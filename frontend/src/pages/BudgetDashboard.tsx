@@ -14,7 +14,7 @@ function BudgetDashboard() {
     queryKey: ['budgets'],
     queryFn: async () => {
       const response = await budgetApi.getAll()
-      return response.data
+      return response.data.results || []
     },
   })
 

@@ -7,6 +7,7 @@ import type {
   BudgetSummaryData,
   MonthlySummary,
   YearlySummary,
+  PaginatedResponse,
 } from '../types/budget'
 
 const api = axios.create({
@@ -18,7 +19,7 @@ const api = axios.create({
 
 // Budget endpoints
 export const budgetApi = {
-  getAll: () => api.get<Budget[]>('/budgets/'),
+  getAll: () => api.get<PaginatedResponse<Budget>>('/budgets/'),
   getById: (id: number) => api.get<Budget>(`/budgets/${id}/`),
   create: (data: Partial<Budget>) => api.post<Budget>('/budgets/', data),
   update: (id: number, data: Partial<Budget>) => api.put<Budget>(`/budgets/${id}/`, data),
@@ -32,7 +33,7 @@ export const budgetApi = {
 
 // Category endpoints
 export const categoryApi = {
-  getAll: (budgetId: number) => api.get<BudgetCategory[]>(`/budgets/${budgetId}/categories/`),
+  getAll: (budgetId: number) => api.get<PaginatedResponse<BudgetCategory>>(`/budgets/${budgetId}/categories/`),
   create: (budgetId: number, data: Partial<BudgetCategory>) =>
     api.post<BudgetCategory>(`/budgets/${budgetId}/categories/`, data),
   update: (id: number, data: Partial<BudgetCategory>) =>
@@ -45,7 +46,7 @@ export const categoryApi = {
 // Entry endpoints
 export const entryApi = {
   getAll: (params?: { category?: number; month?: number; year?: number }) =>
-    api.get<BudgetEntry[]>('/entries/', { params }),
+    api.get<PaginatedResponse<BudgetEntry>>('/entries/', { params }),
   create: (data: Partial<BudgetEntry>) => api.post<BudgetEntry>('/entries/', data),
   update: (id: number, data: Partial<BudgetEntry>) =>
     api.put<BudgetEntry>(`/entries/${id}/`, data),
@@ -56,7 +57,7 @@ export const entryApi = {
 
 // Template endpoints
 export const templateApi = {
-  getAll: () => api.get<BudgetTemplate[]>('/templates/'),
+  getAll: () => api.get<PaginatedResponse<BudgetTemplate>>('/templates/'),
   create: (data: Partial<BudgetTemplate>) => api.post<BudgetTemplate>('/templates/', data),
   delete: (id: number) => api.delete(`/templates/${id}/`),
 }
