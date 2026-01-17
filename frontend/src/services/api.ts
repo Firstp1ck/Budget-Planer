@@ -33,9 +33,9 @@ export const budgetApi = {
 
 // Category endpoints
 export const categoryApi = {
-  getAll: (budgetId: number) => api.get<PaginatedResponse<BudgetCategory>>(`/budgets/${budgetId}/categories/`),
+  getAll: (budgetId: number) => api.get<BudgetCategory[]>(`/budgets/${budgetId}/categories/`),
   create: (budgetId: number, data: Partial<BudgetCategory>) =>
-    api.post<BudgetCategory>(`/budgets/${budgetId}/categories/`, data),
+    api.post<BudgetCategory>(`/budgets/${budgetId}/add_category/`, data),
   update: (id: number, data: Partial<BudgetCategory>) =>
     api.put<BudgetCategory>(`/categories/${id}/`, data),
   delete: (id: number) => api.delete(`/categories/${id}/`),
