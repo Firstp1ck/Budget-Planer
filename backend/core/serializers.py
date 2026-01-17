@@ -24,6 +24,7 @@ class BudgetCategorySerializer(serializers.ModelSerializer):
             'id', 'budget', 'name', 'category_type',
             'category_type_display', 'order', 'is_active'
         ]
+        read_only_fields = ['id', 'budget']
 
 
 class BudgetEntrySerializer(serializers.ModelSerializer):
