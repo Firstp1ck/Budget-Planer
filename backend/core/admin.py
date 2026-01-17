@@ -1,0 +1,31 @@
+from django.contrib import admin
+from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate
+
+
+@admin.register(Budget)
+class BudgetAdmin(admin.ModelAdmin):
+    list_display = ('name', 'year', 'currency', 'created_at')
+    list_filter = ('year', 'currency')
+    search_fields = ('name',)
+
+
+@admin.register(BudgetCategory)
+class BudgetCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'budget', 'category_type', 'order', 'is_active')
+    list_filter = ('category_type', 'is_active', 'budget')
+    search_fields = ('name',)
+    ordering = ('budget', 'order')
+
+
+@admin.register(BudgetEntry)
+class BudgetEntryAdmin(admin.ModelAdmin):
+    list_display = ('category', 'month', 'year', 'planned_amount', 'actual_amount', 'status')
+    list_filter = ('year', 'month', 'status', 'category__budget')
+    search_fields = ('category__name', 'notes')
+    ordering = ('year', 'month')
+
+
+@admin.register(BudgetTemplate)
+class BudgetTemplateAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    search_fields = ('name',)
