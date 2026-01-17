@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { categoryApi, entryApi } from '../services/api'
+import toast from 'react-hot-toast'
+import { categoryApi } from '../services/api'
 import type { BudgetCategory, BudgetEntry } from '../types/budget'
 import CategoryRow from './CategoryRow'
 
@@ -28,6 +29,10 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTab
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setIsAddingCategory(false)
       setNewCategoryName('')
+      toast.success('Kategorie erfolgreich hinzugefügt!')
+    },
+    onError: () => {
+      toast.error('Fehler beim Hinzufügen der Kategorie')
     },
   })
 
@@ -39,6 +44,8 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTab
         order: categories.length,
         is_active: true,
       })
+    } else {
+      toast.error('Bitte geben Sie einen Kategorienamen ein')
     }
   }
 
@@ -51,34 +58,34 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTab
   const displayMonths = selectedMonth ? [selectedMonth] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+    <div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-gray-100 dark:bg-gray-700">
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-600 sticky left-0 bg-gray-100 dark:bg-gray-700 z-10">
+            <tr className="bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600">
+              <th className="px-6 py-4 text-left text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 sticky left-0 bg-gray-100 dark:bg-gray-700 z-10 min-w-[200px]">
                 Kategorie
               </th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-600">
+              <th className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[120px]">
                 Typ
               </th>
               {displayMonths.map((month) => (
                 <th
                   key={month}
-                  className="px-4 py-3 text-center text-sm font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-600 min-w-[120px]"
+                  className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[140px]"
                 >
                   {MONTHS[month - 1]}
                 </th>
               ))}
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-600">
+              <th className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[140px]">
                 Gesamt
               </th>
-              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-600">
+              <th className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[100px]">
                 Aktionen
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {['INCOME', 'FIXED_EXPENSE', 'VARIABLE_EXPENSE', 'SAVINGS'].map((type) => {
               const categoryGroup = categories.filter((c) => c.category_type === type)
               if (categoryGroup.length === 0) return null
@@ -99,53 +106,67 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTab
         </table>
       </div>
 
-      <div className="p-4 border-t dark:border-gray-700">
+      {/* Add Category Section */}
+      <div className="p-6 border-t-2 border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
         {isAddingCategory ? (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-4 max-w-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Neue Kategorie hinzufügen
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <input
                 type="text"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="Kategoriename"
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="Kategoriename (z.B. Gehalt, Miete)"
+                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-base"
+                autoFocus
               />
               <select
                 value={newCategoryType}
                 onChange={(e) => setNewCategoryType(e.target.value as any)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-base"
               >
-                <option value="INCOME">Einnahme</option>
-                <option value="FIXED_EXPENSE">Fixkosten</option>
-                <option value="VARIABLE_EXPENSE">Variable Kosten</option>
-                <option value="SAVINGS">Sparen</option>
+                <option value="INCOME">💰 Einnahme</option>
+                <option value="FIXED_EXPENSE">🏠 Fixkosten</option>
+                <option value="VARIABLE_EXPENSE">🛒 Variable Kosten</option>
+                <option value="SAVINGS">💎 Sparen</option>
               </select>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <button
                 onClick={handleAddCategory}
                 disabled={addCategoryMutation.isPending}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
               >
-                {addCategoryMutation.isPending ? 'Speichern...' : 'Speichern'}
+                {addCategoryMutation.isPending ? (
+                  <span className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Speichern...
+                  </span>
+                ) : (
+                  '✓ Speichern'
+                )}
               </button>
               <button
                 onClick={() => {
                   setIsAddingCategory(false)
                   setNewCategoryName('')
                 }}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                disabled={addCategoryMutation.isPending}
+                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all font-semibold disabled:opacity-50"
               >
-                Abbrechen
+                ✕ Abbrechen
               </button>
             </div>
           </div>
         ) : (
           <button
             onClick={() => setIsAddingCategory(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-semibold shadow-md hover:shadow-lg flex items-center gap-2"
           >
-            + Kategorie hinzufügen
+            <span className="text-xl">+</span>
+            Kategorie hinzufügen
           </button>
         )}
       </div>
