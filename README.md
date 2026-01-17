@@ -62,6 +62,7 @@ Budget-Planer/
 
 ### Prerequisites
 - Python 3.10 or higher
+- [uv](https://github.com/astral-sh/uv) - Fast Python package installer (`brew install uv` on macOS)
 - Node.js 18 or higher
 - npm or bun
 
@@ -72,15 +73,15 @@ Budget-Planer/
 cd backend
 ```
 
-2. Create a virtual environment:
+2. Create a virtual environment with uv:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-3. Install dependencies:
+3. Install dependencies with uv:
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 4. Copy the environment example file:
@@ -109,6 +110,8 @@ python manage.py runserver
 ```
 
 The API will be available at `http://localhost:8000`
+
+**Why uv?** uv is a fast Python package installer written in Rust, offering 10-100x faster installation than pip.
 
 ### Frontend Setup
 
