@@ -1,10 +1,19 @@
+import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import BudgetDashboard from './pages/BudgetDashboard'
 import BudgetEditor from './pages/BudgetEditor'
 import MonthlyView from './pages/MonthlyView'
+import { initializeExchangeRates } from './utils/currency'
 
 function App() {
+  // Initialize exchange rates on app startup
+  useEffect(() => {
+    initializeExchangeRates().catch((error) => {
+      console.error('Failed to initialize exchange rates on app startup:', error)
+    })
+  }, [])
+
   return (
     <Router>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">

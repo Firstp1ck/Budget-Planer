@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { categoryApi } from '../services/api'
 import type { BudgetCategory, BudgetEntry } from '../types/budget'
+import { Currency } from '../utils/currency'
 import CategoryRow from './CategoryRow'
 
 interface BudgetTableProps {
@@ -10,6 +11,8 @@ interface BudgetTableProps {
   categories: BudgetCategory[]
   entries: BudgetEntry[]
   selectedMonth: number | null
+  displayCurrency: Currency
+  budgetYear: number
 }
 
 const MONTHS = [
@@ -17,11 +20,47 @@ const MONTHS = [
   'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
 ]
 
-function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTableProps) {
+// Common category suggestions
+const COMMON_CATEGORIES: Record<string, { name: string; type: 'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS' }[]> = {
+  INCOME: [
+    { name: 'Gehalt', type: 'INCOME' },
+    { name: '13. Monatslohn', type: 'INCOME' },
+    { name: 'Bonus', type: 'INCOME' },
+    { name: 'Nebenverdienst', type: 'INCOME' },
+    { name: 'Kapitalerträge', type: 'INCOME' },
+  ],
+  FIXED_EXPENSE: [
+    { name: 'Miete', type: 'FIXED_EXPENSE' },
+    { name: 'Krankenversicherung', type: 'FIXED_EXPENSE' },
+    { name: 'Strom', type: 'FIXED_EXPENSE' },
+    { name: 'Internet/Telefon', type: 'FIXED_EXPENSE' },
+    { name: 'Auto/Verkehr', type: 'FIXED_EXPENSE' },
+    { name: 'Versicherungen', type: 'FIXED_EXPENSE' },
+    { name: 'Steuern', type: 'FIXED_EXPENSE' },
+  ],
+  VARIABLE_EXPENSE: [
+    { name: 'Lebensmittel', type: 'VARIABLE_EXPENSE' },
+    { name: 'Restaurant', type: 'VARIABLE_EXPENSE' },
+    { name: 'Kleidung', type: 'VARIABLE_EXPENSE' },
+    { name: 'Freizeit', type: 'VARIABLE_EXPENSE' },
+    { name: 'Sport', type: 'VARIABLE_EXPENSE' },
+    { name: 'Geschenke', type: 'VARIABLE_EXPENSE' },
+    { name: 'Haushalt', type: 'VARIABLE_EXPENSE' },
+  ],
+  SAVINGS: [
+    { name: 'Notfallfonds', type: 'SAVINGS' },
+    { name: 'Altersvorsorge', type: 'SAVINGS' },
+    { name: 'Sparen', type: 'SAVINGS' },
+    { name: 'Investitionen', type: 'SAVINGS' },
+  ],
+}
+
+function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurrency, budgetYear }: BudgetTableProps) {
   const queryClient = useQueryClient()
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryType, setNewCategoryType] = useState<'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS'>('VARIABLE_EXPENSE')
+  const [showCategorySuggestions, setShowCategorySuggestions] = useState(false)
 
   const addCategoryMutation = useMutation({
     mutationFn: (data: Partial<BudgetCategory>) => categoryApi.create(budgetId, data),
@@ -43,6 +82,9 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTab
         category_type: newCategoryType,
         order: categories.length,
         is_active: true,
+        input_mode: 'MONTHLY',
+        custom_months: null,
+        yearly_amount: null,
       })
     } else {
       toast.error('Bitte geben Sie einen Kategorienamen ein')
@@ -99,6 +141,8 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTab
                   displayMonths={displayMonths}
                   getEntryForCategoryAndMonth={getEntryForCategoryAndMonth}
                   budgetId={budgetId}
+                  displayCurrency={displayCurrency}
+                  budgetYear={budgetYear}
                 />
               )
             })}
@@ -107,12 +151,43 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth }: BudgetTab
       </div>
 
       {/* Add Category Section */}
-      <div className="p-6 border-t-2 border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
         {isAddingCategory ? (
-          <div className="space-y-4 max-w-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Neue Kategorie hinzufügen
-            </h3>
+          <div className="space-y-3 max-w-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                Neue Kategorie hinzufügen
+              </h3>
+              <button
+                onClick={() => setShowCategorySuggestions(!showCategorySuggestions)}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                💡 {showCategorySuggestions ? 'Vorschläge ausblenden' : 'Vorschläge anzeigen'}
+              </button>
+            </div>
+
+            {showCategorySuggestions && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Häufige Kategorien für {newCategoryType === 'INCOME' ? 'Einnahmen' : newCategoryType === 'FIXED_EXPENSE' ? 'Fixkosten' : newCategoryType === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'}:
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {COMMON_CATEGORIES[newCategoryType].map((suggestion) => (
+                    <button
+                      key={suggestion.name}
+                      onClick={() => {
+                        setNewCategoryName(suggestion.name)
+                        setShowCategorySuggestions(false)
+                      }}
+                      className="px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-left"
+                    >
+                      {suggestion.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <input
                 type="text"

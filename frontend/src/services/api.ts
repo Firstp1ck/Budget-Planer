@@ -37,7 +37,7 @@ export const categoryApi = {
   create: (budgetId: number, data: Partial<BudgetCategory>) =>
     api.post<BudgetCategory>(`/budgets/${budgetId}/add_category/`, data),
   update: (id: number, data: Partial<BudgetCategory>) =>
-    api.put<BudgetCategory>(`/categories/${id}/`, data),
+    api.patch<BudgetCategory>(`/categories/${id}/`, data),
   delete: (id: number) => api.delete(`/categories/${id}/`),
   reorder: (id: number, order: number) =>
     api.patch<BudgetCategory>(`/categories/${id}/reorder/`, { order }),

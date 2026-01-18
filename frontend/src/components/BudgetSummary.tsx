@@ -1,29 +1,52 @@
 import type { BudgetCategory, BudgetEntry } from '../types/budget'
+import { Currency, formatCurrency } from '../utils/currency'
 
 interface BudgetSummaryProps {
   budgetId: number
   categories: BudgetCategory[]
   entries: BudgetEntry[]
   selectedMonth: number | null
+  displayCurrency: Currency
 }
 
-function BudgetSummary({ categories, entries, selectedMonth }: BudgetSummaryProps) {
+function BudgetSummary({ categories, entries, selectedMonth, displayCurrency }: BudgetSummaryProps) {
   const calculateTotals = () => {
     let totalIncome = 0
     let totalExpenses = 0
 
-    const filteredEntries = selectedMonth
-      ? entries.filter((e) => e.month === selectedMonth)
-      : entries
+    categories.forEach((category) => {
+      let categoryTotal = 0
 
-    filteredEntries.forEach((entry) => {
-      const amount = parseFloat(entry.actual_amount || entry.planned_amount)
-      const category = categories.find((c) => c.id === entry.category)
+      // For YEARLY and CUSTOM modes, calculate based on input mode
+      if (category.input_mode === 'YEARLY' || category.input_mode === 'CUSTOM') {
+        const yearlyAmount = parseFloat(category.yearly_amount || '0')
 
-      if (category?.category_type === 'INCOME') {
-        totalIncome += amount
+        if (selectedMonth) {
+          // For single month view, show the monthly calculated amount
+          const monthlyAmount = category.input_mode === 'YEARLY'
+            ? yearlyAmount / 12
+            : yearlyAmount / (category.custom_months || 12)
+          categoryTotal = monthlyAmount
+        } else {
+          // For yearly view, show the full amount
+          categoryTotal = yearlyAmount
+        }
       } else {
-        totalExpenses += amount
+        // For MONTHLY mode, sum actual entries
+        const categoryEntries = selectedMonth
+          ? entries.filter((e) => e.category === category.id && e.month === selectedMonth)
+          : entries.filter((e) => e.category === category.id)
+
+        categoryTotal = categoryEntries.reduce((sum, entry) => {
+          return sum + parseFloat(entry.actual_amount || entry.planned_amount)
+        }, 0)
+      }
+
+      // Add to appropriate total
+      if (category.category_type === 'INCOME') {
+        totalIncome += categoryTotal
+      } else {
+        totalExpenses += categoryTotal
       }
     })
 
@@ -46,7 +69,7 @@ function BudgetSummary({ categories, entries, selectedMonth }: BudgetSummaryProp
           </h3>
         </div>
         <p className="text-4xl font-bold text-green-700 dark:text-green-300">
-          {totalIncome.toFixed(2)} €
+          {formatCurrency(totalIncome, displayCurrency)}
         </p>
       </div>
 
@@ -58,7 +81,7 @@ function BudgetSummary({ categories, entries, selectedMonth }: BudgetSummaryProp
           </h3>
         </div>
         <p className="text-4xl font-bold text-red-700 dark:text-red-300">
-          {totalExpenses.toFixed(2)} €
+          {formatCurrency(totalExpenses, displayCurrency)}
         </p>
       </div>
 
@@ -82,7 +105,7 @@ function BudgetSummary({ categories, entries, selectedMonth }: BudgetSummaryProp
             ? 'text-blue-700 dark:text-blue-300'
             : 'text-orange-700 dark:text-orange-300'
         }`}>
-          {balance >= 0 ? '+' : ''}{balance.toFixed(2)} €
+          {balance >= 0 ? '+' : ''}{formatCurrency(Math.abs(balance), displayCurrency)}
         </p>
       </div>
     </div>

@@ -17,12 +17,17 @@ class BudgetCategorySerializer(serializers.ModelSerializer):
         source='get_category_type_display',
         read_only=True
     )
+    input_mode_display = serializers.CharField(
+        source='get_input_mode_display',
+        read_only=True
+    )
 
     class Meta:
         model = BudgetCategory
         fields = [
             'id', 'budget', 'name', 'category_type',
-            'category_type_display', 'order', 'is_active'
+            'category_type_display', 'order', 'is_active',
+            'input_mode', 'input_mode_display', 'custom_months', 'yearly_amount'
         ]
         read_only_fields = ['id', 'budget']
 

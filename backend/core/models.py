@@ -9,7 +9,7 @@ class Budget(models.Model):
     year = models.IntegerField(
         validators=[MinValueValidator(2000), MaxValueValidator(2100)]
     )
-    currency = models.CharField(max_length=3, default='EUR')
+    currency = models.CharField(max_length=3, default='CHF')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -80,11 +80,33 @@ class BudgetCategory(models.Model):
         ('SAVINGS', 'Savings'),
     ]
 
+    INPUT_MODES = [
+        ('MONTHLY', 'Monthly Input'),
+        ('YEARLY', 'Yearly Input'),
+        ('CUSTOM', 'Custom Period'),
+    ]
+
     budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='categories')
     name = models.CharField(max_length=200)
     category_type = models.CharField(max_length=20, choices=CATEGORY_TYPES)
     order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
+
+    # Input mode configuration
+    input_mode = models.CharField(max_length=10, choices=INPUT_MODES, default='MONTHLY')
+    custom_months = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text='Number of months for custom period distribution'
+    )
+    yearly_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Total amount for yearly/custom input mode'
+    )
 
     class Meta:
         ordering = ['budget', 'order', 'name']

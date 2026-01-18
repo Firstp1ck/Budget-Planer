@@ -1,5 +1,7 @@
 export type CategoryType = 'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS'
 
+export type InputMode = 'MONTHLY' | 'YEARLY' | 'CUSTOM'
+
 export type BudgetStatus = 'WITHIN_BUDGET' | 'WARNING' | 'OVER_BUDGET'
 
 export interface Budget {
@@ -18,6 +20,9 @@ export interface BudgetCategory {
   category_type: CategoryType
   order: number
   is_active: boolean
+  input_mode: InputMode
+  custom_months: number | null
+  yearly_amount: string | null
 }
 
 export interface BudgetEntry {
