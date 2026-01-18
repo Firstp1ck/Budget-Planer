@@ -45,6 +45,8 @@ function CategoryRow({
   const queryClient = useQueryClient()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [editingInputMode, setEditingInputMode] = useState<number | null>(null)
+  const [editingName, setEditingName] = useState<number | null>(null)
+  const [categoryName, setCategoryName] = useState('')
   const [inputModeData, setInputModeData] = useState<{
     mode: InputMode
     customMonths: number
@@ -78,6 +80,21 @@ function CategoryRow({
     },
     onError: () => {
       toast.error('Fehler beim Aktualisieren des Eingabemodus')
+    },
+  })
+
+  const updateCategoryNameMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      categoryApi.update(id, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
+      setEditingName(null)
+      setCategoryName('')
+      toast.success('Kategoriename aktualisiert')
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.name?.[0] || error.response?.data?.error || 'Fehler beim Aktualisieren des Namens'
+      toast.error(errorMessage)
     },
   })
 
@@ -212,6 +229,24 @@ function CategoryRow({
     }
   }
 
+  const handleEditName = (category: BudgetCategory) => {
+    setEditingName(category.id)
+    setCategoryName(category.name)
+  }
+
+  const handleSaveName = (categoryId: number) => {
+    if (!categoryName.trim()) {
+      toast.error('Bitte geben Sie einen Namen ein')
+      return
+    }
+    updateCategoryNameMutation.mutate({ id: categoryId, name: categoryName.trim() })
+  }
+
+  const handleCancelEditName = () => {
+    setEditingName(null)
+    setCategoryName('')
+  }
+
   const handleEditInputMode = (category: BudgetCategory) => {
     setEditingInputMode(category.id)
 
@@ -283,12 +318,12 @@ function CategoryRow({
       >
         <td
           colSpan={displayMonths.length + 4}
-          className="px-6 py-3 text-base font-bold"
+          className="px-4 py-3 text-sm font-bold"
         >
           <div className="flex items-center gap-2">
-            <span className="text-lg">{isCollapsed ? '▶' : '▼'}</span>
+            <span className="text-sm">{isCollapsed ? '▶' : '▼'}</span>
             <span>{TYPE_LABELS[type]}</span>
-            <span className="text-sm font-normal opacity-75">({categories.length})</span>
+            <span className="text-xs font-normal opacity-75">({categories.length})</span>
           </div>
         </td>
       </tr>
@@ -299,23 +334,37 @@ function CategoryRow({
           key={category.id}
           className="group hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
         >
-          <td className="px-6 py-4 text-base font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span>{category.name}</span>
+          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50">
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="truncate">{category.name}</span>
+                {/* Show "Brutto" label for salary category */}
+                {category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt') && (
+                  <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded flex-shrink-0" title="Bruttogehalt">
+                    Brutto
+                  </span>
+                )}
                 {/* Subtle input mode indicator */}
-                <span className="text-xs text-gray-500 dark:text-gray-400" title="Eingabemodus">
+                <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0" title="Eingabemodus">
                   {category.input_mode === 'YEARLY' && '📅'}
                   {category.input_mode === 'MONTHLY' && '📆'}
                   {category.input_mode === 'CUSTOM' && '📊'}
                 </span>
               </div>
               {/* Action buttons - only visible on hover */}
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                {/* Rename button */}
+                <button
+                  onClick={() => handleEditName(category)}
+                  className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                  title="Kategorie umbenennen"
+                >
+                  ✏️
+                </button>
                 {/* Input mode edit button */}
                 <button
                   onClick={() => handleEditInputMode(category)}
-                  className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                  className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                   title="Eingabemodus ändern"
                 >
                   ⚙️
@@ -324,7 +373,7 @@ function CategoryRow({
                 {category.input_mode === 'MONTHLY' && displayMonths.length === 12 && (
                   <button
                     onClick={() => handleOpenAutofill(category)}
-                    className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                    className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                     title="Alle Monate automatisch ausfüllen"
                   >
                     🔄
@@ -335,7 +384,7 @@ function CategoryRow({
                   <button
                     onClick={() => copyPreviousMonthMutation.mutate({ categoryId: category.id, month: displayMonths[0] })}
                     disabled={copyPreviousMonthMutation.isPending}
-                    className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
+                    className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
                     title="Vormonat kopieren"
                   >
                     ⏮️
@@ -343,27 +392,64 @@ function CategoryRow({
                 )}
               </div>
             </div>
+            {/* Rename Category Dialog */}
+            {editingName === category.id && (
+              <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded space-y-2">
+                <div>
+                  <label className="block text-[10px] font-medium mb-1">Kategoriename:</label>
+                  <input
+                    type="text"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveName(category.id)
+                      } else if (e.key === 'Escape') {
+                        handleCancelEditName()
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => handleSaveName(category.id)}
+                    disabled={updateCategoryNameMutation.isPending}
+                    className="flex-1 px-3 py-2 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    ✓ Speichern
+                  </button>
+                  <button
+                    onClick={handleCancelEditName}
+                    className="flex-1 px-3 py-2 text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
+                  >
+                    ✕ Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
             {editingInputMode === category.id && (
-              <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-2">
+              <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded space-y-2">
                 {/* Warning if switching from MONTHLY with existing entries */}
                 {category.input_mode === 'MONTHLY' && inputModeData.mode !== 'MONTHLY' && entries.filter(e => e.category === category.id).length > 0 && (
-                  <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded text-xs text-yellow-800 dark:text-yellow-200">
+                  <div className="p-1.5 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded text-[10px] text-yellow-800 dark:text-yellow-200">
                     ⚠️ Achtung: Vorhandene monatliche Einträge werden durch berechnete Werte überschrieben.
                     Der Gesamtbetrag wurde aus bestehenden Einträgen vorausgefüllt.
                   </div>
                 )}
                 {/* Info if switching to MONTHLY from YEARLY/CUSTOM */}
                 {category.input_mode !== 'MONTHLY' && inputModeData.mode === 'MONTHLY' && (
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded text-xs text-blue-800 dark:text-blue-200">
+                  <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded text-[10px] text-blue-800 dark:text-blue-200">
                     ℹ️ Wechsel zu monatlicher Eingabe. Sie können nun jeden Monat einzeln bearbeiten.
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-medium mb-1">Eingabemodus:</label>
+                  <label className="block text-[10px] font-medium mb-1">Eingabemodus:</label>
                   <select
                     value={inputModeData.mode}
                     onChange={(e) => setInputModeData({ ...inputModeData, mode: e.target.value as InputMode })}
-                    className="w-full px-2 py-1 text-sm border rounded dark:bg-gray-600 dark:border-gray-500"
+                    className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                   >
                     <option value="MONTHLY">Monatlich (einzeln eingeben)</option>
                     <option value="YEARLY">Jährlich (auf 12 Monate verteilen)</option>
@@ -372,20 +458,20 @@ function CategoryRow({
                 </div>
                 {inputModeData.mode === 'CUSTOM' && (
                   <div>
-                    <label className="block text-xs font-medium mb-1">Anzahl Monate:</label>
+                    <label className="block text-[10px] font-medium mb-1">Anzahl Monate:</label>
                     <input
                       type="number"
                       min="1"
                       max="12"
                       value={inputModeData.customMonths}
                       onChange={(e) => setInputModeData({ ...inputModeData, customMonths: parseInt(e.target.value) })}
-                      className="w-full px-2 py-1 text-sm border rounded dark:bg-gray-600 dark:border-gray-500"
+                      className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                     />
                   </div>
                 )}
                 {inputModeData.mode !== 'MONTHLY' && (
                   <div>
-                    <label className="block text-xs font-medium mb-1">
+                    <label className="block text-[10px] font-medium mb-1">
                       {inputModeData.mode === 'YEARLY' ? 'Jahresbetrag:' : 'Gesamtbetrag:'}
                     </label>
                     <input
@@ -393,9 +479,9 @@ function CategoryRow({
                       step="0.01"
                       value={inputModeData.yearlyAmount}
                       onChange={(e) => setInputModeData({ ...inputModeData, yearlyAmount: e.target.value })}
-                      className="w-full px-2 py-1 text-sm border rounded dark:bg-gray-600 dark:border-gray-500"
+                      className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                     />
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
                       Monatlich: {formatCurrency(
                         parseFloat(inputModeData.yearlyAmount || '0') /
                         (inputModeData.mode === 'YEARLY' ? 12 : inputModeData.customMonths),
@@ -404,66 +490,49 @@ function CategoryRow({
                     </p>
                   </div>
                 )}
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-2 pt-2">
                   <button
                     onClick={() => handleSaveInputMode(category.id)}
                     disabled={updateInputModeMutation.isPending}
-                    className="flex-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    className="flex-1 px-3 py-2 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                   >
                     ✓ Speichern
                   </button>
                   <button
                     onClick={() => setEditingInputMode(null)}
-                    className="flex-1 px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
+                    className="flex-1 px-3 py-2 text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
                   >
                     ✕ Abbrechen
                   </button>
                 </div>
               </div>
             )}
-            {/* Input Mode Editor */}
-            {editingInputMode === category.id && (
-              <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg space-y-2 border border-blue-200 dark:border-blue-700">
-                {/* Warning messages remain the same */}
-                {category.input_mode === 'MONTHLY' && inputModeData.mode !== 'MONTHLY' && entries.filter(e => e.category === category.id).length > 0 && (
-                  <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded text-xs text-yellow-800 dark:text-yellow-200">
-                    ⚠️ Vorhandene monatliche Einträge werden durch berechnete Werte überschrieben.
-                  </div>
-                )}
-                {category.input_mode !== 'MONTHLY' && inputModeData.mode === 'MONTHLY' && (
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded text-xs text-blue-800 dark:text-blue-200">
-                    ℹ️ Wechsel zu monatlicher Eingabe.
-                  </div>
-                )}
-                {/* Rest of the input mode editor remains the same but I'll skip showing it all */}
-              </div>
-            )}
             {/* Autofill Dialog */}
             {showAutofillDialog === category.id && (
-              <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg space-y-3 border border-gray-300 dark:border-gray-600">
+              <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded space-y-3 border border-gray-300 dark:border-gray-600">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  <h4 className="text-xs font-semibold text-gray-900 dark:text-white">
                     🔄 Alle Monate ausfüllen
                   </h4>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium mb-1">Betrag pro Monat:</label>
+                  <label className="block text-[10px] font-medium mb-1">Betrag pro Monat:</label>
                   <input
                     type="number"
                     step="0.01"
                     value={autofillData.amount}
                     onChange={(e) => setAutofillData({ ...autofillData, amount: e.target.value })}
                     placeholder="0.00"
-                    className="w-full px-2 py-1 text-sm border rounded dark:bg-gray-600 dark:border-gray-500"
+                    className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                     autoFocus
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium mb-1">Ausfüllen:</label>
-                  <div className="space-y-1">
-                    <label className="flex items-center gap-2 text-sm">
+                  <label className="block text-[10px] font-medium mb-0.5">Ausfüllen:</label>
+                  <div className="space-y-0.5">
+                    <label className="flex items-center gap-1.5 text-xs">
                       <input
                         type="radio"
                         checked={autofillData.mode === 'all'}
@@ -472,7 +541,7 @@ function CategoryRow({
                       />
                       <span>Alle Monate (überschreibt vorhandene Werte)</span>
                     </label>
-                    <label className="flex items-center gap-2 text-sm">
+                    <label className="flex items-center gap-1.5 text-xs">
                       <input
                         type="radio"
                         checked={autofillData.mode === 'empty'}
@@ -481,7 +550,7 @@ function CategoryRow({
                       />
                       <span>Nur leere Monate</span>
                     </label>
-                    <label className="flex items-center gap-2 text-sm">
+                    <label className="flex items-center gap-1.5 text-xs">
                       <input
                         type="radio"
                         checked={autofillData.mode === 'remaining'}
@@ -493,7 +562,7 @@ function CategoryRow({
                         <select
                           value={autofillData.startMonth}
                           onChange={(e) => setAutofillData({ ...autofillData, startMonth: parseInt(e.target.value) })}
-                          className="px-2 py-1 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
+                          className="px-1.5 py-0.5 text-[10px] border rounded dark:bg-gray-600 dark:border-gray-500"
                         >
                           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                             <option key={m} value={m}>{m}</option>
@@ -504,17 +573,17 @@ function CategoryRow({
                   </div>
                 </div>
 
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-2 pt-2">
                   <button
                     onClick={() => handleAutofill(category.id)}
                     disabled={autofillMonthsMutation.isPending}
-                    className="flex-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                    className="flex-1 px-3 py-2 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                   >
                     {autofillMonthsMutation.isPending ? '⏳ Ausfüllen...' : '✓ Ausfüllen'}
                   </button>
                   <button
                     onClick={() => setShowAutofillDialog(null)}
-                    className="flex-1 px-3 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
+                    className="flex-1 px-3 py-2 text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
                   >
                     ✕ Abbrechen
                   </button>
@@ -522,7 +591,7 @@ function CategoryRow({
               </div>
             )}
           </td>
-          <td className="px-6 py-4 text-center">
+          <td className="px-3 py-3 text-center">
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${TYPE_COLORS[type]}`}>
               {TYPE_LABELS[category.category_type]}
             </span>
@@ -543,14 +612,14 @@ function CategoryRow({
               />
             )
           })}
-          <td className="px-6 py-4 text-center text-base font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
+          <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
             {formatCurrency(calculateTotal(category), displayCurrency)}
           </td>
-          <td className="px-6 py-4 text-center">
+          <td className="px-3 py-3 text-center">
             <button
               onClick={() => handleDeleteCategory(category.id, category.name)}
               disabled={deleteCategoryMutation.isPending}
-              className="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 text-sm disabled:opacity-50"
+              className="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 text-xs disabled:opacity-50"
               title="Kategorie löschen"
             >
               🗑️

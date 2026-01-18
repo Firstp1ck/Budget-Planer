@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { budgetApi } from '../services/api'
+import { budgetApi, templateApi } from '../services/api'
 import BudgetTable from '../components/BudgetTable'
 import BudgetSummary from '../components/BudgetSummary'
 import {
@@ -24,9 +24,13 @@ const MONTHS = [
 function BudgetEditor() {
   const { id } = useParams<{ id: string }>()
   const budgetId = parseInt(id || '0')
+  const queryClient = useQueryClient()
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
   const [selectedCurrency, setDisplayCurrency] = useState<Currency>(getSelectedCurrency())
   const [isLoadingRates, setIsLoadingRates] = useState(false)
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false)
+  const [showOverwriteDialog, setShowOverwriteDialog] = useState(false)
+  const [templateName, setTemplateName] = useState('')
 
   const { data: summaryData, isLoading, error } = useQuery({
     queryKey: ['budget', budgetId, 'summary'],
@@ -36,6 +40,42 @@ function BudgetEditor() {
     },
     enabled: budgetId > 0,
   })
+
+  const createTemplateMutation = useMutation({
+    mutationFn: ({ name, overwrite }: { name: string; overwrite?: boolean }) =>
+      templateApi.createFromBudget(budgetId, name, overwrite),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] })
+      setShowTemplateDialog(false)
+      setShowOverwriteDialog(false)
+      setTemplateName('')
+      toast.success('Vorlage erfolgreich gespeichert')
+    },
+    onError: (error: any) => {
+      // Check if it's a duplicate name error
+      if (error.response?.status === 409 && error.response?.data?.error === 'DUPLICATE_NAME') {
+        setShowOverwriteDialog(true)
+      } else {
+        toast.error(error.response?.data?.message || error.response?.data?.error || 'Fehler beim Speichern der Vorlage')
+      }
+    },
+  })
+
+  const handleSaveAsTemplate = () => {
+    if (!templateName.trim()) {
+      toast.error('Bitte geben Sie einen Namen für die Vorlage ein')
+      return
+    }
+    createTemplateMutation.mutate({ name: templateName.trim() })
+  }
+
+  const handleOverwriteTemplate = () => {
+    if (!templateName.trim()) {
+      toast.error('Bitte geben Sie einen Namen für die Vorlage ein')
+      return
+    }
+    createTemplateMutation.mutate({ name: templateName.trim(), overwrite: true })
+  }
 
   // Initialize exchange rates on mount
   useEffect(() => {
@@ -84,8 +124,8 @@ function BudgetEditor() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Lade Budget...</p>
+          <div className="animate-spin rounded-full h-20 w-20 border-4 border-indigo-200 dark:border-indigo-800 border-t-indigo-600 dark:border-t-indigo-400 mx-auto mb-6"></div>
+          <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">Lade Budget...</p>
         </div>
       </div>
     )
@@ -94,15 +134,15 @@ function BudgetEditor() {
   if (error || !summaryData) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="text-red-600 text-6xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-red-600 mb-2">Budget nicht gefunden</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
+        <div className="text-center bg-white dark:bg-slate-800 rounded-xl p-12 shadow-md border border-slate-200 dark:border-slate-700">
+          <div className="text-7xl mb-6 animate-pulse">⚠️</div>
+          <h2 className="text-3xl font-bold text-red-600 dark:text-red-400 mb-3">Budget nicht gefunden</h2>
+          <p className="text-lg text-gray-600 dark:text-gray-300 mb-8 max-w-md">
             Das angeforderte Budget existiert nicht oder konnte nicht geladen werden.
           </p>
           <Link
             to="/"
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all inline-block font-semibold"
+            className="px-10 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all inline-flex items-center font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
           >
             ← Zurück zur Übersicht
           </Link>
@@ -111,45 +151,69 @@ function BudgetEditor() {
     )
   }
 
-  const { budget, categories, entries } = summaryData
+  const { budget, categories, entries, tax_entries, salary_reductions } = summaryData
   const rates = getExchangeRates()
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="container mx-auto px-4 py-6 max-w-[1600px]">
+    <div className="min-h-screen">
+      <div className="w-full px-4 py-8 animate-fade-in">
         {/* Header */}
-        <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <Link
-                to="/"
-                className="text-blue-600 dark:text-blue-400 hover:underline mb-2 inline-flex items-center gap-2 text-sm font-medium"
-              >
-                ← Zurück zur Übersicht
-              </Link>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                {budget.name}
-              </h1>
-              <div className="flex items-center gap-3 mt-2">
-                <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded-full text-sm font-semibold">
-                  {budget.year}
-                </span>
-                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-semibold">
-                  Basis: {budget.currency}
-                </span>
+        <div className="mb-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 border border-slate-200 dark:border-slate-700">
+          {/* Back Link */}
+          <div className="mb-6">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium transition-all hover:gap-3 group"
+            >
+              <span className="text-lg group-hover:-translate-x-1 transition-transform">←</span>
+              <span>Zurück zur Übersicht</span>
+            </Link>
+          </div>
+
+          {/* Budget Info - Centered */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">
+              {budget.name}
+            </h1>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <span className="text-blue-600 dark:text-blue-400 font-semibold text-sm">📅</span>
+                <span className="text-blue-700 dark:text-blue-300 font-semibold text-sm">{budget.year}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
+                <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">Basis:</span>
+                <span className="text-slate-700 dark:text-slate-300 font-semibold text-sm">{budget.currency}</span>
               </div>
             </div>
+          </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Currency Selector */}
+          {/* Controls - Centered */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            {/* Save as Template Button */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide text-center">
+                Vorlage
+              </label>
+              <button
+                onClick={() => setShowTemplateDialog(true)}
+                className="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm flex items-center gap-2"
+                title="Aktuelle Kategorien als Vorlage speichern"
+              >
+                <span>💾</span>
+                Als Vorlage speichern
+              </button>
+            </div>
+
+            {/* Currency Selector */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide text-center">
+                Anzeigewährung
+              </label>
               <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Anzeige:
-                </label>
                 <select
                   value={selectedCurrency}
                   onChange={(e) => handleCurrencyChange(e.target.value as Currency)}
-                  className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-medium"
+                  className="px-5 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white font-medium text-sm shadow-sm transition-all bg-white"
                 >
                   <option value="CHF">🇨🇭 {CURRENCY_SYMBOLS.CHF} {CURRENCY_NAMES.CHF}</option>
                   <option value="EUR">🇪🇺 {CURRENCY_SYMBOLS.EUR} {CURRENCY_NAMES.EUR}</option>
@@ -158,22 +222,27 @@ function BudgetEditor() {
                 <button
                   onClick={handleRefreshRates}
                   disabled={isLoadingRates}
-                  className="px-3 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all disabled:opacity-50"
+                  className="px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-50 shadow-sm font-medium text-base"
                   title="Wechselkurse aktualisieren"
                 >
                   {isLoadingRates ? (
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700 dark:border-gray-300"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-400 dark:border-slate-300 border-t-transparent"></div>
                   ) : (
                     '🔄'
                   )}
                 </button>
               </div>
+            </div>
 
-              {/* Month Selector */}
+            {/* Month Selector */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide text-center">
+                Monatsansicht
+              </label>
               <select
                 value={selectedMonth || ''}
                 onChange={(e) => setSelectedMonth(e.target.value ? parseInt(e.target.value) : null)}
-                className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-medium"
+                className="px-5 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white font-medium text-sm shadow-sm transition-all bg-white"
               >
                 <option value="">🗓️ Alle Monate</option>
                 {MONTHS.map((month, index) => (
@@ -187,18 +256,24 @@ function BudgetEditor() {
 
           {/* Exchange Rate Info */}
           {selectedCurrency !== 'CHF' && (
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                💱 Aktueller Kurs: 1 CHF = {rates[selectedCurrency].toFixed(4)} {CURRENCY_SYMBOLS[selectedCurrency]}
-                <span className="text-xs ml-2 opacity-75">
-                  (Stand: {new Date(rates.lastUpdated).toLocaleDateString('de-DE', {
-                    day: '2-digit',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })})
-                </span>
-              </p>
+            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">💱</span>
+                <div>
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                    Aktueller Kurs: 1 CHF = {rates[selectedCurrency].toFixed(4)} {CURRENCY_SYMBOLS[selectedCurrency]}
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                    Stand: {new Date(rates.lastUpdated).toLocaleDateString('de-DE', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -209,17 +284,20 @@ function BudgetEditor() {
             budgetId={budgetId}
             categories={categories}
             entries={entries}
+            salaryReductions={salary_reductions || []}
             selectedMonth={selectedMonth}
             displayCurrency={selectedCurrency}
           />
         </div>
 
         {/* Budget Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 overflow-hidden w-full">
           <BudgetTable
             budgetId={budgetId}
             categories={categories}
             entries={entries}
+            taxEntries={tax_entries || []}
+            salaryReductions={salary_reductions || []}
             selectedMonth={selectedMonth}
             displayCurrency={selectedCurrency}
             budgetYear={budget.year}
@@ -227,11 +305,117 @@ function BudgetEditor() {
         </div>
 
         {/* Help Text */}
-        <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-          <p>💡 Tipp: Klicken Sie auf eine Zelle, um Beträge zu bearbeiten</p>
-          <p className="mt-1">💱 Alle Beträge werden in der gewählten Währung angezeigt</p>
+        <div className="mt-6 text-center">
+          <div className="inline-flex flex-col gap-1.5 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 shadow-sm">
+            <p className="text-sm text-blue-700 dark:text-blue-300">💡 Tipp: Klicken Sie auf eine Zelle, um Beträge zu bearbeiten</p>
+            <p className="text-sm text-blue-700 dark:text-blue-300">💱 Alle Beträge werden in der gewählten Währung angezeigt</p>
+          </div>
         </div>
       </div>
+
+      {/* Save as Template Dialog */}
+      {showTemplateDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
+              💾 Als Vorlage speichern
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+              Speichern Sie die aktuellen Kategorien und deren Konfiguration (ohne Werte) als Vorlage für zukünftige Budgets.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Vorlagenname:
+                </label>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="z.B. Standard Budget 2026"
+                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveAsTemplate()
+                    } else if (e.key === 'Escape') {
+                      setShowTemplateDialog(false)
+                      setTemplateName('')
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSaveAsTemplate}
+                  disabled={createTemplateMutation.isPending || !templateName.trim()}
+                  className="flex-1 px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                >
+                  {createTemplateMutation.isPending ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Speichern...
+                    </span>
+                  ) : (
+                    '✓ Speichern'
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTemplateDialog(false)
+                    setTemplateName('')
+                  }}
+                  disabled={createTemplateMutation.isPending}
+                  className="flex-1 px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm"
+                >
+                  ✕ Abbrechen
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overwrite Template Confirmation Dialog */}
+      {showOverwriteDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
+              ⚠️ Vorlage überschreiben?
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+              Eine Vorlage mit dem Namen <strong className="text-slate-900 dark:text-white">"{templateName}"</strong> existiert bereits.
+              Möchten Sie die vorhandene Vorlage überschreiben?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleOverwriteTemplate}
+                disabled={createTemplateMutation.isPending}
+                className="flex-1 px-5 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+              >
+                {createTemplateMutation.isPending ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Überschreiben...
+                  </span>
+                ) : (
+                  '✓ Überschreiben'
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowOverwriteDialog(false)
+                  setTemplateName('')
+                }}
+                disabled={createTemplateMutation.isPending}
+                className="flex-1 px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm"
+              >
+                ✕ Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

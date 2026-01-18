@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate
+from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction
 
 
 class BudgetSerializer(serializers.ModelSerializer):
@@ -48,6 +48,28 @@ class BudgetEntrySerializer(serializers.ModelSerializer):
         read_only_fields = ['status', 'status_display']
 
 
+class SalaryReductionSerializer(serializers.ModelSerializer):
+    """Serializer for SalaryReduction model"""
+    reduction_type_display = serializers.CharField(
+        source='get_reduction_type_display',
+        read_only=True
+    )
+
+    class Meta:
+        model = SalaryReduction
+        fields = ['id', 'budget', 'name', 'reduction_type', 'reduction_type_display', 'value', 'order', 'is_active']
+        read_only_fields = ['id', 'budget']
+
+
+class TaxEntrySerializer(serializers.ModelSerializer):
+    """Serializer for TaxEntry model"""
+
+    class Meta:
+        model = TaxEntry
+        fields = ['id', 'budget', 'name', 'percentage', 'order', 'is_active']
+        read_only_fields = ['id', 'budget']
+
+
 class BudgetTemplateSerializer(serializers.ModelSerializer):
     """Serializer for BudgetTemplate model"""
 
@@ -81,3 +103,5 @@ class BudgetSummarySerializer(serializers.Serializer):
     budget = BudgetSerializer()
     categories = BudgetCategorySerializer(many=True)
     entries = BudgetEntrySerializer(many=True)
+    tax_entries = TaxEntrySerializer(many=True)
+    salary_reductions = SalaryReductionSerializer(many=True)

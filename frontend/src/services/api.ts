@@ -4,6 +4,8 @@ import type {
   BudgetCategory,
   BudgetEntry,
   BudgetTemplate,
+  TaxEntry,
+  SalaryReduction,
   BudgetSummaryData,
   MonthlySummary,
   YearlySummary,
@@ -49,16 +51,33 @@ export const entryApi = {
     api.get<PaginatedResponse<BudgetEntry>>('/entries/', { params }),
   create: (data: Partial<BudgetEntry>) => api.post<BudgetEntry>('/entries/', data),
   update: (id: number, data: Partial<BudgetEntry>) =>
-    api.put<BudgetEntry>(`/entries/${id}/`, data),
+    api.patch<BudgetEntry>(`/entries/${id}/`, data),
   updateActual: (id: number, actual_amount: string) =>
     api.patch<BudgetEntry>(`/entries/${id}/actual/`, { actual_amount }),
   delete: (id: number) => api.delete(`/entries/${id}/`),
+}
+
+// Tax endpoints
+export const salaryReductionApi = {
+  getAll: (budgetId: number) => api.get<SalaryReduction[]>(`/salary-reductions/`, { params: { budget: budgetId } }),
+  create: (data: Partial<SalaryReduction>) => api.post<SalaryReduction>('/salary-reductions/', data),
+  update: (id: number, data: Partial<SalaryReduction>) => api.patch<SalaryReduction>(`/salary-reductions/${id}/`, data),
+  delete: (id: number) => api.delete(`/salary-reductions/${id}/`),
+}
+
+export const taxApi = {
+  getAll: (budgetId: number) => api.get<TaxEntry[]>(`/taxes/`, { params: { budget: budgetId } }),
+  create: (data: Partial<TaxEntry>) => api.post<TaxEntry>('/taxes/', data),
+  update: (id: number, data: Partial<TaxEntry>) => api.patch<TaxEntry>(`/taxes/${id}/`, data),
+  delete: (id: number) => api.delete(`/taxes/${id}/`),
 }
 
 // Template endpoints
 export const templateApi = {
   getAll: () => api.get<PaginatedResponse<BudgetTemplate>>('/templates/'),
   create: (data: Partial<BudgetTemplate>) => api.post<BudgetTemplate>('/templates/', data),
+  createFromBudget: (budgetId: number, name: string, overwrite?: boolean) =>
+    api.post<BudgetTemplate>('/templates/create_from_budget/', { budget_id: budgetId, name, overwrite: overwrite || false }),
   delete: (id: number) => api.delete(`/templates/${id}/`),
 }
 

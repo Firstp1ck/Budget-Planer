@@ -2,14 +2,18 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { categoryApi } from '../services/api'
-import type { BudgetCategory, BudgetEntry } from '../types/budget'
-import { Currency } from '../utils/currency'
+import type { BudgetCategory, BudgetEntry, TaxEntry, SalaryReduction } from '../types/budget'
+import { Currency, formatCurrency } from '../utils/currency'
 import CategoryRow from './CategoryRow'
+import TaxesSection from './TaxesSection'
+import SalaryReductionsSection from './SalaryReductionsSection'
 
 interface BudgetTableProps {
   budgetId: number
   categories: BudgetCategory[]
   entries: BudgetEntry[]
+  taxEntries: TaxEntry[]
+  salaryReductions: SalaryReduction[]
   selectedMonth: number | null
   displayCurrency: Currency
   budgetYear: number
@@ -55,7 +59,7 @@ const COMMON_CATEGORIES: Record<string, { name: string; type: 'INCOME' | 'FIXED_
   ],
 }
 
-function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurrency, budgetYear }: BudgetTableProps) {
+function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductions, selectedMonth, displayCurrency, budgetYear }: BudgetTableProps) {
   const queryClient = useQueryClient()
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
@@ -97,32 +101,183 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
     )
   }
 
+  // Get gross salary amount for a specific month (Brutto)
+  const getGrossSalaryForMonth = (month: number): number => {
+    const salaryCategory = categories.find(
+      (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+    )
+    if (!salaryCategory) return 0
+
+    // Prioritize input mode over entries
+    // If YEARLY mode, always use yearly_amount / 12
+    if (salaryCategory.input_mode === 'YEARLY' && salaryCategory.yearly_amount) {
+      return parseFloat(salaryCategory.yearly_amount) / 12
+    }
+
+    // If CUSTOM mode, check if this month is a payment month
+    if (salaryCategory.input_mode === 'CUSTOM' && salaryCategory.custom_months && salaryCategory.yearly_amount) {
+      const monthsInterval = 12 / salaryCategory.custom_months
+      const paymentMonths: number[] = []
+      for (let i = 0; i < salaryCategory.custom_months; i++) {
+        const calculatedMonth = 1 + (i * monthsInterval)
+        let paymentMonth = Math.round(calculatedMonth)
+        while (paymentMonth > 12) paymentMonth -= 12
+        while (paymentMonth < 1) paymentMonth += 12
+        paymentMonths.push(paymentMonth)
+      }
+
+      if (paymentMonths.includes(month)) {
+        return parseFloat(salaryCategory.yearly_amount) / salaryCategory.custom_months
+      } else {
+        return 0
+      }
+    }
+
+    // For MONTHLY mode, check for entry
+    if (salaryCategory.input_mode === 'MONTHLY') {
+      const salaryEntry = entries.find(
+        (e) => e.category === salaryCategory.id && e.month === month
+      )
+
+      if (salaryEntry) {
+        return parseFloat(salaryEntry.actual_amount || salaryEntry.planned_amount)
+      }
+    }
+
+    return 0
+  }
+
+  // Calculate total reductions for a month
+  const getTotalReductionsForMonth = (month: number): number => {
+    const grossSalary = getGrossSalaryForMonth(month)
+    if (grossSalary === 0) return 0
+
+    return salaryReductions.reduce((sum, reduction) => {
+      if (!reduction.is_active) return sum
+      
+      if (reduction.reduction_type === 'PERCENTAGE') {
+        return sum + (grossSalary * parseFloat(reduction.value)) / 100
+      } else {
+        return sum + parseFloat(reduction.value)
+      }
+    }, 0)
+  }
+
+  // Get net salary (gross - reductions) for a month
+  const getNetSalaryForMonth = (month: number): number => {
+    const gross = getGrossSalaryForMonth(month)
+    const reductions = getTotalReductionsForMonth(month)
+    return Math.max(0, gross - reductions)
+  }
+
+  // Calculate tax amount for a tax entry in a specific month (uses gross salary)
+  const calculateTaxAmount = (tax: TaxEntry, month: number): number => {
+    const grossSalary = getGrossSalaryForMonth(month)
+    if (grossSalary === 0) return 0
+    return (grossSalary * parseFloat(tax.percentage)) / 100
+  }
+
+  // Calculate monthly totals (income, expenses, balance) for a specific month
+  const calculateMonthlyTotals = (month: number) => {
+    let income = 0
+    let expenses = 0
+
+    categories.forEach((category) => {
+      let categoryAmount = 0
+
+      // For YEARLY and CUSTOM modes, calculate based on input mode
+      if (category.input_mode === 'YEARLY' || category.input_mode === 'CUSTOM') {
+        const yearlyAmount = parseFloat(category.yearly_amount || '0')
+        
+        if (category.input_mode === 'YEARLY') {
+          // Distribute evenly across 12 months
+          categoryAmount = yearlyAmount / 12
+        } else if (category.input_mode === 'CUSTOM' && category.custom_months) {
+          // For CUSTOM mode, check if this month is a payment month
+          const monthsInterval = 12 / category.custom_months
+          const paymentMonths: number[] = []
+          for (let i = 0; i < category.custom_months; i++) {
+            const calculatedMonth = 1 + (i * monthsInterval)
+            let paymentMonth = Math.round(calculatedMonth)
+            while (paymentMonth > 12) paymentMonth -= 12
+            while (paymentMonth < 1) paymentMonth += 12
+            paymentMonths.push(paymentMonth)
+          }
+          
+          if (paymentMonths.includes(month)) {
+            // This month has a payment, show the payment amount
+            categoryAmount = yearlyAmount / category.custom_months
+          } else {
+            // No payment this month
+            categoryAmount = 0
+          }
+        }
+      } else {
+        // For MONTHLY mode, get the entry for this month
+        const categoryEntries = entries.filter(
+          (e) => e.category === category.id && e.month === month
+        )
+        categoryAmount = categoryEntries.reduce((sum, entry) => {
+          return sum + parseFloat(entry.actual_amount || entry.planned_amount)
+        }, 0)
+      }
+
+      // Add to appropriate total
+      if (category.category_type === 'INCOME') {
+        // For salary category, use net salary (gross - reductions)
+        if (category.name.toLowerCase().includes('gehalt')) {
+          income += getNetSalaryForMonth(month)
+        } else {
+          income += categoryAmount
+        }
+      } else {
+        expenses += categoryAmount
+      }
+    })
+
+    // Add salary reductions as expenses
+    expenses += getTotalReductionsForMonth(month)
+
+    // Add tax expenses
+    taxEntries.forEach((tax) => {
+      if (tax.is_active) {
+        expenses += calculateTaxAmount(tax, month)
+      }
+    })
+
+    return {
+      income,
+      expenses,
+      balance: income - expenses,
+    }
+  }
+
   const displayMonths = selectedMonth ? [selectedMonth] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
   return (
-    <div>
-      <div className="overflow-x-auto">
+    <div className="w-full">
+      <div className="overflow-x-auto w-full">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600">
-              <th className="px-6 py-4 text-left text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 sticky left-0 bg-gray-100 dark:bg-gray-700 z-10 min-w-[200px]">
+            <tr className="bg-slate-100 dark:bg-slate-700">
+              <th className="px-4 py-4 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 sticky left-0 bg-slate-100 dark:bg-slate-700 z-10 min-w-[180px]">
                 Kategorie
               </th>
-              <th className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[120px]">
+              <th className="px-4 py-4 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[100px]">
                 Typ
               </th>
               {displayMonths.map((month) => (
                 <th
                   key={month}
-                  className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[140px]"
+                  className="px-3 py-4 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[110px]"
                 >
                   {MONTHS[month - 1]}
                 </th>
               ))}
-              <th className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[140px]">
+              <th className="px-4 py-4 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[120px]">
                 Gesamt
               </th>
-              <th className="px-6 py-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200 border-b-2 border-gray-300 dark:border-gray-500 min-w-[100px]">
+              <th className="px-4 py-4 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[80px]">
                 Aktionen
               </th>
             </tr>
@@ -146,14 +301,89 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
                 />
               )
             })}
+            {/* Taxes Section */}
+            <SalaryReductionsSection
+              budgetId={budgetId}
+              salaryReductions={salaryReductions || []}
+              categories={categories}
+              entries={entries}
+              displayMonths={displayMonths}
+              displayCurrency={displayCurrency}
+              budgetYear={budgetYear}
+            />
+            <TaxesSection
+              budgetId={budgetId}
+              taxEntries={taxEntries || []}
+              categories={categories}
+              entries={entries}
+              displayMonths={displayMonths}
+              displayCurrency={displayCurrency}
+              budgetYear={budgetYear}
+            />
+            {/* Monthly Summary Row */}
+            <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-4 border-slate-400 dark:border-slate-500">
+              <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-r border-slate-300 dark:border-slate-600 z-10">
+                Monatliche Bilanz
+              </td>
+              <td className="px-3 py-4 text-center text-xs text-slate-600 dark:text-slate-400">
+                -
+              </td>
+              {displayMonths.map((month) => {
+                const totals = calculateMonthlyTotals(month)
+                return (
+                  <td
+                    key={month}
+                    className="px-3 py-4 text-center border-l border-r border-slate-200 dark:border-slate-600 bg-white/50 dark:bg-slate-800/30"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] font-semibold text-green-700 dark:text-green-400">
+                        <div className="flex items-center justify-center gap-1">
+                          <span>💰</span>
+                          <span className="text-[9px] opacity-75">Einnahme:</span>
+                        </div>
+                        <div className="mt-0.5">{formatCurrency(totals.income, displayCurrency)}</div>
+                      </div>
+                      <div className="text-[10px] font-semibold text-red-700 dark:text-red-400">
+                        <div className="flex items-center justify-center gap-1">
+                          <span>💸</span>
+                          <span className="text-[9px] opacity-75">Ausgabe:</span>
+                        </div>
+                        <div className="mt-0.5">{formatCurrency(totals.expenses, displayCurrency)}</div>
+                      </div>
+                      <div
+                        className={`text-xs font-bold pt-1 border-t border-slate-300 dark:border-slate-600 ${
+                          totals.balance >= 0
+                            ? 'text-blue-700 dark:text-blue-400'
+                            : 'text-orange-700 dark:text-orange-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>{totals.balance >= 0 ? '📈' : '📉'}</span>
+                          <span className="text-[9px] opacity-75">Bilanz:</span>
+                        </div>
+                        <div className="mt-0.5">
+                          {totals.balance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totals.balance), displayCurrency)}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                )
+              })}
+              <td className="px-3 py-4 text-center text-sm font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-700/50">
+                -
+              </td>
+              <td className="px-3 py-4 text-center">
+                -
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
 
       {/* Add Category Section */}
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
+      <div className="p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
         {isAddingCategory ? (
-          <div className="space-y-3 max-w-2xl">
+            <div className="space-y-4 max-w-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">
                 Neue Kategorie hinzufügen
@@ -167,8 +397,8 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
             </div>
 
             {showCategorySuggestions && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">
                   Häufige Kategorien für {newCategoryType === 'INCOME' ? 'Einnahmen' : newCategoryType === 'FIXED_EXPENSE' ? 'Fixkosten' : newCategoryType === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'}:
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -179,7 +409,7 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
                         setNewCategoryName(suggestion.name)
                         setShowCategorySuggestions(false)
                       }}
-                      className="px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-left"
+                      className="px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-left text-slate-900 dark:text-white font-medium"
                     >
                       {suggestion.name}
                     </button>
@@ -194,13 +424,13 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 placeholder="Kategoriename (z.B. Gehalt, Miete)"
-                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-base"
+                className="px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm shadow-sm transition-all"
                 autoFocus
               />
               <select
                 value={newCategoryType}
                 onChange={(e) => setNewCategoryType(e.target.value as any)}
-                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-base"
+                className="px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm shadow-sm transition-all"
               >
                 <option value="INCOME">💰 Einnahme</option>
                 <option value="FIXED_EXPENSE">🏠 Fixkosten</option>
@@ -212,7 +442,7 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
               <button
                 onClick={handleAddCategory}
                 disabled={addCategoryMutation.isPending}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
               >
                 {addCategoryMutation.isPending ? (
                   <span className="flex items-center gap-2">
@@ -229,7 +459,7 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
                   setNewCategoryName('')
                 }}
                 disabled={addCategoryMutation.isPending}
-                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all font-semibold disabled:opacity-50"
+                className="px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm text-sm"
               >
                 ✕ Abbrechen
               </button>
@@ -238,7 +468,7 @@ function BudgetTable({ budgetId, categories, entries, selectedMonth, displayCurr
         ) : (
           <button
             onClick={() => setIsAddingCategory(true)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-semibold shadow-md hover:shadow-lg flex items-center gap-2"
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-2 text-sm"
           >
             <span className="text-xl">+</span>
             Kategorie hinzufügen

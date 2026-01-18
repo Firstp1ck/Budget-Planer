@@ -6,6 +6,8 @@ router = DefaultRouter()
 router.register(r'budgets', views.BudgetViewSet, basename='budget')
 router.register(r'categories', views.BudgetCategoryViewSet, basename='category')
 router.register(r'entries', views.BudgetEntryViewSet, basename='entry')
+router.register(r'salary-reductions', views.SalaryReductionViewSet, basename='salary-reduction')
+router.register(r'taxes', views.TaxEntryViewSet, basename='tax')
 router.register(r'templates', views.BudgetTemplateViewSet, basename='template')
 
 urlpatterns = [

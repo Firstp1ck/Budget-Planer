@@ -65,10 +65,34 @@ export interface YearlySummary {
   monthly_summaries: MonthlySummary[]
 }
 
+export type ReductionType = 'PERCENTAGE' | 'FIXED'
+
+export interface SalaryReduction {
+  id: number
+  budget: number
+  name: string
+  reduction_type: ReductionType
+  reduction_type_display: string
+  value: string
+  order: number
+  is_active: boolean
+}
+
+export interface TaxEntry {
+  id: number
+  budget: number
+  name: string
+  percentage: string
+  order: number
+  is_active: boolean
+}
+
 export interface BudgetSummaryData {
   budget: Budget
   categories: BudgetCategory[]
   entries: BudgetEntry[]
+  tax_entries: TaxEntry[]
+  salary_reductions: SalaryReduction[]
 }
 
 export interface PaginatedResponse<T> {

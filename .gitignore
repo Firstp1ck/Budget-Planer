@@ -29,8 +29,6 @@ htmlcov/
 *.log
 
 # Django
-*.sqlite3
-db.sqlite3
 /media
 /staticfiles
 local_settings.py

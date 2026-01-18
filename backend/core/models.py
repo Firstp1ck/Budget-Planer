@@ -232,6 +232,74 @@ class BudgetEntry(models.Model):
         super().save(*args, **kwargs)
 
 
+class SalaryReduction(models.Model):
+    """Reduction from gross salary (e.g., social security, health insurance)"""
+    REDUCTION_TYPES = [
+        ('PERCENTAGE', 'Percentage'),
+        ('FIXED', 'Fixed Amount'),
+    ]
+
+    budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='salary_reductions')
+    name = models.CharField(max_length=200, help_text="Reduction name (e.g., AHV, Krankenkasse)")
+    reduction_type = models.CharField(max_length=10, choices=REDUCTION_TYPES, default='PERCENTAGE')
+    value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        help_text="Percentage (0-100) or fixed amount"
+    )
+    order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['budget', 'order', 'name']
+        verbose_name_plural = 'Salary Reductions'
+        unique_together = ['budget', 'name']
+
+    def __str__(self):
+        if self.reduction_type == 'PERCENTAGE':
+            return f"{self.budget.name} - {self.name} ({self.value}%)"
+        return f"{self.budget.name} - {self.name} ({self.value} {self.budget.currency})"
+
+    def calculate_amount(self, gross_salary: Decimal) -> Decimal:
+        """Calculate reduction amount based on gross salary"""
+        if not gross_salary or gross_salary == 0:
+            return Decimal('0')
+        
+        if self.reduction_type == 'PERCENTAGE':
+            return (gross_salary * self.value) / Decimal('100')
+        else:
+            return self.value
+
+
+class TaxEntry(models.Model):
+    """Tax entry that calculates expense based on percentage of salary income"""
+    budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='tax_entries')
+    name = models.CharField(max_length=200, help_text="Tax name (e.g., Einkommenssteuer, AHV)")
+    percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Tax percentage (e.g., 10.5 for 10.5%)"
+    )
+    order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['budget', 'order', 'name']
+        verbose_name_plural = 'Tax Entries'
+        unique_together = ['budget', 'name']
+
+    def __str__(self):
+        return f"{self.budget.name} - {self.name} ({self.percentage}%)"
+
+    def calculate_amount(self, salary_amount: Decimal) -> Decimal:
+        """Calculate tax amount based on salary and percentage"""
+        if not salary_amount or salary_amount == 0:
+            return Decimal('0')
+        return (salary_amount * self.percentage) / Decimal('100')
+
+
 class BudgetTemplate(models.Model):
     """Template for quick budget creation with predefined categories"""
     name = models.CharField(max_length=200, unique=True)
@@ -257,7 +325,10 @@ class BudgetTemplate(models.Model):
                 name=cat_data['name'],
                 defaults={
                     'category_type': cat_data['category_type'],
-                    'order': cat_data.get('order', 0)
+                    'order': cat_data.get('order', 0),
+                    'input_mode': cat_data.get('input_mode', 'MONTHLY'),
+                    'custom_months': cat_data.get('custom_months'),
+                    'yearly_amount': None,  # Templates don't include values
                 }
             )
             if created:

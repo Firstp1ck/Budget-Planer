@@ -36,7 +36,10 @@ function MonthlyView() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-600 dark:text-gray-400">Loading...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-20 w-20 border-4 border-indigo-200 dark:border-indigo-800 border-t-indigo-600 dark:border-t-indigo-400 mx-auto mb-6"></div>
+          <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">Lade Daten...</p>
+        </div>
       </div>
     )
   }
@@ -44,7 +47,10 @@ function MonthlyView() {
   if (!monthlyData || !budget) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-600">Daten nicht gefunden</div>
+        <div className="text-center bg-white dark:bg-slate-800 rounded-xl p-12 shadow-md border border-slate-200 dark:border-slate-700">
+          <div className="text-7xl mb-6 animate-pulse">⚠️</div>
+          <p className="text-xl font-bold text-red-600 dark:text-red-400">Daten nicht gefunden</p>
+        </div>
       </div>
     )
   }
@@ -57,23 +63,23 @@ function MonthlyView() {
     }))
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen">
+      <div className="w-full max-w-7xl mx-auto px-6 py-8 animate-fade-in">
         <div className="mb-8">
           <Link
             to={`/budget/${budgetId}`}
-            className="text-blue-600 dark:text-blue-400 hover:underline mb-2 inline-block"
+            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mb-3 inline-flex items-center gap-2 text-sm font-medium transition-colors"
           >
             ← Zurück zum Budget
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
             {budget.name} - {MONTHS[monthNum - 1]} {budget.year}
           </h1>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700">
+            <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
               Einnahmen
             </h3>
             <p className="text-2xl font-bold text-green-600 dark:text-green-400">
@@ -81,8 +87,8 @@ function MonthlyView() {
             </p>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+          <div className="glass rounded-xl shadow-md p-6 border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-xl">
+            <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
               Ausgaben
             </h3>
             <p className="text-2xl font-bold text-red-600 dark:text-red-400">
@@ -90,8 +96,12 @@ function MonthlyView() {
             </p>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+          <div className={`bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700 ${
+            parseFloat(monthlyData.balance) >= 0
+              ? 'bg-green-50/50 dark:bg-green-900/10'
+              : 'bg-red-50/50 dark:bg-red-900/10'
+          }`}>
+            <h3 className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wide">
               Bilanz
             </h3>
             <p className={`text-2xl font-bold ${
@@ -99,14 +109,14 @@ function MonthlyView() {
                 ? 'text-green-600 dark:text-green-400'
                 : 'text-red-600 dark:text-red-400'
             }`}>
-              {parseFloat(monthlyData.balance).toFixed(2)} {budget.currency}
+              {parseFloat(monthlyData.balance) >= 0 ? '+' : ''}{parseFloat(monthlyData.balance).toFixed(2)} {budget.currency}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
               Ausgaben-Verteilung
             </h2>
             <ResponsiveContainer width="100%" height={300}>
@@ -130,30 +140,30 @@ function MonthlyView() {
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 border border-slate-200 dark:border-slate-700">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
               Einträge
             </h2>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {monthlyData.entries.map((entry) => (
                 <div
                   key={entry.id}
-                  className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                  className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 shadow-sm"
                 >
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-white">
+                    <p className="font-medium text-slate-900 dark:text-white">
                       {entry.category_name}
                     </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
                       {entry.category_type === 'INCOME' ? 'Einnahme' : 'Ausgabe'}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900 dark:text-white">
+                    <p className="font-semibold text-slate-900 dark:text-white">
                       {parseFloat(entry.actual_amount || entry.planned_amount).toFixed(2)} {budget.currency}
                     </p>
                     {entry.actual_amount && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
                         Geplant: {parseFloat(entry.planned_amount).toFixed(2)}
                       </p>
                     )}

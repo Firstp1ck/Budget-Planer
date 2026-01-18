@@ -2,12 +2,15 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate
+from django.db import IntegrityError
+from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction
 from .serializers import (
     BudgetSerializer,
     BudgetCategorySerializer,
     BudgetEntrySerializer,
     BudgetTemplateSerializer,
+    TaxEntrySerializer,
+    SalaryReductionSerializer,
     MonthlySummarySerializer,
     YearlySummarySerializer,
     BudgetSummarySerializer,
@@ -28,11 +31,15 @@ class BudgetViewSet(viewsets.ModelViewSet):
         entries = BudgetEntry.objects.filter(
             category__budget=budget
         ).select_related('category')
+        tax_entries = budget.tax_entries.filter(is_active=True)
+        salary_reductions = budget.salary_reductions.filter(is_active=True)
 
         data = {
             'budget': budget,
             'categories': categories,
-            'entries': entries
+            'entries': entries,
+            'tax_entries': tax_entries,
+            'salary_reductions': salary_reductions
         }
 
         serializer = BudgetSummarySerializer(data)
@@ -164,6 +171,56 @@ class BudgetEntryViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+class SalaryReductionViewSet(viewsets.ModelViewSet):
+    """ViewSet for SalaryReduction model"""
+    queryset = SalaryReduction.objects.all()
+    serializer_class = SalaryReductionSerializer
+
+    def get_queryset(self):
+        """Filter by budget if provided"""
+        queryset = super().get_queryset()
+        budget_id = self.request.query_params.get('budget', None)
+
+        if budget_id is not None:
+            queryset = queryset.filter(budget_id=budget_id)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        """Set budget when creating salary reduction"""
+        budget_id = self.request.data.get('budget')
+        if budget_id:
+            budget = get_object_or_404(Budget, pk=budget_id)
+            serializer.save(budget=budget)
+        else:
+            serializer.save()
+
+
+class TaxEntryViewSet(viewsets.ModelViewSet):
+    """ViewSet for TaxEntry model"""
+    queryset = TaxEntry.objects.all()
+    serializer_class = TaxEntrySerializer
+
+    def get_queryset(self):
+        """Filter by budget if provided"""
+        queryset = super().get_queryset()
+        budget_id = self.request.query_params.get('budget', None)
+
+        if budget_id is not None:
+            queryset = queryset.filter(budget_id=budget_id)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        """Set budget when creating tax entry"""
+        budget_id = self.request.data.get('budget')
+        if budget_id:
+            budget = get_object_or_404(Budget, pk=budget_id)
+            serializer.save(budget=budget)
+        else:
+            serializer.save()
+
+
 class BudgetTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for BudgetTemplate model"""
     queryset = BudgetTemplate.objects.all()
@@ -186,3 +243,69 @@ class BudgetTemplateViewSet(viewsets.ModelViewSet):
 
         serializer = BudgetCategorySerializer(created_categories, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def create_from_budget(self, request):
+        """Create a template from an existing budget (categories without values)"""
+        budget_id = request.data.get('budget_id')
+        template_name = request.data.get('name')
+        overwrite = request.data.get('overwrite', False)
+
+        if not budget_id:
+            return Response(
+                {'error': 'budget_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not template_name:
+            return Response(
+                {'error': 'name is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        budget = get_object_or_404(Budget, pk=budget_id)
+        categories = budget.categories.filter(is_active=True).order_by('order', 'name')
+
+        # Build category data without values
+        category_data = []
+        for category in categories:
+            category_data.append({
+                'name': category.name,
+                'category_type': category.category_type,
+                'order': category.order,
+                'input_mode': category.input_mode,
+                'custom_months': category.custom_months,
+                # Note: yearly_amount is NOT included - templates don't store values
+            })
+
+        # Check if template with this name already exists
+        existing_template = BudgetTemplate.objects.filter(name=template_name).first()
+        
+        if existing_template:
+            if overwrite:
+                # Update existing template
+                existing_template.categories = category_data
+                existing_template.save()
+                serializer = BudgetTemplateSerializer(existing_template)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            else:
+                # Return error indicating duplicate name
+                return Response(
+                    {'error': 'DUPLICATE_NAME', 'message': f'Eine Vorlage mit dem Namen "{template_name}" existiert bereits.'},
+                    status=status.HTTP_409_CONFLICT
+                )
+
+        # Create new template
+        try:
+            template = BudgetTemplate.objects.create(
+                name=template_name,
+                categories=category_data
+            )
+            serializer = BudgetTemplateSerializer(template)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except IntegrityError:
+            # Fallback in case of race condition
+            return Response(
+                {'error': 'DUPLICATE_NAME', 'message': f'Eine Vorlage mit dem Namen "{template_name}" existiert bereits.'},
+                status=status.HTTP_409_CONFLICT
+            )

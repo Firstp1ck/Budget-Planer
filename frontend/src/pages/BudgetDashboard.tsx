@@ -49,7 +49,7 @@ function BudgetDashboard() {
       createMutation.mutate({
         name: newBudgetName,
         year: newBudgetYear,
-        currency: 'EUR',
+        currency: 'CHF',
       })
     } else {
       toast.error('Bitte geben Sie einen Namen ein')
@@ -66,8 +66,8 @@ function BudgetDashboard() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Lade Budgets...</p>
+          <div className="animate-spin rounded-full h-20 w-20 border-4 border-indigo-200 dark:border-indigo-800 border-t-indigo-600 dark:border-t-indigo-400 mx-auto mb-6"></div>
+          <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">Lade Budgets...</p>
         </div>
       </div>
     )
@@ -76,12 +76,12 @@ function BudgetDashboard() {
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="text-red-600 text-6xl mb-4">⚠️</div>
-          <p className="text-red-600 mb-4">Fehler beim Laden der Budgets</p>
+        <div className="text-center bg-white dark:bg-slate-800 rounded-xl p-12 shadow-md border border-slate-200 dark:border-slate-700">
+          <div className="text-7xl mb-6 animate-pulse">⚠️</div>
+          <p className="text-xl font-bold text-red-600 dark:text-red-400 mb-6">Fehler beim Laden der Budgets</p>
           <button
             onClick={() => queryClient.invalidateQueries({ queryKey: ['budgets'] })}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
           >
             Erneut versuchen
           </button>
@@ -91,25 +91,32 @@ function BudgetDashboard() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className="w-full px-4 py-8 animate-fade-in">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-          💰 Budget Planer
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Verwalten Sie Ihre Finanzen einfach und übersichtlich
-        </p>
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-2xl shadow-md">
+            💰
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+              Budget Planer
+            </h1>
+            <p className="text-base text-gray-600 dark:text-gray-400">
+              Verwalten Sie Ihre Finanzen einfach und übersichtlich
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Create Budget Button */}
       {!isCreating && (
-        <div className="mb-6">
+        <div className="mb-8">
           <button
             onClick={() => setIsCreating(true)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-semibold flex items-center gap-2"
+            className="group px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 font-medium flex items-center gap-2 text-sm"
           >
-            <span className="text-xl">+</span>
+            <span className="text-base group-hover:scale-110 transition-transform">+</span>
             Neues Budget erstellen
           </button>
         </div>
@@ -117,11 +124,11 @@ function BudgetDashboard() {
 
       {/* Create Budget Form */}
       {isCreating && (
-        <div className="mb-8 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">
+        <div className="mb-8 p-7 bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 animate-fade-in">
+          <h2 className="text-xl font-semibold mb-6 text-gray-900 dark:text-white">
             Neues Budget erstellen
           </h2>
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Budget Name *
@@ -130,7 +137,7 @@ function BudgetDashboard() {
                 type="text"
                 value={newBudgetName}
                 onChange={(e) => setNewBudgetName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
+                className="w-full px-5 py-3.5 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700/50 dark:text-white transition-all shadow-sm focus:shadow-md"
                 placeholder="z.B. Haushaltsbudget 2026"
                 autoFocus
               />
@@ -143,16 +150,16 @@ function BudgetDashboard() {
                 type="number"
                 value={newBudgetYear}
                 onChange={(e) => setNewBudgetYear(parseInt(e.target.value))}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
+                className="w-full px-5 py-3.5 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700/50 dark:text-white transition-all shadow-sm focus:shadow-md"
                 min="2000"
                 max="2100"
               />
             </div>
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-4">
               <button
                 onClick={handleCreate}
                 disabled={createMutation.isPending}
-                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
               >
                 {createMutation.isPending ? (
                   <span className="flex items-center justify-center gap-2">
@@ -169,7 +176,7 @@ function BudgetDashboard() {
                   setNewBudgetName('')
                 }}
                 disabled={createMutation.isPending}
-                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all font-semibold disabled:opacity-50"
+                className="px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm text-sm"
               >
                 Abbrechen
               </button>
@@ -180,29 +187,29 @@ function BudgetDashboard() {
 
       {/* Budget Grid */}
       {budgets && budgets.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
           {budgets.map((budget) => (
             <div
               key={budget.id}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-200 dark:border-gray-700 overflow-hidden group"
+              className="bg-white dark:bg-slate-800 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700 overflow-hidden group transform hover:-translate-y-1"
             >
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-4">
+              <div className="p-7">
+                <div className="flex justify-between items-start mb-6">
                   <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-1 group-hover:text-blue-600 transition-colors">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                       {budget.name}
                     </h3>
-                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                      <span className="font-medium">{budget.year}</span>
-                      <span>•</span>
-                      <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded-full text-xs font-semibold">
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{budget.year}</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="px-2.5 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">
                         {budget.currency}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="mb-5 pb-5 border-b border-gray-200 dark:border-gray-700">
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     Erstellt am {new Date(budget.created_at).toLocaleDateString('de-DE', {
                       day: '2-digit',
@@ -212,17 +219,17 @@ function BudgetDashboard() {
                   </p>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <Link
                     to={`/budget/${budget.id}`}
-                    className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-center rounded-lg hover:bg-blue-700 transition-all font-semibold shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+                    className="flex-1 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm flex items-center justify-center"
                   >
                     Öffnen
                   </Link>
                   <button
                     onClick={() => handleDelete(budget.id, budget.name)}
                     disabled={deleteMutation.isPending}
-                    className="px-4 py-2.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-all font-semibold disabled:opacity-50"
+                    className="px-4 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-all font-medium disabled:opacity-50 shadow-sm border border-red-200 dark:border-red-800 text-sm"
                     title="Budget löschen"
                   >
                     🗑️
@@ -233,19 +240,19 @@ function BudgetDashboard() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
-          <div className="text-6xl mb-4">📊</div>
-          <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+        <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+          <div className="text-6xl mb-5">📊</div>
+          <h3 className="text-2xl font-semibold text-slate-900 dark:text-white mb-2">
             Noch keine Budgets vorhanden
           </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+          <p className="text-base text-slate-600 dark:text-slate-400 mb-6 max-w-md mx-auto">
             Erstellen Sie Ihr erstes Budget, um mit der Finanzplanung zu beginnen
           </p>
           <button
             onClick={() => setIsCreating(true)}
-            className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 font-semibold inline-flex items-center gap-2"
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 font-medium inline-flex items-center gap-2 text-sm"
           >
-            <span className="text-xl">+</span>
+            <span className="text-base">+</span>
             Erstes Budget erstellen
           </button>
         </div>
