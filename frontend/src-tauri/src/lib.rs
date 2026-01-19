@@ -182,7 +182,7 @@ fn start_backend_server(
   for i in 0..10 {
     std::thread::sleep(std::time::Duration::from_millis(500));
     // Try to connect to the server
-    if let Ok(mut stream) = std::net::TcpStream::connect("127.0.0.1:8000") {
+    if let Ok(stream) = std::net::TcpStream::connect("127.0.0.1:8000") {
       server_ready = true;
       let _ = stream.shutdown(std::net::Shutdown::Both);
       info!("Backend server is ready and accepting connections");

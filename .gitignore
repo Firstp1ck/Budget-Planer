@@ -63,3 +63,6 @@ build/
 # Logs
 logs/
 *.log
+
+# data
+backend/db.sqlite3
