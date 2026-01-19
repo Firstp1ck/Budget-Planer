@@ -257,7 +257,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
 
   if (isEditing) {
     return (
-      <td className="px-3 py-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600">
+      <td className="px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600">
         <div ref={cellRef} className="space-y-2 min-w-[150px]" tabIndex={-1}>
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -389,7 +389,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
   if (category.input_mode === 'YEARLY' && calculatedMonthlyAmount > 0) {
     return (
       <td
-        className="px-3 py-3 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
+        className="px-3 py-2 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
         title="Berechnet: Jahresbetrag / 12"
       >
         <div>
@@ -412,7 +412,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     if (!isPaymentMonth) {
       return (
         <td
-          className="px-3 py-3 text-center text-sm border bg-gray-50 dark:bg-gray-800/50"
+          className="px-3 py-2 text-center text-sm border bg-gray-50 dark:bg-gray-800/50"
           title={`Keine Zahlung in diesem Monat (Zahlungen in Monaten: ${paymentMonths.join(', ')})`}
         >
           <div>
@@ -436,7 +436,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
         return (
           <td
             onClick={() => setIsEditing(true)}
-            className="px-3 py-3 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-blue-50 dark:bg-blue-900/10"
+            className="px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-blue-50 dark:bg-blue-900/10"
             title="Klicken zum Bearbeiten - Betrag pro Zahlung"
           >
             <div>
@@ -455,7 +455,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       return (
         <td
           onClick={() => setIsEditing(true)}
-          className={`px-3 py-3 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border ${getStatusColor()}`}
+          className={`px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border ${getStatusColor()}`}
           title="Klicken zum Bearbeiten - Betrag pro Zahlung"
         >
           {entry ? (
@@ -484,7 +484,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
 
         return (
           <td
-            className="px-3 py-3 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
+            className="px-3 py-2 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
             title="Berechnet: Zahlung in diesem Monat"
           >
             <div>
@@ -502,7 +502,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       // If yearly_amount not set yet, show empty (waiting for first month input)
       return (
         <td
-          className="px-3 py-3 text-center text-sm border bg-gray-50 dark:bg-gray-800/50"
+          className="px-3 py-2 text-center text-sm border bg-gray-50 dark:bg-gray-800/50"
           title="Warten auf Eingabe im ersten Monat"
         >
           <div>
@@ -522,7 +522,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
   return (
     <td
       onClick={() => setIsEditing(true)}
-      className={`px-3 py-3 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border ${getStatusColor()}`}
+      className={`px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border ${getStatusColor()}`}
       title="Klicken zum Bearbeiten"
     >
       {entry ? (

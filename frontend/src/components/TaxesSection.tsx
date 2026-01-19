@@ -192,7 +192,7 @@ function TaxesSection({
       >
         <td
           colSpan={displayMonths.length + 4}
-          className="px-4 py-3 text-sm font-bold text-red-800 dark:text-red-300"
+          className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300"
         >
           <div className="flex items-center gap-3">
             <button
@@ -235,7 +235,7 @@ function TaxesSection({
             >
               {editingTaxId === tax.id ? (
                 <>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <input
                       type="text"
                       value={taxFormData.name}
@@ -249,11 +249,11 @@ function TaxesSection({
                           handleCancelEdit()
                         }
                       }}
-                      className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="Name"
                     />
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-2 text-center">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <input
@@ -272,7 +272,7 @@ function TaxesSection({
                               handleCancelEdit()
                             }
                           }}
-                          className="flex-1 px-4 py-3 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          className="flex-1 px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           placeholder="Prozent (z.B. 10.5)"
                         />
                         <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">%</span>
@@ -284,7 +284,7 @@ function TaxesSection({
                     return (
                       <td
                         key={month}
-                        className="px-3 py-3 text-center text-sm border bg-red-50 dark:bg-red-900/10"
+                        className="px-3 py-2 text-center text-sm border bg-red-50 dark:bg-red-900/10"
                       >
                         <div className="font-semibold text-xs text-red-700 dark:text-red-300">
                           {formatCurrency(taxAmount, displayCurrency)}
@@ -292,13 +292,13 @@ function TaxesSection({
                       </td>
                     )
                   })}
-                  <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
+                  <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
                     {formatCurrency(
                       displayMonths.reduce((sum, month) => sum + calculateTaxAmount({ ...tax, percentage: taxFormData.percentage }, month), 0),
                       displayCurrency
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-2 text-center">
                     <div className="flex gap-2 justify-center">
                       <button
                         onClick={(e) => {
@@ -326,12 +326,12 @@ function TaxesSection({
                 </>
               ) : (
                 <>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-red-50 dark:bg-red-900/10 border-r border-gray-200 dark:border-gray-700 group-hover:bg-red-100 dark:group-hover:bg-red-900/20">
+                  <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-red-50 dark:bg-red-900/10 border-r border-gray-200 dark:border-gray-700 group-hover:bg-red-100 dark:group-hover:bg-red-900/20">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className="truncate">{tax.name}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-3 py-2 text-center">
                     <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
                       {tax.percentage}%
                     </span>
@@ -342,7 +342,7 @@ function TaxesSection({
                     return (
                       <td
                         key={month}
-                        className="px-3 py-3 text-center text-sm border bg-red-50 dark:bg-red-900/10"
+                        className="px-3 py-2 text-center text-sm border bg-red-50 dark:bg-red-900/10"
                         title={`Berechnet: ${formatCurrency(salary, displayCurrency)} × ${tax.percentage}% = ${formatCurrency(taxAmount, displayCurrency)}`}
                       >
                         <div className="font-semibold text-xs text-red-700 dark:text-red-300">
@@ -351,13 +351,13 @@ function TaxesSection({
                       </td>
                     )
                   })}
-                  <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
+                  <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
                     {formatCurrency(
                       displayMonths.reduce((sum, month) => sum + calculateTaxAmount(tax, month), 0),
                       displayCurrency
                     )}
                   </td>
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-3 py-2 text-center">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                       <button
                         onClick={(e) => {
@@ -389,10 +389,10 @@ function TaxesSection({
           {/* Total Row */}
           {sortedTaxEntries.length > 0 && (
             <tr className="bg-red-100 dark:bg-red-900/30 border-t-2 border-red-400 dark:border-red-600 font-bold">
-              <td className="px-4 py-3 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-400 dark:border-red-600">
+              <td className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-400 dark:border-red-600">
                 Gesamt
               </td>
-              <td className="px-3 py-3 text-center">
+              <td className="px-3 py-2 text-center">
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 dark:bg-red-800/50 text-red-900 dark:text-red-200">
                   {sortedTaxEntries
                     .filter(t => t.is_active)
@@ -407,7 +407,7 @@ function TaxesSection({
                 return (
                   <td
                     key={month}
-                    className="px-3 py-3 text-center text-sm border bg-red-100 dark:bg-red-900/30"
+                    className="px-3 py-2 text-center text-sm border bg-red-100 dark:bg-red-900/30"
                   >
                     <div className="font-bold text-red-800 dark:text-red-200">
                       {formatCurrency(totalTaxAmount, displayCurrency)}
@@ -415,7 +415,7 @@ function TaxesSection({
                   </td>
                 )
               })}
-              <td className="px-3 py-3 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30">
+              <td className="px-3 py-2 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30">
                 {formatCurrency(
                   displayMonths.reduce((sum, month) => {
                     return sum + sortedTaxEntries
@@ -425,14 +425,14 @@ function TaxesSection({
                   displayCurrency
                 )}
               </td>
-              <td className="px-3 py-3 text-center">
+              <td className="px-3 py-2 text-center">
                 {/* Empty cell for alignment */}
               </td>
             </tr>
           )}
           {isAddingTax && (
             <tr className="bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-800">
-              <td className="px-4 py-3">
+              <td className="px-4 py-2">
                 <input
                   type="text"
                   value={taxFormData.name}
@@ -446,11 +446,11 @@ function TaxesSection({
                       handleCancelEdit()
                     }
                   }}
-                  className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   placeholder="Name (z.B. Einkommenssteuer, AHV)"
                 />
               </td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-4 py-2 text-center">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <input
@@ -469,7 +469,7 @@ function TaxesSection({
                           handleCancelEdit()
                         }
                       }}
-                      className="flex-1 px-4 py-3 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      className="flex-1 px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="Prozent (z.B. 10.5)"
                     />
                     <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">%</span>
@@ -477,14 +477,14 @@ function TaxesSection({
                 </div>
               </td>
               {displayMonths.map((month) => (
-                <td key={month} className="px-3 py-3 text-center text-sm text-gray-400 dark:text-gray-500">
+                <td key={month} className="px-3 py-2 text-center text-sm text-gray-400 dark:text-gray-500">
                   -
                 </td>
               ))}
-              <td className="px-3 py-3 text-center text-sm text-gray-400 dark:text-gray-500">
+              <td className="px-3 py-2 text-center text-sm text-gray-400 dark:text-gray-500">
                 -
               </td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-4 py-2 text-center">
                 <div className="flex gap-2 justify-center">
                   <button
                     onClick={(e) => {
@@ -513,10 +513,10 @@ function TaxesSection({
           )}
           {!isAddingTax && (
             <tr className="bg-red-100 dark:bg-red-900/30 border-t-2 border-red-400 dark:border-red-600 font-bold">
-              <td className="px-4 py-3 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-400 dark:border-red-600">
+              <td className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-400 dark:border-red-600">
                 Gesamt
               </td>
-              <td className="px-3 py-3 text-center">
+              <td className="px-3 py-2 text-center">
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 dark:bg-red-800/50 text-red-900 dark:text-red-200">
                   {sortedTaxEntries
                     .filter(t => t.is_active)
@@ -525,7 +525,7 @@ function TaxesSection({
                 </span>
               </td>
               {displayMonths.map((month) => (
-                <td key={month} className="px-3 py-3 text-center text-sm border bg-red-100 dark:bg-red-900/30">
+                <td key={month} className="px-3 py-2 text-center text-sm border bg-red-100 dark:bg-red-900/30">
                   <div className="font-bold text-red-800 dark:text-red-200">
                     {formatCurrency(
                       sortedTaxEntries
@@ -536,7 +536,7 @@ function TaxesSection({
                   </div>
                 </td>
               ))}
-              <td className="px-3 py-3 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30">
+              <td className="px-3 py-2 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30">
                 {formatCurrency(
                   displayMonths.reduce((sum, month) => {
                     return sum + sortedTaxEntries
@@ -546,7 +546,7 @@ function TaxesSection({
                   displayCurrency
                 )}
               </td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-4 py-2 text-center">
               </td>
             </tr>
           )}

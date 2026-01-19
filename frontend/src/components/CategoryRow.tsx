@@ -524,46 +524,85 @@ function CategoryRow({
     return amount
   }
 
+  // Calculate yearly total for all categories in this group
+  const yearlyTotal = categories.reduce((sum, category) => sum + calculateTotal(category), 0)
+
   return (
     <>
       <tr
         className={`${TYPE_COLORS[type]} border-t-2 border-gray-300 dark:border-gray-600`}
       >
-        <td
-          colSpan={displayMonths.length + 4}
-          className="px-4 py-3 text-sm font-bold"
-        >
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
-              title={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
-              aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
-            >
-              <span className={`text-sm transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-90'}`}>
-                ▶
-              </span>
-            </button>
-            <span>{TYPE_LABELS[type]}</span>
-            <span className="text-xs font-normal opacity-75">({categories.length})</span>
-            {onAddCategory && (
+        {isCollapsed ? (
+          <>
+            {/* When collapsed, show individual cells with total in Gesamt column */}
+            <td className="px-4 py-2 text-sm font-bold sticky left-0 border-r border-gray-300 dark:border-gray-600">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsCollapsed(!isCollapsed)}
+                  className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
+                  title="Aufklappen"
+                  aria-label="Aufklappen"
+                >
+                  <span className="text-sm transition-transform duration-200 rotate-0">
+                    ▶
+                  </span>
+                </button>
+                <span>{TYPE_LABELS[type]}</span>
+                <span className="text-xs font-normal opacity-75">({categories.length})</span>
+              </div>
+            </td>
+            <td className="px-3 py-2 text-center">
+              {/* Empty cell for category type column */}
+            </td>
+            {displayMonths.map((month) => (
+              <td key={month} className="px-3 py-2 text-center">
+                {/* Empty cells for month columns */}
+              </td>
+            ))}
+            <td className="px-3 py-2 text-center text-sm font-bold bg-gray-50 dark:bg-gray-700/50">
+              {formatCurrency(yearlyTotal, displayCurrency)}
+            </td>
+            <td className="px-3 py-2 text-center">
+              {/* Empty cell for actions column */}
+            </td>
+          </>
+        ) : (
+          <td
+            colSpan={displayMonths.length + 4}
+            className="px-4 py-2 text-sm font-bold"
+          >
+            <div className="flex items-center gap-3">
               <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAddCategory(type)
-                }}
-                className={`px-4 py-2 text-white rounded hover:opacity-90 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95 ${
-                  type === 'INCOME' ? 'bg-green-500 hover:bg-green-600' :
-                  type === 'FIXED_EXPENSE' ? 'bg-blue-500 hover:bg-blue-600' :
-                  type === 'VARIABLE_EXPENSE' ? 'bg-purple-500 hover:bg-purple-600' :
-                  'bg-yellow-500 hover:bg-yellow-600'
-                }`}
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
+                title="Zuklappen"
+                aria-label="Zuklappen"
               >
-                + {type === 'INCOME' ? 'Einnahme' : type === 'FIXED_EXPENSE' ? 'Fixkosten' : type === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'} hinzufügen
+                <span className="text-sm transition-transform duration-200 rotate-90">
+                  ▶
+                </span>
               </button>
-            )}
-          </div>
-        </td>
+              <span>{TYPE_LABELS[type]}</span>
+              <span className="text-xs font-normal opacity-75">({categories.length})</span>
+              {onAddCategory && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAddCategory(type)
+                  }}
+                  className={`px-4 py-2 text-white rounded hover:opacity-90 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95 ${
+                    type === 'INCOME' ? 'bg-green-500 hover:bg-green-600' :
+                    type === 'FIXED_EXPENSE' ? 'bg-blue-500 hover:bg-blue-600' :
+                    type === 'VARIABLE_EXPENSE' ? 'bg-purple-500 hover:bg-purple-600' :
+                    'bg-yellow-500 hover:bg-yellow-600'
+                  }`}
+                >
+                  + {type === 'INCOME' ? 'Einnahme' : type === 'FIXED_EXPENSE' ? 'Fixkosten' : type === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'} hinzufügen
+                </button>
+              )}
+            </div>
+          </td>
+        )}
       </tr>
       {!isCollapsed && (
         <>
@@ -579,7 +618,7 @@ function CategoryRow({
             dragOverCategoryId === category.id ? 'border-t-4 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30' : ''
           }`}
         >
-          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50">
+          <td className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50">
             <div className="flex items-center gap-1.5 min-w-0">
               <span 
                 className="cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 select-none inline-block px-1" 
@@ -922,7 +961,7 @@ function CategoryRow({
               </div>
             )}
           </td>
-          <td className="px-3 py-3 text-center">
+          <td className="px-3 py-2 text-center">
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${TYPE_COLORS[type]}`}>
               {TYPE_LABELS[category.category_type]}
             </span>
@@ -943,18 +982,18 @@ function CategoryRow({
               />
             )
           })}
-          <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
+          <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
             {formatCurrency(calculateTotal(category), displayCurrency)}
           </td>
-          <td className="px-3 py-3 text-center">
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 flex-wrap">
+          <td className="px-3 py-2 text-center">
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 flex-nowrap">
               {/* Rename button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   handleEditName(category)
                 }}
-                className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
                 title="Kategorie umbenennen"
               >
                 ✏️
@@ -965,7 +1004,7 @@ function CategoryRow({
                   e.stopPropagation()
                   handleEditInputMode(category)
                 }}
-                className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
                 title="Eingabemodus ändern"
               >
                 ⚙️
@@ -977,7 +1016,7 @@ function CategoryRow({
                     e.stopPropagation()
                     handleOpenAutofill(category)
                   }}
-                  className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                  className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
                   title="Alle Monate automatisch ausfüllen"
                 >
                   🔄
@@ -991,7 +1030,7 @@ function CategoryRow({
                     copyPreviousMonthMutation.mutate({ categoryId: category.id, month: displayMonths[0] })
                   }}
                   disabled={copyPreviousMonthMutation.isPending}
-                  className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Vormonat kopieren"
                 >
                   ⏮️
@@ -1004,7 +1043,7 @@ function CategoryRow({
                   handleDeleteCategory(category.id, category.name)
                 }}
                 disabled={deleteCategoryMutation.isPending}
-                className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Kategorie löschen"
               >
                 🗑️
@@ -1016,10 +1055,10 @@ function CategoryRow({
           {/* Total Row for INCOME, FIXED_EXPENSE and VARIABLE_EXPENSE */}
           {(type === 'INCOME' || type === 'FIXED_EXPENSE' || type === 'VARIABLE_EXPENSE') && categories.length > 0 && (
             <tr className={`${TYPE_COLORS[type]} border-t-2 border-gray-300 dark:border-gray-600 font-bold`}>
-              <td className="px-4 py-3 text-sm font-bold sticky left-0 border-r border-gray-300 dark:border-gray-600">
+              <td className="px-4 py-2 text-sm font-bold sticky left-0 border-r border-gray-300 dark:border-gray-600">
                 Gesamt
               </td>
-              <td className="px-3 py-3 text-center">
+              <td className="px-3 py-2 text-center">
                 {/* Empty cell for category type column */}
               </td>
               {displayMonths.map((month) => {
@@ -1029,19 +1068,19 @@ function CategoryRow({
                 return (
                   <td
                     key={month}
-                    className="px-3 py-3 text-center text-sm border font-bold"
+                    className="px-3 py-2 text-center text-sm border font-bold"
                   >
                     {formatCurrency(monthlyTotal, displayCurrency)}
                   </td>
                 )
               })}
-              <td className="px-3 py-3 text-center text-sm font-bold bg-gray-50 dark:bg-gray-700/50">
+              <td className="px-3 py-2 text-center text-sm font-bold bg-gray-50 dark:bg-gray-700/50">
                 {formatCurrency(
                   categories.reduce((sum, category) => sum + calculateTotal(category), 0),
                   displayCurrency
                 )}
               </td>
-              <td className="px-3 py-3 text-center">
+              <td className="px-3 py-2 text-center">
                 {/* Empty cell for actions column */}
               </td>
             </tr>

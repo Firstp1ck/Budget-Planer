@@ -222,7 +222,7 @@ function BudgetDashboard() {
   }
 
   return (
-    <div className="w-full px-4 py-8 animate-fade-in">
+    <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 animate-fade-in">
       {/* Header */}
       <div className="mb-10">
         <div className="flex items-center gap-3 mb-4">

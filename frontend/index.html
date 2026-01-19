@@ -5,6 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Budget Planer</title>
+    <script>
+      // Apply dark mode class immediately before React renders to prevent flash
+      (function() {
+        const stored = localStorage.getItem('darkMode');
+        if (stored === 'true') {
+          document.documentElement.classList.add('dark');
+        } else if (stored === 'false') {
+          document.documentElement.classList.remove('dark');
+        } else {
+          // Use system preference if no stored value
+          if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+          }
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

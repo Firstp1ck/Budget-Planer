@@ -248,7 +248,7 @@ function SalaryReductionsSection({
   if (!salaryCategory) {
     return (
       <tr className="bg-yellow-50 dark:bg-yellow-900/20 border-t-2 border-yellow-300 dark:border-yellow-600">
-        <td colSpan={displayMonths.length + 4} className="px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+        <td colSpan={displayMonths.length + 4} className="px-4 py-2 text-sm text-yellow-800 dark:text-yellow-300">
           ⚠️ Keine "Gehalt" Kategorie gefunden. Bitte erstellen Sie eine Einnahmen-Kategorie mit dem Namen "Gehalt".
         </td>
       </tr>
@@ -260,7 +260,7 @@ function SalaryReductionsSection({
       <tr
         className="bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-t-2 border-orange-300 dark:border-orange-600"
       >
-        <td colSpan={displayMonths.length + 4} className="px-4 py-3 text-sm font-bold">
+        <td colSpan={displayMonths.length + 4} className="px-4 py-2 text-sm font-bold">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
@@ -294,7 +294,7 @@ function SalaryReductionsSection({
             <tr key={reduction.id} className="group bg-orange-50 dark:bg-orange-900/10 border-b border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/20 transition-colors">
               {editingReductionId === reduction.id ? (
                 <>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2">
                     <input
                       type="text"
                       value={reductionFormData.name}
@@ -308,11 +308,11 @@ function SalaryReductionsSection({
                           handleCancelEdit()
                         }
                       }}
-                      className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="Name"
                     />
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-2 text-center">
                     <div className="space-y-2">
                       <select
                         value={reductionFormData.reduction_type}
@@ -326,7 +326,7 @@ function SalaryReductionsSection({
                             handleCancelEdit()
                           }
                         }}
-                        className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       >
                         <option value="PERCENTAGE">Prozent</option>
                         <option value="FIXED">Fixbetrag</option>
@@ -347,23 +347,23 @@ function SalaryReductionsSection({
                             handleCancelEdit()
                           }
                         }}
-                        className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? 'Prozent (z.B. 5.125)' : 'Betrag'}
                       />
                     </div>
                   </td>
                   {displayMonths.map((month) => (
-                    <td key={month} className="px-3 py-3 text-center text-sm text-gray-900 dark:text-white">
+                    <td key={month} className="px-3 py-2 text-center text-sm text-gray-900 dark:text-white">
                       {formatCurrency(calculateReductionAmount({ ...reduction, ...reductionFormData }, month), displayCurrency)}
                     </td>
                   ))}
-                  <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white">
+                  <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 dark:text-white">
                     {formatCurrency(
                       displayMonths.reduce((sum, month) => sum + calculateReductionAmount({ ...reduction, ...reductionFormData }, month), 0),
                       displayCurrency
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-2 text-center">
                     <div className="flex gap-2 justify-center">
                       <button
                         onClick={(e) => {
@@ -391,24 +391,24 @@ function SalaryReductionsSection({
                 </>
               ) : (
                 <>
-                  <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{reduction.name}</td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-2 font-semibold text-gray-900 dark:text-white">{reduction.name}</td>
+                  <td className="px-4 py-2 text-center">
                     <span className="px-3 py-1 rounded-full text-xs bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200">
                       {reduction.reduction_type === 'PERCENTAGE' ? `${reduction.value}%` : formatCurrency(parseFloat(reduction.value), displayCurrency)}
                     </span>
                   </td>
                   {displayMonths.map((month) => (
-                    <td key={month} className="px-3 py-3 text-center text-sm text-gray-900 dark:text-white">
+                    <td key={month} className="px-3 py-2 text-center text-sm text-gray-900 dark:text-white">
                       {formatCurrency(calculateReductionAmount(reduction, month), displayCurrency)}
                     </td>
                   ))}
-                  <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white">
+                  <td className="px-3 py-2 text-center text-sm font-bold text-gray-900 dark:text-white">
                     {formatCurrency(
                       displayMonths.reduce((sum, month) => sum + calculateReductionAmount(reduction, month), 0),
                       displayCurrency
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  <td className="px-4 py-2 text-center">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 justify-center">
                       <button
                         onClick={(e) => {
@@ -439,7 +439,7 @@ function SalaryReductionsSection({
           ))}
           {isAddingReduction && (
             <tr className="bg-orange-50 dark:bg-orange-900/10 border-b border-orange-200 dark:border-orange-800">
-              <td className="px-4 py-3">
+              <td className="px-4 py-2">
                 <input
                   type="text"
                   value={reductionFormData.name}
@@ -453,11 +453,11 @@ function SalaryReductionsSection({
                       handleCancelEdit()
                     }
                   }}
-                  className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   placeholder="Name (z.B. AHV, Krankenkasse)"
                 />
               </td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-4 py-2 text-center">
                 <div className="space-y-2">
                   <select
                     value={reductionFormData.reduction_type}
@@ -471,7 +471,7 @@ function SalaryReductionsSection({
                         handleCancelEdit()
                       }
                     }}
-                    className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   >
                     <option value="PERCENTAGE">Prozent</option>
                     <option value="FIXED">Fixbetrag</option>
@@ -490,20 +490,20 @@ function SalaryReductionsSection({
                         handleCancelEdit()
                       }
                     }}
-                    className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                     placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? 'Prozent (z.B. 5.125)' : 'Betrag'}
                   />
                 </div>
               </td>
               {displayMonths.map((month) => (
-                <td key={month} className="px-3 py-3 text-center text-sm text-gray-400 dark:text-gray-500">
+                <td key={month} className="px-3 py-2 text-center text-sm text-gray-400 dark:text-gray-500">
                   -
                 </td>
               ))}
-              <td className="px-3 py-3 text-center text-sm text-gray-400 dark:text-gray-500">
+              <td className="px-3 py-2 text-center text-sm text-gray-400 dark:text-gray-500">
                 -
               </td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-4 py-2 text-center">
                 <div className="flex gap-2 justify-center">
                   <button
                     onClick={(e) => {
@@ -532,45 +532,45 @@ function SalaryReductionsSection({
           )}
           {!isAddingReduction && (
             <tr className="bg-orange-100 dark:bg-orange-900/30 border-t-2 border-orange-300 dark:border-orange-600 font-bold">
-              <td className="px-4 py-3 text-sm font-bold text-orange-800 dark:text-orange-300 sticky left-0 bg-orange-100 dark:bg-orange-900/30 border-r border-orange-300 dark:border-orange-600">
+              <td className="px-4 py-2 text-sm font-bold text-orange-800 dark:text-orange-300 sticky left-0 bg-orange-100 dark:bg-orange-900/30 border-r border-orange-300 dark:border-orange-600">
                 Gesamt
               </td>
-              <td className="px-3 py-3 text-center">
+              <td className="px-3 py-2 text-center">
                 {/* Empty cell for type column */}
               </td>
               {displayMonths.map((month) => (
-                <td key={month} className="px-3 py-3 text-center text-sm border bg-orange-100 dark:bg-orange-900/30">
+                <td key={month} className="px-3 py-2 text-center text-sm border bg-orange-100 dark:bg-orange-900/30">
                   <div className="font-bold text-orange-800 dark:text-orange-200">
                     {formatCurrency(getTotalReductionsForMonth(month), displayCurrency)}
                   </div>
                 </td>
               ))}
-              <td className="px-3 py-3 text-center text-sm font-bold text-orange-800 dark:text-orange-200 bg-orange-100 dark:bg-orange-900/30">
+              <td className="px-3 py-2 text-center text-sm font-bold text-orange-800 dark:text-orange-200 bg-orange-100 dark:bg-orange-900/30">
                 {formatCurrency(
                   displayMonths.reduce((sum, month) => sum + getTotalReductionsForMonth(month), 0),
                   displayCurrency
                 )}
               </td>
-              <td className="px-4 py-3 text-center">
+              <td className="px-4 py-2 text-center">
               </td>
             </tr>
           )}
           <tr className="bg-green-50 dark:bg-green-900/20 border-b-2 border-green-300 dark:border-green-600">
-            <td colSpan={2} className="px-4 py-3 text-sm font-bold text-green-800 dark:text-green-300">
+            <td colSpan={2} className="px-4 py-2 text-sm font-bold text-green-800 dark:text-green-300">
               Netto-Gehalt (Brutto - Abzüge)
             </td>
             {displayMonths.map((month) => (
-              <td key={month} className="px-3 py-3 text-center text-sm font-bold text-green-800 dark:text-green-300">
+              <td key={month} className="px-3 py-2 text-center text-sm font-bold text-green-800 dark:text-green-300">
                 {formatCurrency(getNetSalaryForMonth(month), displayCurrency)}
               </td>
             ))}
-            <td className="px-3 py-3 text-center text-sm font-bold text-green-800 dark:text-green-300">
+            <td className="px-3 py-2 text-center text-sm font-bold text-green-800 dark:text-green-300">
               {formatCurrency(
                 displayMonths.reduce((sum, month) => sum + getNetSalaryForMonth(month), 0),
                 displayCurrency
               )}
             </td>
-            <td className="px-4 py-3 text-center">
+            <td className="px-4 py-2 text-center">
               -
             </td>
           </tr>

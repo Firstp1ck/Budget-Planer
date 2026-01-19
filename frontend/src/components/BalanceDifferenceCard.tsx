@@ -24,6 +24,7 @@ function BalanceDifferenceCard({
   budgetYear,
 }: BalanceDifferenceCardProps) {
   const [viewMode, setViewMode] = useState<'yearly' | 'untilCurrent'>('untilCurrent')
+  const [isCollapsed, setIsCollapsed] = useState(false)
   
   // Get current month (1-12)
   const currentMonth = new Date().getMonth() + 1
@@ -256,6 +257,16 @@ function BalanceDifferenceCard({
     <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-xl shadow-md border border-indigo-200 dark:border-indigo-800 p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
+            title={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+            aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+          >
+            <span className={`text-sm transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-90'}`}>
+              ▶
+            </span>
+          </button>
           <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center text-2xl shadow-md">
             📊
           </div>
@@ -274,7 +285,7 @@ function BalanceDifferenceCard({
         </div>
         
         {/* Toggle for view mode - only show when no specific month is selected and it's the current year */}
-        {showToggle && (
+        {showToggle && !isCollapsed && (
           <div className="flex items-center gap-2 bg-white dark:bg-slate-800 rounded-lg p-2 border border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setViewMode('untilCurrent')}
@@ -300,6 +311,7 @@ function BalanceDifferenceCard({
         )}
       </div>
 
+      {!isCollapsed && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* SOLL Balance */}
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
@@ -350,6 +362,7 @@ function BalanceDifferenceCard({
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }

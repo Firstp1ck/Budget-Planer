@@ -97,7 +97,7 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
 
   if (isEditing) {
     return (
-      <td className="px-3 py-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600">
+      <td className="px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600">
         <div ref={cellRef} className="space-y-2 min-w-[150px]" tabIndex={-1}>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -155,7 +155,7 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
   return (
     <td
       onClick={() => setIsEditing(true)}
-      className="px-3 py-3 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-white dark:bg-gray-800"
+      className="px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-white dark:bg-gray-800"
       title="Klicken zum Bearbeiten"
     >
       {balance ? (

@@ -8,6 +8,18 @@ export default {
   theme: {
     extend: {
       colors: {
+        'light-green': {
+          50: '#e6f9f0',  // Lighter green tint
+          100: '#a7f3d0',
+          200: '#6ee7b7',
+          300: '#34d399',
+          400: '#10b981',
+          500: '#059669',
+          600: '#047857',
+          700: '#065f46',
+          800: '#064e3b',
+          900: '#022c22',
+        },
         'status-good': {
           light: '#d1fae5',
           DEFAULT: '#10b981',

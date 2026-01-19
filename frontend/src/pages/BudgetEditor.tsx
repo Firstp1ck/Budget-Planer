@@ -159,7 +159,7 @@ function BudgetEditor() {
 
   return (
     <div className="min-h-screen">
-      <div className="w-full px-4 py-8 animate-fade-in">
+      <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 animate-fade-in">
         {/* Header */}
         <div className="mb-12 bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 border border-slate-200 dark:border-slate-700">
           {/* Back Link */}
