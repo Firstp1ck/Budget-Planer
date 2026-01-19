@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   get-version:
     name: Get Version
@@ -127,8 +130,8 @@ jobs:
           name: budget-planer-windows
           path: |
             frontend/src-tauri/target/release/budget-planer.exe
-            frontend/src-tauri/target/release/bundle/msi/*.msi
-            frontend/src-tauri/target/release/bundle/nsis/*.exe
+            frontend/src-tauri/target/release/bundle/
+          if-no-files-found: warn
 
   build-macos:
     name: Build macOS
@@ -171,8 +174,8 @@ jobs:
           name: budget-planer-macos
           path: |
             frontend/src-tauri/target/release/budget-planer
-            frontend/src-tauri/target/release/bundle/dmg/*.dmg
-            frontend/src-tauri/target/release/bundle/macos/Budget Planer.app
+            frontend/src-tauri/target/release/bundle/
+          if-no-files-found: warn
 
   publish-release:
     name: Publish Release
@@ -197,21 +200,28 @@ jobs:
           name: budget-planer-macos
           path: artifacts/macos
 
+      - name: List artifacts
+        run: |
+          echo "=== Linux artifacts ==="
+          find artifacts/linux -type f 2>/dev/null || echo "No Linux artifacts found"
+          echo ""
+          echo "=== Windows artifacts ==="
+          find artifacts/windows -type f 2>/dev/null || echo "No Windows artifacts found"
+          echo ""
+          echo "=== macOS artifacts ==="
+          find artifacts/macos -type f 2>/dev/null || echo "No macOS artifacts found"
+
       - name: Create and publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.get-version.outputs.version }}
           name: Release ${{ needs.get-version.outputs.version }}
           files: |
-            artifacts/linux/budget-planer
-            artifacts/linux/*.deb
-            artifacts/windows/budget-planer.exe
-            artifacts/windows/*.msi
-            artifacts/windows/*.exe
-            artifacts/macos/budget-planer
-            artifacts/macos/*.dmg
-            artifacts/macos/*.app
+            artifacts/linux/**
+            artifacts/windows/**
+            artifacts/macos/**
           draft: false
           prerelease: false
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
