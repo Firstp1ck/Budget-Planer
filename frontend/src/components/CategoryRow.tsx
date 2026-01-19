@@ -16,6 +16,9 @@ interface CategoryRowProps {
   displayCurrency: Currency
   budgetYear?: number
   salaryReductions?: SalaryReduction[]
+  isCollapsed?: boolean
+  onCollapseChange?: (collapsed: boolean) => void
+  onAddCategory?: (type: string) => void
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -42,10 +45,22 @@ function CategoryRow({
   displayCurrency,
   budgetYear,
   salaryReductions = [],
+  isCollapsed: externalIsCollapsed,
+  onCollapseChange,
+  onAddCategory,
 }: CategoryRowProps) {
   const year = budgetYear || new Date().getFullYear()
   const queryClient = useQueryClient()
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [internalIsCollapsed, setInternalIsCollapsed] = useState(false)
+  const isCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalIsCollapsed
+  
+  const setIsCollapsed = (value: boolean) => {
+    if (onCollapseChange) {
+      onCollapseChange(value)
+    } else {
+      setInternalIsCollapsed(value)
+    }
+  }
   const [editingInputMode, setEditingInputMode] = useState<number | null>(null)
   const [editingName, setEditingName] = useState<number | null>(null)
   const [categoryName, setCategoryName] = useState('')
@@ -512,17 +527,41 @@ function CategoryRow({
   return (
     <>
       <tr
-        className={`${TYPE_COLORS[type]} border-t-2 border-gray-300 dark:border-gray-600 cursor-pointer hover:opacity-80 transition-opacity`}
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        className={`${TYPE_COLORS[type]} border-t-2 border-gray-300 dark:border-gray-600`}
       >
         <td
           colSpan={displayMonths.length + 4}
           className="px-4 py-3 text-sm font-bold"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{isCollapsed ? '▶' : '▼'}</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
+              title={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+              aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+            >
+              <span className={`text-sm transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-90'}`}>
+                ▶
+              </span>
+            </button>
             <span>{TYPE_LABELS[type]}</span>
             <span className="text-xs font-normal opacity-75">({categories.length})</span>
+            {onAddCategory && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddCategory(type)
+                }}
+                className={`px-4 py-2 text-white rounded hover:opacity-90 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95 ${
+                  type === 'INCOME' ? 'bg-green-500 hover:bg-green-600' :
+                  type === 'FIXED_EXPENSE' ? 'bg-blue-500 hover:bg-blue-600' :
+                  type === 'VARIABLE_EXPENSE' ? 'bg-purple-500 hover:bg-purple-600' :
+                  'bg-yellow-500 hover:bg-yellow-600'
+                }`}
+              >
+                + {type === 'INCOME' ? 'Einnahme' : type === 'FIXED_EXPENSE' ? 'Fixkosten' : type === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'} hinzufügen
+              </button>
+            )}
           </div>
         </td>
       </tr>

@@ -13,6 +13,8 @@ interface SalaryReductionsSectionProps {
   displayMonths: number[]
   displayCurrency: Currency
   budgetYear: number
+  isCollapsed?: boolean
+  onCollapseChange?: (collapsed: boolean) => void
 }
 
 function SalaryReductionsSection({
@@ -23,9 +25,20 @@ function SalaryReductionsSection({
   displayMonths,
   displayCurrency,
   budgetYear,
+  isCollapsed: externalIsCollapsed,
+  onCollapseChange,
 }: SalaryReductionsSectionProps) {
   const queryClient = useQueryClient()
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [internalIsCollapsed, setInternalIsCollapsed] = useState(false)
+  const isCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalIsCollapsed
+  
+  const setIsCollapsed = (value: boolean) => {
+    if (onCollapseChange) {
+      onCollapseChange(value)
+    } else {
+      setInternalIsCollapsed(value)
+    }
+  }
   const [isAddingReduction, setIsAddingReduction] = useState(false)
   const [editingReductionId, setEditingReductionId] = useState<number | null>(null)
   const [reductionFormData, setReductionFormData] = useState({
@@ -245,14 +258,33 @@ function SalaryReductionsSection({
   return (
     <>
       <tr
-        className="bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-t-2 border-orange-300 dark:border-orange-600 cursor-pointer hover:opacity-80 transition-opacity"
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 border-t-2 border-orange-300 dark:border-orange-600"
       >
         <td colSpan={displayMonths.length + 4} className="px-4 py-3 text-sm font-bold">
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{isCollapsed ? '▶' : '▼'}</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-orange-300 dark:border-orange-600"
+              title={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+              aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+            >
+              <span className={`text-sm transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-90'}`}>
+                ▶
+              </span>
+            </button>
             <span>💰 Gehaltsabzüge (Brutto → Netto)</span>
             <span className="text-xs font-normal opacity-75">({salaryReductions.length})</span>
+            {!isAddingReduction && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsAddingReduction(true)
+                }}
+                className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
+              >
+                + Abzug hinzufügen
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -499,27 +531,27 @@ function SalaryReductionsSection({
             </tr>
           )}
           {!isAddingReduction && (
-            <tr className="bg-orange-50 dark:bg-orange-900/10 border-b border-orange-200 dark:border-orange-800">
-              <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-900 dark:text-white">
-                <button
-                  onClick={() => setIsAddingReduction(true)}
-                  className="px-5 py-3 bg-orange-500 text-white rounded hover:bg-orange-600 text-sm"
-                >
-                  + Abzug hinzufügen
-                </button>
+            <tr className="bg-orange-100 dark:bg-orange-900/30 border-t-2 border-orange-300 dark:border-orange-600 font-bold">
+              <td className="px-4 py-3 text-sm font-bold text-orange-800 dark:text-orange-300 sticky left-0 bg-orange-100 dark:bg-orange-900/30 border-r border-orange-300 dark:border-orange-600">
+                Gesamt
+              </td>
+              <td className="px-3 py-3 text-center">
+                {/* Empty cell for type column */}
               </td>
               {displayMonths.map((month) => (
-                <td key={month} className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(getTotalReductionsForMonth(month), displayCurrency)}
+                <td key={month} className="px-3 py-3 text-center text-sm border bg-orange-100 dark:bg-orange-900/30">
+                  <div className="font-bold text-orange-800 dark:text-orange-200">
+                    {formatCurrency(getTotalReductionsForMonth(month), displayCurrency)}
+                  </div>
                 </td>
               ))}
-              <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white">
+              <td className="px-3 py-3 text-center text-sm font-bold text-orange-800 dark:text-orange-200 bg-orange-100 dark:bg-orange-900/30">
                 {formatCurrency(
                   displayMonths.reduce((sum, month) => sum + getTotalReductionsForMonth(month), 0),
                   displayCurrency
                 )}
               </td>
-              <td className="px-4 py-3 text-center text-gray-900 dark:text-white">
+              <td className="px-4 py-3 text-center">
               </td>
             </tr>
           )}

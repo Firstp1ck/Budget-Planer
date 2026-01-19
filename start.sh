@@ -46,6 +46,21 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to get the virtual environment activation script path
+get_venv_activate() {
+    local venv_dir="$1"
+    # Check for Windows path first (Scripts/activate)
+    if [ -f "$venv_dir/Scripts/activate" ]; then
+        echo "$venv_dir/Scripts/activate"
+    # Check for Unix path (bin/activate)
+    elif [ -f "$venv_dir/bin/activate" ]; then
+        echo "$venv_dir/bin/activate"
+    else
+        print_error "Could not find virtual environment activation script in $venv_dir"
+        exit 1
+    fi
+}
+
 # Check for required tools
 print_info "Checking for required tools..."
 
@@ -78,11 +93,12 @@ fi
 
 # Activate virtual environment
 print_info "Activating virtual environment..."
-source .venv/bin/activate
+VENV_ACTIVATE=$(get_venv_activate ".venv")
+source "$VENV_ACTIVATE"
 
 # Install Python dependencies
 print_info "Installing Python dependencies with uv..."
-uv pip install -r requirements.txt
+uv pip install --native-tls -r requirements.txt
 print_success "Python dependencies installed"
 
 # Check if .env file exists
@@ -175,7 +191,8 @@ sleep 1
 # Start backend server
 print_info "Starting Django backend server on http://localhost:8000..."
 cd "$BACKEND_DIR"
-source .venv/bin/activate
+VENV_ACTIVATE=$(get_venv_activate ".venv")
+source "$VENV_ACTIVATE"
 (
     $STDBUF_CMD python manage.py runserver 2>&1 | prefix_output "$BLUE" "Backend"
 ) &

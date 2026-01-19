@@ -67,6 +67,37 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryType, setNewCategoryType] = useState<'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS'>('VARIABLE_EXPENSE')
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false)
+  
+  // Global collapse state for all groups
+  const [collapseStates, setCollapseStates] = useState<Record<string, boolean>>({
+    INCOME: false,
+    FIXED_EXPENSE: false,
+    VARIABLE_EXPENSE: false,
+    SAVINGS: false,
+    TAXES: false,
+    SALARY_REDUCTIONS: false,
+    MONTHLY_BALANCE: false,
+  })
+  
+  const handleCollapseChange = (group: string, collapsed: boolean) => {
+    setCollapseStates(prev => ({ ...prev, [group]: collapsed }))
+  }
+  
+  const toggleAllGroups = () => {
+    const allCollapsed = Object.values(collapseStates).every(v => v === true)
+    const newState = allCollapsed ? false : true
+    setCollapseStates({
+      INCOME: newState,
+      FIXED_EXPENSE: newState,
+      VARIABLE_EXPENSE: newState,
+      SAVINGS: newState,
+      TAXES: newState,
+      SALARY_REDUCTIONS: newState,
+      MONTHLY_BALANCE: newState,
+    })
+  }
+  
+  const allCollapsed = Object.values(collapseStates).every(v => v === true)
 
   const getActualBalanceForMonth = (month: number): MonthlyActualBalance | undefined => {
     return actualBalances.find(b => b.month === month && b.year === budgetYear)
@@ -100,6 +131,12 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
     } else {
       toast.error('Bitte geben Sie einen Kategorienamen ein')
     }
+  }
+
+  const handleAddCategoryFromGroup = (type: string) => {
+    setNewCategoryType(type as 'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS')
+    setNewCategoryName('')
+    setIsAddingCategory(true)
   }
 
   const getEntryForCategoryAndMonth = (categoryId: number, month: number) => {
@@ -269,6 +306,27 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
     <div className="w-full">
       {/* Add Category Section */}
       <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
+          <button
+            onClick={toggleAllGroups}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold transition-all shadow-lg hover:shadow-xl active:scale-95 border border-blue-500/20"
+            title={allCollapsed ? 'Alle Gruppen aufklappen' : 'Alle Gruppen zuklappen'}
+          >
+            <span className={`text-lg transition-transform duration-200 ${allCollapsed ? 'rotate-0' : 'rotate-90'}`}>
+              ▶
+            </span>
+            <span>{allCollapsed ? 'Alle aufklappen' : 'Alle zuklappen'}</span>
+          </button>
+          {!isAddingCategory && (
+            <button
+              onClick={() => setIsAddingCategory(true)}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-sm font-semibold transition-all shadow-lg hover:shadow-xl active:scale-95 border border-green-500/20"
+            >
+              <span className="text-xl font-bold">+</span>
+              <span>Kategorie hinzufügen</span>
+            </button>
+          )}
+        </div>
         {isAddingCategory ? (
             <div className="space-y-4 max-w-2xl">
             <div className="flex items-center justify-between">
@@ -364,15 +422,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               </button>
             </div>
           </div>
-        ) : (
-          <button
-            onClick={() => setIsAddingCategory(true)}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-2 text-sm"
-          >
-            <span className="text-xl">+</span>
-            Kategorie hinzufügen
-          </button>
-        )}
+        ) : null}
       </div>
 
       <div className="overflow-x-auto w-full">
@@ -418,6 +468,9 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                   displayCurrency={displayCurrency}
                   budgetYear={budgetYear}
                   salaryReductions={salaryReductions || []}
+                  isCollapsed={collapseStates[type]}
+                  onCollapseChange={(collapsed) => handleCollapseChange(type, collapsed)}
+                  onAddCategory={handleAddCategoryFromGroup}
                 />
               )
             })}
@@ -430,6 +483,8 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               displayMonths={displayMonths}
               displayCurrency={displayCurrency}
               budgetYear={budgetYear}
+              isCollapsed={collapseStates.SALARY_REDUCTIONS}
+              onCollapseChange={(collapsed) => handleCollapseChange('SALARY_REDUCTIONS', collapsed)}
             />
             <TaxesSection
               budgetId={budgetId}
@@ -439,9 +494,34 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               displayMonths={displayMonths}
               displayCurrency={displayCurrency}
               budgetYear={budgetYear}
+              isCollapsed={collapseStates.TAXES}
+              onCollapseChange={(collapsed) => handleCollapseChange('TAXES', collapsed)}
             />
-            {/* Monthly Summary Row */}
+            {/* Monthly Balance Header */}
             <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-4 border-slate-400 dark:border-slate-500">
+              <td
+                colSpan={displayMonths.length + 4}
+                className="px-4 py-3 text-sm font-bold text-slate-900 dark:text-white"
+              >
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleCollapseChange('MONTHLY_BALANCE', !collapseStates.MONTHLY_BALANCE)}
+                    className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-slate-300 dark:border-slate-600"
+                    title={collapseStates.MONTHLY_BALANCE ? 'Aufklappen' : 'Zuklappen'}
+                    aria-label={collapseStates.MONTHLY_BALANCE ? 'Aufklappen' : 'Zuklappen'}
+                  >
+                    <span className={`text-sm transition-transform duration-200 ${collapseStates.MONTHLY_BALANCE ? 'rotate-0' : 'rotate-90'}`}>
+                      ▶
+                    </span>
+                  </button>
+                  <span>📊 Monatliche Bilanz</span>
+                </div>
+              </td>
+            </tr>
+            {!collapseStates.MONTHLY_BALANCE && (
+              <>
+            {/* Monthly Summary Row */}
+            <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-2 border-slate-400 dark:border-slate-500">
               <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-r border-slate-300 dark:border-slate-600 z-10">
                 Monatliche Bilanz SOLL
               </td>
@@ -501,61 +581,89 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               <td className="px-3 py-4 text-center">
               </td>
             </tr>
-            {/* Actual Balance Section - Combined Row like SOLL */}
+            {/* Actual Balance Section - Income Row */}
             <tr className="bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-t-4 border-purple-400 dark:border-purple-500">
-              <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-r border-slate-300 dark:border-slate-600 z-10">
+              <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-r border-slate-300 dark:border-slate-600 z-10" rowSpan={3}>
                 Monatliche Bilanz IST
               </td>
               <td className="px-3 py-4 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
-                <div className="space-y-1.5">
-                  <div className="text-sm font-semibold text-green-700 dark:text-green-400">
-                    <div className="flex items-center justify-center gap-1">
-                      <span>💰</span>
-                      <span className="opacity-75">Einnahme</span>
-                    </div>
-                  </div>
-                  <div className="text-sm font-semibold text-red-700 dark:text-red-400">
-                    <div className="flex items-center justify-center gap-1">
-                      <span>💸</span>
-                      <span className="opacity-75">Ausgabe</span>
-                    </div>
-                  </div>
-                  <div className="text-sm font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-slate-300 dark:border-slate-600">
-                    <div className="flex items-center justify-center gap-1">
-                      <span>📈</span>
-                      <span className="opacity-75">Bilanz</span>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-center gap-1">
+                  <span>💰</span>
+                  <span className="opacity-75 font-semibold text-green-700 dark:text-green-400">Einnahme</span>
+                </div>
+              </td>
+              {displayMonths.map((month) => {
+                const balance = getActualBalanceForMonth(month)
+                return (
+                  <ActualBalanceCell
+                    key={month}
+                    month={month}
+                    balance={balance}
+                    budgetId={budgetId}
+                    budgetYear={budgetYear}
+                    displayCurrency={displayCurrency}
+                    field="income"
+                  />
+                )
+              })}
+              <td className="px-3 py-4 text-center text-sm font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-700/50">
+              </td>
+              <td className="px-3 py-4 text-center">
+              </td>
+            </tr>
+            {/* Actual Balance Section - Expenses Row */}
+            <tr className="bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50">
+              <td className="px-3 py-4 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
+                <div className="flex items-center justify-center gap-1">
+                  <span>💸</span>
+                  <span className="opacity-75 font-semibold text-red-700 dark:text-red-400">Ausgabe</span>
+                </div>
+              </td>
+              {displayMonths.map((month) => {
+                const balance = getActualBalanceForMonth(month)
+                return (
+                  <ActualBalanceCell
+                    key={month}
+                    month={month}
+                    balance={balance}
+                    budgetId={budgetId}
+                    budgetYear={budgetYear}
+                    displayCurrency={displayCurrency}
+                    field="expenses"
+                  />
+                )
+              })}
+              <td className="px-3 py-4 text-center text-sm font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-700/50">
+              </td>
+              <td className="px-3 py-4 text-center">
+              </td>
+            </tr>
+            {/* Actual Balance Section - Balance Row */}
+            <tr className="bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-b-2 border-purple-400 dark:border-purple-500">
+              <td className="px-3 py-4 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
+                <div className="flex items-center justify-center gap-1">
+                  <span>📈</span>
+                  <span className="opacity-75 font-semibold text-blue-700 dark:text-blue-400">Bilanz</span>
                 </div>
               </td>
               {displayMonths.map((month) => {
                 const balance = getActualBalanceForMonth(month)
                 const actualIncome = balance ? parseFloat(balance.actual_income) : 0
                 const actualExpenses = balance ? parseFloat(balance.actual_expenses) : 0
-                const actualBalance = balance ? parseFloat(balance.balance) : 0
+                const actualBalance = actualIncome - actualExpenses
                 return (
                   <td
                     key={month}
                     className="px-3 py-4 text-center border-l border-r border-slate-200 dark:border-slate-600 bg-white/50 dark:bg-slate-800/30"
                   >
-                    <div className="space-y-1.5">
-                      <div className="text-sm font-semibold text-green-700 dark:text-green-400">
-                        <div className="mt-0.5">{formatCurrency(actualIncome, displayCurrency)}</div>
-                      </div>
-                      <div className="text-sm font-semibold text-red-700 dark:text-red-400">
-                        <div className="mt-0.5">{formatCurrency(actualExpenses, displayCurrency)}</div>
-                      </div>
-                      <div
-                        className={`text-sm font-bold pt-1 border-t border-slate-300 dark:border-slate-600 ${
-                          actualBalance >= 0
-                            ? 'text-blue-700 dark:text-blue-400'
-                            : 'text-orange-700 dark:text-orange-400'
-                        }`}
-                      >
-                        <div className="mt-0.5">
-                          {actualBalance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(actualBalance), displayCurrency)}
-                        </div>
-                      </div>
+                    <div
+                      className={`text-sm font-bold ${
+                        actualBalance >= 0
+                          ? 'text-blue-700 dark:text-blue-400'
+                          : 'text-orange-700 dark:text-orange-400'
+                      }`}
+                    >
+                      {actualBalance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(actualBalance), displayCurrency)}
                     </div>
                   </td>
                 )
@@ -565,6 +673,8 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               <td className="px-3 py-4 text-center">
               </td>
             </tr>
+              </>
+            )}
           </tbody>
         </table>
       </div>
