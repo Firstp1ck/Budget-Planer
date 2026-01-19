@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { categoryApi } from '../services/api'
@@ -79,6 +79,51 @@ function CategoryRow({
     mode: 'all' as 'all' | 'empty' | 'remaining',
     startMonth: 1,
   })
+
+  // Global keyboard handler for dialogs (Escape to close, Enter to save)
+  const handleGlobalKeydown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      if (editingInputMode !== null) {
+        e.preventDefault()
+        setEditingInputMode(null)
+      } else if (editingName !== null) {
+        e.preventDefault()
+        setEditingName(null)
+        setCategoryName('')
+      } else if (showAutofillDialog !== null) {
+        e.preventDefault()
+        setShowAutofillDialog(null)
+      }
+    } else if (e.key === 'Enter') {
+      // Only trigger if not already handled by an input element
+      const target = e.target as HTMLElement
+      const isInputElement = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA'
+      
+      // If already on an input, let the input's own handler deal with it
+      if (isInputElement) return
+      
+      if (editingInputMode !== null) {
+        e.preventDefault()
+        handleSaveInputMode(editingInputMode)
+      } else if (editingName !== null) {
+        e.preventDefault()
+        handleSaveName(editingName)
+      } else if (showAutofillDialog !== null) {
+        e.preventDefault()
+        handleAutofill(showAutofillDialog)
+      }
+    }
+  }, [editingInputMode, editingName, showAutofillDialog])
+
+  useEffect(() => {
+    // Only add listener when a dialog is open
+    if (editingInputMode !== null || editingName !== null || showAutofillDialog !== null) {
+      document.addEventListener('keydown', handleGlobalKeydown)
+      return () => {
+        document.removeEventListener('keydown', handleGlobalKeydown)
+      }
+    }
+  }, [editingInputMode, editingName, showAutofillDialog, handleGlobalKeydown])
 
   const deleteCategoryMutation = useMutation({
     mutationFn: (id: number) => categoryApi.delete(id),
