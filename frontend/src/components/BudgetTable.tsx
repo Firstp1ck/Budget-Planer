@@ -267,6 +267,114 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
 
   return (
     <div className="w-full">
+      {/* Add Category Section */}
+      <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+        {isAddingCategory ? (
+            <div className="space-y-4 max-w-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                Neue Kategorie hinzufügen
+              </h3>
+              <button
+                onClick={() => setShowCategorySuggestions(!showCategorySuggestions)}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                💡 {showCategorySuggestions ? 'Vorschläge ausblenden' : 'Vorschläge anzeigen'}
+              </button>
+            </div>
+
+            {showCategorySuggestions && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
+                {Object.entries(COMMON_CATEGORIES).map(([type, cats]) => (
+                  <div key={type} className="space-y-2">
+                    <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-2">
+                      {type === 'INCOME' ? 'Einnahmen' : type === 'FIXED_EXPENSE' ? 'Fixkosten' : type === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'}
+                    </div>
+                    {cats.map((cat) => (
+                      <button
+                        key={cat.name}
+                        onClick={() => {
+                          setNewCategoryName(cat.name)
+                          setNewCategoryType(cat.type)
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm bg-slate-100 dark:bg-slate-600 hover:bg-slate-200 dark:hover:bg-slate-500 rounded-md transition-colors text-slate-700 dark:text-slate-300"
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Kategoriename *
+                </label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-gray-900 dark:text-white"
+                  placeholder="z.B. Miete, Lebensmittel..."
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Typ *
+                </label>
+                <select
+                  value={newCategoryType}
+                  onChange={(e) => setNewCategoryType(e.target.value as 'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS')}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-gray-900 dark:text-white"
+                >
+                  <option value="INCOME">Einnahmen</option>
+                  <option value="FIXED_EXPENSE">Fixkosten</option>
+                  <option value="VARIABLE_EXPENSE">Variable Kosten</option>
+                  <option value="SAVINGS">Sparen</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleAddCategory}
+                disabled={addCategoryMutation.isPending}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
+              >
+                {addCategoryMutation.isPending ? (
+                  <span className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Speichern...
+                  </span>
+                ) : (
+                  '✓ Speichern'
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setIsAddingCategory(false)
+                  setNewCategoryName('')
+                }}
+                disabled={addCategoryMutation.isPending}
+                className="px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm text-sm"
+              >
+                ✕ Abbrechen
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setIsAddingCategory(true)}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-2 text-sm"
+          >
+            <span className="text-xl">+</span>
+            Kategorie hinzufügen
+          </button>
+        )}
+      </div>
+
       <div className="overflow-x-auto w-full">
         <table className="w-full border-collapse">
           <thead>
@@ -459,102 +567,6 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
             </tr>
           </tbody>
         </table>
-      </div>
-
-      {/* Add Category Section */}
-      <div className="p-6 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-        {isAddingCategory ? (
-            <div className="space-y-4 max-w-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                Neue Kategorie hinzufügen
-              </h3>
-              <button
-                onClick={() => setShowCategorySuggestions(!showCategorySuggestions)}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-              >
-                💡 {showCategorySuggestions ? 'Vorschläge ausblenden' : 'Vorschläge anzeigen'}
-              </button>
-            </div>
-
-            {showCategorySuggestions && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">
-                  Häufige Kategorien für {newCategoryType === 'INCOME' ? 'Einnahmen' : newCategoryType === 'FIXED_EXPENSE' ? 'Fixkosten' : newCategoryType === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'}:
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {COMMON_CATEGORIES[newCategoryType].map((suggestion) => (
-                    <button
-                      key={suggestion.name}
-                      onClick={() => {
-                        setNewCategoryName(suggestion.name)
-                        setShowCategorySuggestions(false)
-                      }}
-                      className="px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-left text-slate-900 dark:text-white font-medium"
-                    >
-                      {suggestion.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <input
-                type="text"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
-                placeholder="Kategoriename (z.B. Gehalt, Miete)"
-                className="px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm shadow-sm transition-all"
-                autoFocus
-              />
-              <select
-                value={newCategoryType}
-                onChange={(e) => setNewCategoryType(e.target.value as any)}
-                className="px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm shadow-sm transition-all"
-              >
-                <option value="INCOME">💰 Einnahme</option>
-                <option value="FIXED_EXPENSE">🏠 Fixkosten</option>
-                <option value="VARIABLE_EXPENSE">🛒 Variable Kosten</option>
-                <option value="SAVINGS">💎 Sparen</option>
-              </select>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleAddCategory}
-                disabled={addCategoryMutation.isPending}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
-              >
-                {addCategoryMutation.isPending ? (
-                  <span className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Speichern...
-                  </span>
-                ) : (
-                  '✓ Speichern'
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  setIsAddingCategory(false)
-                  setNewCategoryName('')
-                }}
-                disabled={addCategoryMutation.isPending}
-                className="px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm text-sm"
-              >
-                ✕ Abbrechen
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setIsAddingCategory(true)}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-2 text-sm"
-          >
-            <span className="text-xl">+</span>
-            Kategorie hinzufügen
-          </button>
-        )}
       </div>
     </div>
   )

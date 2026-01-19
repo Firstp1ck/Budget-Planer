@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   LineChart,
   Line,
@@ -65,6 +65,7 @@ function BudgetGraphs({
   displayCurrency,
   budgetYear,
 }: BudgetGraphsProps) {
+  const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('yearly')
   // Get gross salary for a specific month
   const getGrossSalaryForMonth = (month: number): number => {
     const salaryCategory = categories.find(
@@ -277,11 +278,16 @@ function BudgetGraphs({
       }
     }
 
-    return Object.entries(categoryTotals)
-      .map(([name, value]) => ({ name, value }))
+    const result = Object.entries(categoryTotals)
+      .map(([name, value]) => ({ 
+        name, 
+        value: viewMode === 'monthly' ? value / 12 : value 
+      }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10) // Top 10 categories
-  }, [categories, entries, taxEntries])
+    
+    return result
+  }, [categories, entries, taxEntries, viewMode])
 
   // Calculate expense breakdown by category type
   const expenseByType = useMemo(() => {
@@ -334,8 +340,11 @@ function BudgetGraphs({
 
     return Object.entries(typeTotals)
       .filter(([, value]) => value > 0)
-      .map(([name, value]) => ({ name, value }))
-  }, [categories, entries, taxEntries])
+      .map(([name, value]) => ({ 
+        name, 
+        value: viewMode === 'monthly' ? value / 12 : value 
+      }))
+  }, [categories, entries, taxEntries, viewMode])
 
   // Custom tooltip formatter
   const formatTooltipValue = (value: number) => {
@@ -454,47 +463,80 @@ function BudgetGraphs({
         </ResponsiveContainer>
       </div>
 
-      {/* Planned vs Actual Comparison */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-          📊 Geplant vs. Tatsächlich
-        </h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={monthlyData}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-slate-300 dark:stroke-slate-600" />
-            <XAxis
-              dataKey="month"
-              className="text-slate-600 dark:text-slate-400"
-              tick={{ fill: 'currentColor' }}
-            />
-            <YAxis
-              tick={{ fill: 'currentColor' }}
-              className="text-slate-600 dark:text-slate-400"
-              tickFormatter={formatTooltipValue}
-            />
-            <Tooltip
-              formatter={(value: number) => formatTooltipValue(value)}
-              contentStyle={{
-                backgroundColor: 'rgba(30, 41, 59, 0.95)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '8px',
-                color: '#fff',
-              }}
-            />
-            <Legend />
-            <Bar dataKey="plannedIncome" name="Geplante Einnahmen" fill={COLORS.planned} />
-            <Bar dataKey="income" name="Tatsächliche Einnahmen" fill={COLORS.income} />
-            <Bar dataKey="plannedExpenses" name="Geplante Ausgaben" fill="#a855f7" />
-            <Bar dataKey="expenses" name="Tatsächliche Ausgaben" fill={COLORS.expenses} />
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Planned vs Actual Comparison - Only show if IST data is available */}
+      {actualBalances.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
+            📊 Geplant vs. Tatsächlich
+          </h2>
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-slate-300 dark:stroke-slate-600" />
+              <XAxis
+                dataKey="month"
+                className="text-slate-600 dark:text-slate-400"
+                tick={{ fill: 'currentColor' }}
+              />
+              <YAxis
+                tick={{ fill: 'currentColor' }}
+                className="text-slate-600 dark:text-slate-400"
+                tickFormatter={formatTooltipValue}
+              />
+              <Tooltip
+                formatter={(value: number) => formatTooltipValue(value)}
+                contentStyle={{
+                  backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                }}
+              />
+              <Legend />
+              <Bar dataKey="plannedIncome" name="Geplante Einnahmen" fill={COLORS.planned} />
+              <Bar dataKey="income" name="Tatsächliche Einnahmen" fill={COLORS.income} />
+              <Bar dataKey="plannedExpenses" name="Geplante Ausgaben" fill="#a855f7" />
+              <Bar dataKey="expenses" name="Tatsächliche Ausgaben" fill={COLORS.expenses} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Toggle Switch for View Mode */}
+      <div className="flex items-center justify-center mb-6">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-4 inline-flex items-center gap-4">
+          <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+            Ansicht:
+          </span>
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('yearly')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'yearly'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              Jahr
+            </button>
+            <button
+              onClick={() => setViewMode('monthly')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'monthly'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              Monat (Ø)
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Category Distribution Pie Chart */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-            🥧 Ausgabenverteilung nach Kategorie
+            🥧 Ausgabenverteilung nach Kategorie {viewMode === 'monthly' && '(Ø pro Monat)'}
           </h2>
           {categoryDistribution.length > 0 ? (
             <ResponsiveContainer width="100%" height={400}>
@@ -505,6 +547,7 @@ function BudgetGraphs({
                   cy="50%"
                   labelLine={false}
                   label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                  labelStyle={{ fill: '#fff', fontSize: 12, fontWeight: 500 }}
                   outerRadius={120}
                   fill="#8884d8"
                   dataKey="value"
@@ -521,6 +564,8 @@ function BudgetGraphs({
                     borderRadius: '8px',
                     color: '#fff',
                   }}
+                  itemStyle={{ color: '#fff' }}
+                  labelStyle={{ color: '#fff' }}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -534,7 +579,7 @@ function BudgetGraphs({
         {/* Expense Breakdown by Type */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-            📊 Ausgaben nach Typ
+            📊 Ausgaben nach Typ {viewMode === 'monthly' && '(Ø pro Monat)'}
           </h2>
           {expenseByType.length > 0 ? (
             <ResponsiveContainer width="100%" height={400}>
