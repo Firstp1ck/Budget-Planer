@@ -27,7 +27,7 @@ class BudgetCategorySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'budget', 'name', 'category_type',
             'category_type_display', 'order', 'is_active',
-            'input_mode', 'input_mode_display', 'custom_months', 'yearly_amount'
+            'input_mode', 'input_mode_display', 'custom_months', 'custom_start_month', 'yearly_amount'
         ]
         read_only_fields = ['id', 'budget']
 

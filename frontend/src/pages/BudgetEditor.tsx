@@ -285,6 +285,7 @@ function BudgetEditor() {
             categories={categories}
             entries={entries}
             salaryReductions={salary_reductions || []}
+            taxEntries={tax_entries || []}
             selectedMonth={selectedMonth}
             displayCurrency={selectedCurrency}
           />

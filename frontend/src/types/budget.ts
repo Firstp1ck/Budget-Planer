@@ -22,6 +22,7 @@ export interface BudgetCategory {
   is_active: boolean
   input_mode: InputMode
   custom_months: number | null
+  custom_start_month: number | null
   yearly_amount: string | null
 }
 

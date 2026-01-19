@@ -129,8 +129,21 @@ fi
 # Function to cleanup on exit
 cleanup() {
     print_info "Shutting down servers..."
-    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-    wait $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+    # Kill backend process
+    if [ ! -z "$BACKEND_PID" ]; then
+        kill $BACKEND_PID 2>/dev/null || true
+    fi
+    # Kill frontend process
+    if [ ! -z "$FRONTEND_PID" ]; then
+        kill $FRONTEND_PID 2>/dev/null || true
+    fi
+    # Wait a moment for graceful shutdown
+    sleep 1
+    # Force kill any remaining processes on ports 8000 and 5173
+    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+    lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+    # Also force kill the PIDs if they're still running
+    kill -9 $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
     print_info "Servers stopped"
     exit 0
 }
@@ -152,6 +165,12 @@ STDBUF_CMD=""
 if command_exists stdbuf; then
     STDBUF_CMD="stdbuf -oL -eL"
 fi
+
+# Check and kill any existing processes on ports 8000 and 5173
+print_info "Checking for existing processes on ports 8000 and 5173..."
+lsof -ti:8000 | xargs kill -9 2>/dev/null && print_info "Killed existing process on port 8000" || true
+lsof -ti:5173 | xargs kill -9 2>/dev/null && print_info "Killed existing process on port 5173" || true
+sleep 1
 
 # Start backend server
 print_info "Starting Django backend server on http://localhost:8000..."

@@ -51,10 +51,11 @@ function SalaryReductionsSection({
 
     // If CUSTOM mode, check if this month is a payment month
     if (salaryCategory.input_mode === 'CUSTOM' && salaryCategory.custom_months && salaryCategory.yearly_amount) {
+      const startMonth = salaryCategory.custom_start_month || 1
       const monthsInterval = 12 / salaryCategory.custom_months
       const paymentMonths: number[] = []
       for (let i = 0; i < salaryCategory.custom_months; i++) {
-        const calculatedMonth = 1 + (i * monthsInterval)
+        const calculatedMonth = startMonth + (i * monthsInterval)
         let paymentMonth = Math.round(calculatedMonth)
         while (paymentMonth > 12) paymentMonth -= 12
         while (paymentMonth < 1) paymentMonth += 12
@@ -62,7 +63,8 @@ function SalaryReductionsSection({
       }
 
       if (paymentMonths.includes(month)) {
-        return parseFloat(salaryCategory.yearly_amount) / salaryCategory.custom_months
+        // For CUSTOM mode, yearly_amount stores the payment amount, not the total
+        return parseFloat(salaryCategory.yearly_amount)
       } else {
         return 0
       }

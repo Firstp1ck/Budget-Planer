@@ -1,16 +1,21 @@
-import type { BudgetCategory, BudgetEntry, SalaryReduction } from '../types/budget'
+import { useState } from 'react'
+import type { BudgetCategory, BudgetEntry, SalaryReduction, TaxEntry } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
+
+type IncomeCalculationMode = 'gross' | 'net' | 'net_minus_taxes'
 
 interface BudgetSummaryProps {
   budgetId: number
   categories: BudgetCategory[]
   entries: BudgetEntry[]
   salaryReductions: SalaryReduction[]
+  taxEntries: TaxEntry[]
   selectedMonth: number | null
   displayCurrency: Currency
 }
 
-function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, displayCurrency }: BudgetSummaryProps) {
+function BudgetSummary({ categories, entries, salaryReductions, taxEntries, selectedMonth, displayCurrency }: BudgetSummaryProps) {
+  const [incomeMode, setIncomeMode] = useState<IncomeCalculationMode>('net')
   // Get gross salary for a specific month
   const getGrossSalaryForMonth = (month: number): number => {
     const salaryCategory = categories.find(
@@ -24,10 +29,11 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
     }
 
     if (salaryCategory.input_mode === 'CUSTOM' && salaryCategory.custom_months && salaryCategory.yearly_amount) {
+      const startMonth = salaryCategory.custom_start_month || 1
       const monthsInterval = 12 / salaryCategory.custom_months
       const paymentMonths: number[] = []
       for (let i = 0; i < salaryCategory.custom_months; i++) {
-        const calculatedMonth = 1 + (i * monthsInterval)
+        const calculatedMonth = startMonth + (i * monthsInterval)
         let paymentMonth = Math.round(calculatedMonth)
         while (paymentMonth > 12) paymentMonth -= 12
         while (paymentMonth < 1) paymentMonth += 12
@@ -35,7 +41,8 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
       }
 
       if (paymentMonths.includes(month)) {
-        return parseFloat(salaryCategory.yearly_amount) / salaryCategory.custom_months
+        // For CUSTOM mode, yearly_amount stores the payment amount, not the total
+        return parseFloat(salaryCategory.yearly_amount)
       } else {
         return 0
       }
@@ -77,6 +84,34 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
     return Math.max(0, gross - reductions)
   }
 
+  // Calculate tax amount for a tax entry in a specific month
+  const calculateTaxAmount = (tax: TaxEntry, month: number): number => {
+    const salary = getGrossSalaryForMonth(month)
+    if (salary === 0) return 0
+    return (salary * parseFloat(tax.percentage)) / 100
+  }
+
+  // Calculate total taxes for a period
+  const getTotalTaxes = (): number => {
+    let total = 0
+    if (selectedMonth) {
+      taxEntries.forEach((tax) => {
+        if (tax.is_active) {
+          total += calculateTaxAmount(tax, selectedMonth)
+        }
+      })
+    } else {
+      for (let month = 1; month <= 12; month++) {
+        taxEntries.forEach((tax) => {
+          if (tax.is_active) {
+            total += calculateTaxAmount(tax, month)
+          }
+        })
+      }
+    }
+    return total
+  }
+
   const calculateTotals = () => {
     let totalIncome = 0
     let totalExpenses = 0
@@ -84,16 +119,26 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
     categories.forEach((category) => {
       let categoryTotal = 0
 
-      // For salary category, use net salary (gross - reductions)
+      // For salary category, calculate based on selected mode
       if (category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt')) {
         if (selectedMonth) {
-          // Single month: use net salary for that month
-          categoryTotal = getNetSalaryForMonth(selectedMonth)
-        } else {
-          // Yearly: sum net salary for all 12 months
-          for (let month = 1; month <= 12; month++) {
-            categoryTotal += getNetSalaryForMonth(month)
+          // Single month
+          if (incomeMode === 'gross') {
+            categoryTotal = getGrossSalaryForMonth(selectedMonth)
+          } else {
+            categoryTotal = getNetSalaryForMonth(selectedMonth)
           }
+        } else {
+          // Yearly: sum for all 12 months
+          let salarySum = 0
+          for (let month = 1; month <= 12; month++) {
+            if (incomeMode === 'gross') {
+              salarySum += getGrossSalaryForMonth(month)
+            } else {
+              salarySum += getNetSalaryForMonth(month)
+            }
+          }
+          categoryTotal = salarySum
         }
       } else {
         // For other categories, calculate normally
@@ -107,10 +152,11 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
               categoryTotal = yearlyAmount / 12
             } else if (category.input_mode === 'CUSTOM' && category.custom_months) {
               // For CUSTOM mode, check if this month is a payment month
+              const startMonth = category.custom_start_month || 1
               const monthsInterval = 12 / category.custom_months
               const paymentMonths: number[] = []
               for (let i = 0; i < category.custom_months; i++) {
-                const calculatedMonth = 1 + (i * monthsInterval)
+                const calculatedMonth = startMonth + (i * monthsInterval)
                 let paymentMonth = Math.round(calculatedMonth)
                 while (paymentMonth > 12) paymentMonth -= 12
                 while (paymentMonth < 1) paymentMonth += 12
@@ -118,14 +164,20 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
               }
               
               if (paymentMonths.includes(selectedMonth)) {
-                categoryTotal = yearlyAmount / category.custom_months
+                // For CUSTOM mode, yearly_amount stores the payment amount, not the total
+                categoryTotal = yearlyAmount
               } else {
                 categoryTotal = 0
               }
             }
           } else {
-            // For yearly view, show the full amount
-            categoryTotal = yearlyAmount
+            // For yearly view
+            if (category.input_mode === 'YEARLY') {
+              categoryTotal = yearlyAmount
+            } else if (category.input_mode === 'CUSTOM' && category.custom_months) {
+              // For CUSTOM mode, yearly_amount stores the payment amount, so multiply by custom_months for total
+              categoryTotal = yearlyAmount * category.custom_months
+            }
           }
         } else {
           // For MONTHLY mode, sum actual entries
@@ -149,14 +201,40 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
       }
     })
 
-    // Note: Salary reductions are NOT added to expenses here because:
-    // - They are already deducted from gross salary to get net salary (which is used for income)
-    // - Salary reductions are not expenses, they are deductions from income
-    // - Taxes are also not included here (they would need to be added separately if desired)
+    // Handle salary reductions and taxes based on income calculation mode
+    const totalTaxes = getTotalTaxes()
+    
+    // Calculate total salary reductions
+    let totalReductions = 0
+    if (selectedMonth) {
+      totalReductions = getTotalReductionsForMonth(selectedMonth)
+    } else {
+      for (let month = 1; month <= 12; month++) {
+        totalReductions += getTotalReductionsForMonth(month)
+      }
+    }
+    
+    if (incomeMode === 'gross') {
+      // Mode 1: Brutto + alles andere
+      // Salary reductions are added to expenses (since they're not deducted from income)
+      totalExpenses += totalReductions
+      // Taxes are added to expenses
+      totalExpenses += totalTaxes
+    } else if (incomeMode === 'net_minus_taxes') {
+      // Mode 3: Netto - Steuern + alles andere
+      // Salary reductions are already deducted from income (net salary)
+      // Taxes are deducted from income, not added to expenses
+      totalIncome -= totalTaxes
+    } else {
+      // Mode 2: Netto + alles andere (default)
+      // Salary reductions are already deducted from income (net salary)
+      // Taxes are added to expenses
+      totalExpenses += totalTaxes
+    }
 
     return {
       totalIncome,
-      totalExpenses,
+      totalExpenses, // Includes categories (Fixkosten, Variable Kosten, Sparen) + taxes (unless mode 3), but NOT salary reductions
       balance: totalIncome - totalExpenses,
     }
   }
@@ -164,20 +242,44 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
   const { totalIncome, totalExpenses, balance } = calculateTotals()
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-      <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-xl shadow-md p-7 border border-green-200 dark:border-green-700/50 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="text-4xl">💰</div>
-          <h3 className="text-sm font-semibold text-green-700 dark:text-green-300 uppercase tracking-wide">
-            Gesamteinnahmen {selectedMonth ? `(Monat ${selectedMonth})` : '(Jahr)'}
-          </h3>
+    <div className="mb-6">
+      {/* Income Mode Selector - only show for yearly view */}
+      {!selectedMonth && (
+        <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+            Berechnungsmodus für Gesamteinnahmen:
+          </label>
+          <select
+            value={incomeMode}
+            onChange={(e) => setIncomeMode(e.target.value as IncomeCalculationMode)}
+            className="w-full md:w-auto px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
+          >
+            <option value="gross">Brutto + alles andere</option>
+            <option value="net">Netto + alles andere</option>
+            <option value="net_minus_taxes">Netto - Steuern + alles andere</option>
+          </select>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+            {incomeMode === 'gross' && 'Brutto-Gehalt wird verwendet (ohne Abzüge)'}
+            {incomeMode === 'net' && 'Netto-Gehalt wird verwendet (Brutto - Abzüge)'}
+            {incomeMode === 'net_minus_taxes' && 'Netto-Gehalt - Steuern wird verwendet (Steuern werden von Einnahmen abgezogen, nicht zu Ausgaben hinzugefügt)'}
+          </p>
         </div>
-        <p className="text-4xl font-bold text-green-700 dark:text-green-300">
-          {formatCurrency(totalIncome, displayCurrency)}
-        </p>
-      </div>
+      )}
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-xl shadow-md p-7 border border-green-200 dark:border-green-700/50 backdrop-blur-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="text-4xl">💰</div>
+            <h3 className="text-sm font-semibold text-green-700 dark:text-green-300 uppercase tracking-wide">
+              Gesamteinnahmen {selectedMonth ? `(Monat ${selectedMonth})` : '(Jahr)'}
+            </h3>
+          </div>
+          <p className="text-4xl font-bold text-green-700 dark:text-green-300">
+            {formatCurrency(totalIncome, displayCurrency)}
+          </p>
+        </div>
 
-      <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-xl shadow-md p-7 border border-red-200 dark:border-red-700/50 backdrop-blur-sm">
+        <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-xl shadow-md p-7 border border-red-200 dark:border-red-700/50 backdrop-blur-sm">
         <div className="flex items-center gap-3 mb-3">
           <div className="text-4xl">💸</div>
           <h3 className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase tracking-wide">
@@ -187,9 +289,9 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
         <p className="text-4xl font-bold text-red-700 dark:text-red-300">
           {formatCurrency(totalExpenses, displayCurrency)}
         </p>
-      </div>
+        </div>
 
-      <div className={`bg-gradient-to-br rounded-xl shadow-md p-7 border backdrop-blur-sm ${
+        <div className={`bg-gradient-to-br rounded-xl shadow-md p-7 border backdrop-blur-sm ${
         balance >= 0
           ? 'from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-700/50'
           : 'from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-700/50'
@@ -211,6 +313,7 @@ function BudgetSummary({ categories, entries, salaryReductions, selectedMonth, d
         }`}>
           {balance >= 0 ? '+' : ''}{formatCurrency(Math.abs(balance), displayCurrency)}
         </p>
+      </div>
       </div>
     </div>
   )

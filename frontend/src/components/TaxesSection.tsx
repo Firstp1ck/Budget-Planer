@@ -53,10 +53,11 @@ function TaxesSection({
     }
 
     if (salaryCategory.input_mode === 'CUSTOM' && salaryCategory.custom_months && salaryCategory.yearly_amount) {
+      const startMonth = salaryCategory.custom_start_month || 1
       const monthsInterval = 12 / salaryCategory.custom_months
       const paymentMonths: number[] = []
       for (let i = 0; i < salaryCategory.custom_months; i++) {
-        const calculatedMonth = 1 + (i * monthsInterval)
+        const calculatedMonth = startMonth + (i * monthsInterval)
         let paymentMonth = Math.round(calculatedMonth)
         while (paymentMonth > 12) paymentMonth -= 12
         while (paymentMonth < 1) paymentMonth += 12
@@ -64,7 +65,8 @@ function TaxesSection({
       }
 
       if (paymentMonths.includes(month)) {
-        return parseFloat(salaryCategory.yearly_amount) / salaryCategory.custom_months
+        // For CUSTOM mode, yearly_amount stores the payment amount, not the total
+        return parseFloat(salaryCategory.yearly_amount)
       }
     }
 
@@ -128,17 +130,22 @@ function TaxesSection({
       return
     }
 
-    const data = {
-      budget: budgetId,
-      name: taxFormData.name.trim(),
-      percentage: percentage.toFixed(2),
-      order: taxEntries.length,
-      is_active: true,
-    }
-
     if (editingTaxId) {
+      // When editing, only update name and percentage, keep existing order and other fields
+      const data = {
+        name: taxFormData.name.trim(),
+        percentage: percentage.toFixed(2),
+      }
       updateTaxMutation.mutate({ id: editingTaxId, data })
     } else {
+      // When creating, include all required fields
+      const data = {
+        budget: budgetId,
+        name: taxFormData.name.trim(),
+        percentage: percentage.toFixed(2),
+        order: taxEntries.length,
+        is_active: true,
+      }
       createTaxMutation.mutate(data)
     }
   }
@@ -253,35 +260,94 @@ function TaxesSection({
               </td>
             </tr>
           ))}
-          {/* Add Tax Form */}
+          {/* Total Row */}
+          {sortedTaxEntries.length > 0 && (
+            <tr className="bg-red-100 dark:bg-red-900/30 border-t-2 border-red-400 dark:border-red-600 font-bold">
+              <td className="px-4 py-3 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-400 dark:border-red-600">
+                Gesamt
+              </td>
+              <td className="px-3 py-3 text-center">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 dark:bg-red-800/50 text-red-900 dark:text-red-200">
+                  {sortedTaxEntries
+                    .filter(t => t.is_active)
+                    .reduce((sum, tax) => sum + parseFloat(tax.percentage), 0)
+                    .toFixed(2)}%
+                </span>
+              </td>
+              {displayMonths.map((month) => {
+                const totalTaxAmount = sortedTaxEntries
+                  .filter(t => t.is_active)
+                  .reduce((sum, tax) => sum + calculateTaxAmount(tax, month), 0)
+                return (
+                  <td
+                    key={month}
+                    className="px-3 py-3 text-center text-sm border bg-red-100 dark:bg-red-900/30"
+                  >
+                    <div className="font-bold text-red-800 dark:text-red-200">
+                      {formatCurrency(totalTaxAmount, displayCurrency)}
+                    </div>
+                  </td>
+                )
+              })}
+              <td className="px-3 py-3 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30">
+                {formatCurrency(
+                  displayMonths.reduce((sum, month) => {
+                    return sum + sortedTaxEntries
+                      .filter(t => t.is_active)
+                      .reduce((taxSum, tax) => taxSum + calculateTaxAmount(tax, month), 0)
+                  }, 0),
+                  displayCurrency
+                )}
+              </td>
+              <td className="px-3 py-3 text-center">
+                {/* Empty cell for alignment */}
+              </td>
+            </tr>
+          )}
+          {/* Add/Edit Tax Form */}
           {isAddingTax && (
             <tr className="bg-blue-50 dark:bg-blue-900/20">
               <td colSpan={displayMonths.length + 4} className="px-4 py-4">
                 <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                      {editingTaxId ? '✏️ Steuer bearbeiten' : '➕ Neue Steuer hinzufügen'}
+                    </span>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <input
-                      type="text"
-                      value={taxFormData.name}
-                      onChange={(e) => setTaxFormData({ ...taxFormData, name: e.target.value })}
-                      placeholder="Steuername (z.B. Einkommenssteuer, AHV)"
-                      className="px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
-                      autoFocus
-                    />
-                    <div className="flex items-center gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Steuername
+                      </label>
                       <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        value={taxFormData.percentage}
-                        onChange={(e) => setTaxFormData({ ...taxFormData, percentage: e.target.value })}
-                        placeholder="Prozentsatz (z.B. 10.5)"
-                        className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
+                        type="text"
+                        value={taxFormData.name}
+                        onChange={(e) => setTaxFormData({ ...taxFormData, name: e.target.value })}
+                        placeholder="z.B. Einkommenssteuer, AHV"
+                        className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
+                        autoFocus
                       />
-                      <span className="text-sm text-slate-600 dark:text-slate-400">%</span>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Prozentsatz
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={taxFormData.percentage}
+                          onChange={(e) => setTaxFormData({ ...taxFormData, percentage: e.target.value })}
+                          placeholder="z.B. 10.5"
+                          className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
+                        />
+                        <span className="text-sm text-slate-600 dark:text-slate-400 font-medium">%</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 pt-2">
                     <button
                       onClick={handleSaveTax}
                       disabled={createTaxMutation.isPending || updateTaxMutation.isPending}
@@ -293,7 +359,7 @@ function TaxesSection({
                           Speichern...
                         </span>
                       ) : (
-                        '✓ Speichern'
+                        `✓ ${editingTaxId ? 'Aktualisieren' : 'Hinzufügen'}`
                       )}
                     </button>
                     <button

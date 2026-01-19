@@ -100,6 +100,13 @@ class BudgetCategory(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(12)],
         help_text='Number of months for custom period distribution'
     )
+    custom_start_month = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        default=1,
+        help_text='Starting month (1-12) for custom period distribution'
+    )
     yearly_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -328,6 +335,7 @@ class BudgetTemplate(models.Model):
                     'order': cat_data.get('order', 0),
                     'input_mode': cat_data.get('input_mode', 'MONTHLY'),
                     'custom_months': cat_data.get('custom_months'),
+                    'custom_start_month': cat_data.get('custom_start_month'),
                     'yearly_amount': None,  # Templates don't include values
                 }
             )

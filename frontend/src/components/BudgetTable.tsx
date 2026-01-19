@@ -88,6 +88,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
         is_active: true,
         input_mode: 'MONTHLY',
         custom_months: null,
+        custom_start_month: null,
         yearly_amount: null,
       })
     } else {
@@ -116,10 +117,11 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
 
     // If CUSTOM mode, check if this month is a payment month
     if (salaryCategory.input_mode === 'CUSTOM' && salaryCategory.custom_months && salaryCategory.yearly_amount) {
+      const startMonth = salaryCategory.custom_start_month || 1
       const monthsInterval = 12 / salaryCategory.custom_months
       const paymentMonths: number[] = []
       for (let i = 0; i < salaryCategory.custom_months; i++) {
-        const calculatedMonth = 1 + (i * monthsInterval)
+        const calculatedMonth = startMonth + (i * monthsInterval)
         let paymentMonth = Math.round(calculatedMonth)
         while (paymentMonth > 12) paymentMonth -= 12
         while (paymentMonth < 1) paymentMonth += 12
@@ -127,7 +129,8 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
       }
 
       if (paymentMonths.includes(month)) {
-        return parseFloat(salaryCategory.yearly_amount) / salaryCategory.custom_months
+        // For CUSTOM mode, yearly_amount stores the payment amount, not the total
+        return parseFloat(salaryCategory.yearly_amount)
       } else {
         return 0
       }
@@ -194,10 +197,11 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
           categoryAmount = yearlyAmount / 12
         } else if (category.input_mode === 'CUSTOM' && category.custom_months) {
           // For CUSTOM mode, check if this month is a payment month
+          const startMonth = category.custom_start_month || 1
           const monthsInterval = 12 / category.custom_months
           const paymentMonths: number[] = []
           for (let i = 0; i < category.custom_months; i++) {
-            const calculatedMonth = 1 + (i * monthsInterval)
+            const calculatedMonth = startMonth + (i * monthsInterval)
             let paymentMonth = Math.round(calculatedMonth)
             while (paymentMonth > 12) paymentMonth -= 12
             while (paymentMonth < 1) paymentMonth += 12
@@ -205,8 +209,8 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
           }
           
           if (paymentMonths.includes(month)) {
-            // This month has a payment, show the payment amount
-            categoryAmount = yearlyAmount / category.custom_months
+            // This month has a payment, show the payment amount (yearly_amount stores payment amount, not total)
+            categoryAmount = yearlyAmount
           } else {
             // No payment this month
             categoryAmount = 0
@@ -235,8 +239,9 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
       }
     })
 
-    // Add salary reductions as expenses
-    expenses += getTotalReductionsForMonth(month)
+    // Note: Salary reductions (Gehaltsabzüge) are NOT included in expenses
+    // They are already deducted from gross salary to calculate net salary (income)
+    // Including them here would double-count them
 
     // Add tax expenses
     taxEntries.forEach((tax) => {
@@ -298,6 +303,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                   budgetId={budgetId}
                   displayCurrency={displayCurrency}
                   budgetYear={budgetYear}
+                  salaryReductions={salaryReductions || []}
                 />
               )
             })}

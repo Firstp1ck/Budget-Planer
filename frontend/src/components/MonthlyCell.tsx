@@ -51,15 +51,15 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     if (category.input_mode !== 'CUSTOM' || !category.custom_months) {
       return []
     }
-    const startMonth = 1 // Always start from January
+    const startMonth = category.custom_start_month || 1
     const monthsInterval = 12 / category.custom_months
     const paymentMonths: number[] = []
     for (let i = 0; i < category.custom_months; i++) {
-      // Calculate the month number (1-12)
+      // Calculate the month number (1-12), starting from startMonth
       const calculatedMonth = startMonth + (i * monthsInterval)
       // Round to nearest integer and ensure it's within 1-12 range
       let paymentMonth = Math.round(calculatedMonth)
-      // Handle wrap-around (shouldn't happen, but just in case)
+      // Handle wrap-around
       while (paymentMonth > 12) paymentMonth -= 12
       while (paymentMonth < 1) paymentMonth += 12
       paymentMonths.push(paymentMonth)
@@ -99,13 +99,18 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
 
   const distributeCustomAmountMutation = useMutation({
     mutationFn: async ({ firstMonthValue }: { firstMonthValue: number }) => {
-      if (category.input_mode !== 'CUSTOM' || !category.custom_months || month !== 1) {
-        throw new Error('Distribution only works for first month in CUSTOM mode')
+      if (category.input_mode !== 'CUSTOM' || !category.custom_months) {
+        throw new Error('Distribution only works for CUSTOM mode')
       }
 
-      // The value entered in the first month is the amount per payment
+      const startMonth = category.custom_start_month || 1
+      // Check if the current month is the start month
+      if (month !== startMonth) {
+        throw new Error(`Distribution only works for start month (${startMonth}) in CUSTOM mode`)
+      }
+
+      // The value entered in the start month is the amount per payment
       const paymentAmount = firstMonthValue
-      const totalAmount = paymentAmount * category.custom_months
       const year = new Date().getFullYear()
 
       // Calculate which months should have payments (evenly distributed across the year)
@@ -113,19 +118,19 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       const monthsInterval = 12 / category.custom_months
       const paymentMonths: number[] = []
       for (let i = 0; i < category.custom_months; i++) {
-        // Calculate the month number (1-12)
-        const calculatedMonth = month + (i * monthsInterval)
+        // Calculate the month number (1-12), starting from startMonth
+        const calculatedMonth = startMonth + (i * monthsInterval)
         // Round to nearest integer and ensure it's within 1-12 range
         let paymentMonth = Math.round(calculatedMonth)
-        // Handle wrap-around (shouldn't happen, but just in case)
+        // Handle wrap-around
         while (paymentMonth > 12) paymentMonth -= 12
         while (paymentMonth < 1) paymentMonth += 12
         paymentMonths.push(paymentMonth)
       }
 
-      // Update category yearly_amount
+      // Update category yearly_amount with the payment amount (not the total)
       await categoryApi.update(category.id, {
-        yearly_amount: totalAmount.toFixed(2),
+        yearly_amount: paymentAmount.toFixed(2),
       })
 
       // Get all entries for this category
@@ -163,6 +168,8 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       }
 
       await Promise.all(promises)
+      // Calculate total amount (payment amount * number of payments)
+      const totalAmount = paymentAmount * category.custom_months
       return { totalAmount, paymentAmount, months: category.custom_months, paymentMonths }
     },
     onSuccess: (result) => {
@@ -178,7 +185,8 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
 
   const handleSave = () => {
     // Special handling for CUSTOM mode first month
-    if (category.input_mode === 'CUSTOM' && category.custom_months && month === 1) {
+    const startMonth = category.custom_start_month || 1
+    if (category.input_mode === 'CUSTOM' && category.custom_months && month === startMonth) {
       const firstMonthValue = parseFloat(plannedAmount)
       if (isNaN(firstMonthValue) || firstMonthValue <= 0) {
         toast.error('Bitte geben Sie einen gültigen Betrag ein')
@@ -290,7 +298,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
             />
           </div>
           <div className="flex gap-2 pt-2">
-            {category.input_mode === 'CUSTOM' && category.custom_months && month === 1 && (
+            {category.input_mode === 'CUSTOM' && category.custom_months && month === (category.custom_start_month || 1) && (
               <div className="text-[10px] text-blue-600 dark:text-blue-400 mb-1">
                 ℹ️ {formatCurrency(parseFloat(plannedAmount || '0'), displayCurrency)} pro Zahlung, {category.custom_months}x über das Jahr verteilt
               </div>
@@ -327,20 +335,17 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
 
   // For YEARLY mode, show calculated amount (read-only display)
   if (category.input_mode === 'YEARLY' && calculatedMonthlyAmount > 0) {
-    const hasExistingEntry = entry && (entry.planned_amount !== '0' || entry.actual_amount)
-
     return (
       <td
-        className={`px-3 py-3 text-center text-sm border ${hasExistingEntry ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-blue-50 dark:bg-blue-900/10'}`}
-        title={`Berechnet: Jahresbetrag / 12${hasExistingEntry ? ' (überschreibt vorhandenen Eintrag)' : ''}`}
+        className="px-3 py-3 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
+        title="Berechnet: Jahresbetrag / 12"
       >
         <div>
-          <div className={`font-semibold text-xs ${hasExistingEntry ? 'text-yellow-700 dark:text-yellow-300' : 'text-blue-700 dark:text-blue-300'}`}>
+          <div className="font-semibold text-xs text-blue-700 dark:text-blue-300">
             {formatCurrency(calculatedMonthlyAmount, displayCurrency)}
           </div>
-          <div className={`text-[10px] mt-0.5 ${hasExistingEntry ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400'}`}>
+          <div className="text-[10px] mt-0.5 text-blue-600 dark:text-blue-400">
             📅 Berechnet
-            {hasExistingEntry && <span className="block">⚠️ Überschreibt</span>}
           </div>
         </div>
       </td>
@@ -349,6 +354,8 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
 
   // For CUSTOM mode: first month is editable, others show calculated amount
   if (category.input_mode === 'CUSTOM' && category.custom_months) {
+    const startMonth = category.custom_start_month || 1
+    
     // Show empty for months that are not payment months
     if (!isPaymentMonth) {
       return (
@@ -368,8 +375,8 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       )
     }
 
-    // First month is editable in CUSTOM mode
-    if (month === 1) {
+    // Start month is editable in CUSTOM mode
+    if (month === startMonth) {
       const hasExistingEntry = entry && (entry.planned_amount !== '0' || entry.actual_amount)
       
       // If yearly_amount is set, show calculated amount but make it editable
@@ -378,7 +385,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
           <td
             onClick={() => setIsEditing(true)}
             className="px-3 py-3 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-blue-50 dark:bg-blue-900/10"
-            title="Klicken zum Bearbeiten - Gesamtbetrag wird auf alle Monate verteilt"
+            title="Klicken zum Bearbeiten - Betrag pro Zahlung"
           >
             <div>
               <div className="font-semibold text-xs text-blue-700 dark:text-blue-300">
@@ -397,7 +404,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
         <td
           onClick={() => setIsEditing(true)}
           className={`px-3 py-3 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border ${getStatusColor()}`}
-          title="Klicken zum Bearbeiten - Gesamtbetrag wird auf alle Monate verteilt"
+          title="Klicken zum Bearbeiten - Betrag pro Zahlung"
         >
           {entry ? (
             <div>
@@ -417,24 +424,23 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       )
     }
 
-    // Other payment months (not month 1) show calculated amount
-    if (month !== 1 && isPaymentMonth) {
+    // Other payment months (not start month) show calculated amount
+    if (month !== startMonth && isPaymentMonth) {
       // If yearly_amount is set, show calculated amount (which is the payment amount)
       if (calculatedMonthlyAmount > 0) {
         const hasExistingEntry = entry && (entry.planned_amount !== '0' || entry.actual_amount)
 
         return (
           <td
-            className={`px-3 py-3 text-center text-sm border ${hasExistingEntry ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-blue-50 dark:bg-blue-900/10'}`}
-            title={`Berechnet: Zahlung in diesem Monat${hasExistingEntry ? ' (überschreibt vorhandenen Eintrag)' : ''}`}
+            className="px-3 py-3 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
+            title="Berechnet: Zahlung in diesem Monat"
           >
             <div>
-              <div className={`font-semibold text-xs ${hasExistingEntry ? 'text-yellow-700 dark:text-yellow-300' : 'text-blue-700 dark:text-blue-300'}`}>
+              <div className="font-semibold text-xs text-blue-700 dark:text-blue-300">
                 {formatCurrency(calculatedMonthlyAmount, displayCurrency)}
               </div>
-              <div className={`text-[10px] mt-0.5 ${hasExistingEntry ? 'text-yellow-600 dark:text-yellow-400' : 'text-blue-600 dark:text-blue-400'}`}>
+              <div className="text-[10px] mt-0.5 text-blue-600 dark:text-blue-400">
                 📊 Berechnet
-                {hasExistingEntry && <span className="block">⚠️ Überschreibt</span>}
               </div>
             </div>
           </td>

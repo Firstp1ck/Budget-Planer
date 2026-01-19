@@ -275,6 +275,7 @@ class BudgetTemplateViewSet(viewsets.ModelViewSet):
                 'order': category.order,
                 'input_mode': category.input_mode,
                 'custom_months': category.custom_months,
+                'custom_start_month': category.custom_start_month,
                 # Note: yearly_amount is NOT included - templates don't store values
             })
 

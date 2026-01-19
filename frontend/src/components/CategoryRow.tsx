@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { categoryApi } from '../services/api'
-import type { BudgetCategory, BudgetEntry, InputMode } from '../types/budget'
+import type { BudgetCategory, BudgetEntry, InputMode, SalaryReduction } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
 import MonthlyCell from './MonthlyCell'
 
@@ -15,6 +15,7 @@ interface CategoryRowProps {
   budgetId: number
   displayCurrency: Currency
   budgetYear?: number
+  salaryReductions?: SalaryReduction[]
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -40,6 +41,7 @@ function CategoryRow({
   budgetId,
   displayCurrency,
   budgetYear,
+  salaryReductions = [],
 }: CategoryRowProps) {
   const year = budgetYear || new Date().getFullYear()
   const queryClient = useQueryClient()
@@ -47,11 +49,15 @@ function CategoryRow({
   const [editingInputMode, setEditingInputMode] = useState<number | null>(null)
   const [editingName, setEditingName] = useState<number | null>(null)
   const [categoryName, setCategoryName] = useState('')
+  const [draggedCategoryId, setDraggedCategoryId] = useState<number | null>(null)
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<number | null>(null)
   const [inputModeData, setInputModeData] = useState<{
     mode: InputMode
     customMonths: number
+    customStartMonth: number
     yearlyAmount: string
-  }>({ mode: 'MONTHLY', customMonths: 12, yearlyAmount: '0' })
+    customAmountType: 'payment' | 'total'
+  }>({ mode: 'MONTHLY', customMonths: 12, customStartMonth: 1, yearlyAmount: '0', customAmountType: 'payment' })
   const [showAutofillDialog, setShowAutofillDialog] = useState<number | null>(null)
   const [autofillData, setAutofillData] = useState({
     amount: '',
@@ -69,6 +75,87 @@ function CategoryRow({
       toast.error('Fehler beim Löschen der Kategorie')
     },
   })
+
+  const reorderCategoryMutation = useMutation({
+    mutationFn: ({ id, order }: { id: number; order: number }) => categoryApi.reorder(id, order),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
+    },
+    onError: () => {
+      toast.error('Fehler beim Neuanordnen der Kategorie')
+    },
+  })
+
+  const handleDragStart = (e: React.DragEvent, categoryId: number) => {
+    setDraggedCategoryId(categoryId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', categoryId.toString())
+  }
+
+  const handleDragOver = (e: React.DragEvent, categoryId: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    if (draggedCategoryId && draggedCategoryId !== categoryId) {
+      setDragOverCategoryId(categoryId)
+    }
+  }
+
+  const handleDragLeave = () => {
+    setDragOverCategoryId(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, targetCategoryId: number) => {
+    e.preventDefault()
+    setDragOverCategoryId(null)
+    
+    if (!draggedCategoryId || draggedCategoryId === targetCategoryId) {
+      setDraggedCategoryId(null)
+      return
+    }
+
+    const draggedCategory = categories.find(c => c.id === draggedCategoryId)
+    const targetCategory = categories.find(c => c.id === targetCategoryId)
+    
+    if (!draggedCategory || !targetCategory) {
+      setDraggedCategoryId(null)
+      return
+    }
+
+    // Calculate new order
+    const sortedCategories = [...categories].sort((a, b) => a.order - b.order)
+    const draggedIndex = sortedCategories.findIndex(c => c.id === draggedCategoryId)
+    const targetIndex = sortedCategories.findIndex(c => c.id === targetCategoryId)
+    
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedCategoryId(null)
+      return
+    }
+    
+    // Remove dragged category from its position
+    sortedCategories.splice(draggedIndex, 1)
+    
+    // Insert at new position (if dragging down, insert after target; if dragging up, insert at target position)
+    const newIndex = draggedIndex < targetIndex ? targetIndex : targetIndex
+    sortedCategories.splice(newIndex, 0, draggedCategory)
+    
+    // Update orders for all affected categories
+    sortedCategories.forEach((category, index) => {
+      const newOrder = index
+      const oldOrder = categories.find(c => c.id === category.id)?.order ?? index
+      // Only update if order changed
+      if (newOrder !== oldOrder) {
+        reorderCategoryMutation.mutate({ id: category.id, order: newOrder })
+      }
+    })
+    
+    setDraggedCategoryId(null)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedCategoryId(null)
+    setDragOverCategoryId(null)
+  }
 
   const updateInputModeMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<BudgetCategory> }) =>
@@ -264,24 +351,40 @@ function CategoryRow({
     setInputModeData({
       mode: category.input_mode,
       customMonths: category.custom_months || 12,
+      customStartMonth: category.custom_start_month || 1,
       yearlyAmount: suggestedYearlyAmount,
+      customAmountType: 'payment', // Default to payment amount (what we store)
     })
   }
 
   const handleSaveInputMode = (categoryId: number) => {
+    let yearlyAmount = inputModeData.yearlyAmount
+    
+    // If CUSTOM mode and user entered Gesamtbetrag, convert to payment amount
+    if (inputModeData.mode === 'CUSTOM' && inputModeData.customAmountType === 'total') {
+      const totalAmount = parseFloat(inputModeData.yearlyAmount || '0')
+      yearlyAmount = (totalAmount / inputModeData.customMonths).toFixed(2)
+    }
+    
     const data: Partial<BudgetCategory> = {
       input_mode: inputModeData.mode,
       custom_months: inputModeData.mode === 'CUSTOM' ? inputModeData.customMonths : null,
-      yearly_amount: inputModeData.mode !== 'MONTHLY' ? inputModeData.yearlyAmount : null,
+      custom_start_month: inputModeData.mode === 'CUSTOM' ? inputModeData.customStartMonth : null,
+      yearly_amount: inputModeData.mode !== 'MONTHLY' ? yearlyAmount : null,
     }
 
     updateInputModeMutation.mutate({ id: categoryId, data })
   }
 
   const calculateTotal = (category: BudgetCategory) => {
-    // For YEARLY and CUSTOM modes, use the yearly_amount as total
-    if (category.input_mode === 'YEARLY' || category.input_mode === 'CUSTOM') {
+    // For YEARLY mode, use the yearly_amount as total
+    if (category.input_mode === 'YEARLY') {
       return parseFloat(category.yearly_amount || '0')
+    }
+
+    // For CUSTOM mode, yearly_amount stores the payment amount, so multiply by custom_months
+    if (category.input_mode === 'CUSTOM' && category.custom_months) {
+      return parseFloat(category.yearly_amount || '0') * category.custom_months
     }
 
     // For MONTHLY mode, sum all entries
@@ -304,10 +407,106 @@ function CategoryRow({
     }
 
     if (category.input_mode === 'CUSTOM' && category.custom_months) {
-      return yearlyAmount / category.custom_months
+      // For CUSTOM mode, yearly_amount stores the payment amount, not the total
+      return yearlyAmount
     }
 
     return 0
+  }
+
+  // Calculate total reductions for a month
+  const getTotalReductionsForMonth = (month: number): number => {
+    if (!salaryReductions || salaryReductions.length === 0) return 0
+    
+    // Find salary category
+    const salaryCategory = categories.find(
+      (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+    )
+    if (!salaryCategory) return 0
+
+    // Get gross salary for the month
+    let grossSalary = 0
+    if (salaryCategory.input_mode === 'YEARLY' && salaryCategory.yearly_amount) {
+      grossSalary = parseFloat(salaryCategory.yearly_amount) / 12
+    } else if (salaryCategory.input_mode === 'CUSTOM' && salaryCategory.custom_months && salaryCategory.yearly_amount) {
+      const startMonth = salaryCategory.custom_start_month || 1
+      const monthsInterval = 12 / salaryCategory.custom_months
+      const paymentMonths: number[] = []
+      for (let i = 0; i < salaryCategory.custom_months; i++) {
+        const calculatedMonth = startMonth + (i * monthsInterval)
+        let paymentMonth = Math.round(calculatedMonth)
+        while (paymentMonth > 12) paymentMonth -= 12
+        while (paymentMonth < 1) paymentMonth += 12
+        paymentMonths.push(paymentMonth)
+      }
+      if (paymentMonths.includes(month)) {
+        grossSalary = parseFloat(salaryCategory.yearly_amount)
+      }
+    } else if (salaryCategory.input_mode === 'MONTHLY') {
+      const salaryEntry = entries.find(
+        (e) => e.category === salaryCategory.id && e.month === month
+      )
+      if (salaryEntry) {
+        grossSalary = parseFloat(salaryEntry.actual_amount || salaryEntry.planned_amount)
+      }
+    }
+
+    if (grossSalary === 0) return 0
+
+    // Calculate total reductions
+    return salaryReductions
+      .filter(r => r.is_active)
+      .reduce((sum, reduction) => {
+        if (reduction.reduction_type === 'PERCENTAGE') {
+          return sum + (grossSalary * parseFloat(reduction.value)) / 100
+        } else {
+          return sum + parseFloat(reduction.value)
+        }
+      }, 0)
+  }
+
+  // Calculate total amount for a category in a specific month
+  const getCategoryAmountForMonth = (category: BudgetCategory, month: number): number => {
+    let amount = 0
+
+    // For MONTHLY mode, get the entry for this month
+    if (category.input_mode === 'MONTHLY') {
+      const categoryEntries = entries.filter(
+        (e) => e.category === category.id && e.month === month
+      )
+      amount = categoryEntries.reduce((sum, entry) => {
+        return sum + parseFloat(entry.actual_amount || entry.planned_amount)
+      }, 0)
+    } else if (category.input_mode === 'YEARLY') {
+      // For YEARLY mode, distribute evenly
+      const yearlyAmount = parseFloat(category.yearly_amount || '0')
+      amount = yearlyAmount / 12
+    } else if (category.input_mode === 'CUSTOM' && category.custom_months) {
+      // For CUSTOM mode, check if this month is a payment month
+      const startMonth = category.custom_start_month || 1
+      const monthsInterval = 12 / category.custom_months
+      const paymentMonths: number[] = []
+      for (let i = 0; i < category.custom_months; i++) {
+        const calculatedMonth = startMonth + (i * monthsInterval)
+        let paymentMonth = Math.round(calculatedMonth)
+        while (paymentMonth > 12) paymentMonth -= 12
+        while (paymentMonth < 1) paymentMonth += 12
+        paymentMonths.push(paymentMonth)
+      }
+      
+      if (paymentMonths.includes(month)) {
+        // This month has a payment
+        amount = parseFloat(category.yearly_amount || '0')
+      }
+    }
+
+    // For income type, if it's salary, subtract reductions to get net salary
+    if (type === 'INCOME' && category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt')) {
+      const reductions = getTotalReductionsForMonth(month)
+      return amount - reductions
+    }
+
+    return amount
   }
 
   return (
@@ -329,14 +528,30 @@ function CategoryRow({
       </tr>
       {!isCollapsed && (
         <>
-      {categories.map((category) => (
+      {categories.sort((a, b) => a.order - b.order).map((category) => (
         <tr
           key={category.id}
-          className="group hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          onDragOver={(e) => handleDragOver(e, category.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, category.id)}
+          className={`group hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+            draggedCategoryId === category.id ? 'opacity-50 bg-blue-100 dark:bg-blue-900/20' : ''
+          } ${
+            dragOverCategoryId === category.id ? 'border-t-4 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30' : ''
+          }`}
         >
           <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50">
             <div className="flex items-center justify-between gap-2 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span 
+                  className="cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 select-none inline-block px-1" 
+                  title="Ziehen zum Neuanordnen"
+                  draggable
+                  onDragStart={(e) => {
+                    handleDragStart(e, category.id)
+                  }}
+                  onDragEnd={handleDragEnd}
+                >⋮⋮</span>
                 <span className="truncate">{category.name}</span>
                 {/* Show "Brutto" label for salary category */}
                 {category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt') && (
@@ -457,22 +672,76 @@ function CategoryRow({
                   </select>
                 </div>
                 {inputModeData.mode === 'CUSTOM' && (
-                  <div>
-                    <label className="block text-[10px] font-medium mb-1">Anzahl Monate:</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="12"
-                      value={inputModeData.customMonths}
-                      onChange={(e) => setInputModeData({ ...inputModeData, customMonths: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-medium mb-1">Anzahl Monate:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="12"
+                        value={inputModeData.customMonths}
+                        onChange={(e) => setInputModeData({ ...inputModeData, customMonths: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium mb-1">Startmonat:</label>
+                      <select
+                        value={inputModeData.customStartMonth}
+                        onChange={(e) => setInputModeData({ ...inputModeData, customStartMonth: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
+                      >
+                        <option value={1}>Januar</option>
+                        <option value={2}>Februar</option>
+                        <option value={3}>März</option>
+                        <option value={4}>April</option>
+                        <option value={5}>Mai</option>
+                        <option value={6}>Juni</option>
+                        <option value={7}>Juli</option>
+                        <option value={8}>August</option>
+                        <option value={9}>September</option>
+                        <option value={10}>Oktober</option>
+                        <option value={11}>November</option>
+                        <option value={12}>Dezember</option>
+                      </select>
+                    </div>
+                  </>
                 )}
                 {inputModeData.mode !== 'MONTHLY' && (
                   <div>
+                    {inputModeData.mode === 'CUSTOM' && (
+                      <div className="mb-2">
+                        <label className="block text-[10px] font-medium mb-1">Eingabetyp:</label>
+                        <div className="flex gap-2">
+                          <label className="flex items-center gap-1 text-[10px]">
+                            <input
+                              type="radio"
+                              name={`customAmountType-${category.id}`}
+                              checked={inputModeData.customAmountType === 'payment'}
+                              onChange={() => setInputModeData({ ...inputModeData, customAmountType: 'payment' })}
+                              className="w-3 h-3"
+                            />
+                            <span>Betrag pro Zahlung</span>
+                          </label>
+                          <label className="flex items-center gap-1 text-[10px]">
+                            <input
+                              type="radio"
+                              name={`customAmountType-${category.id}`}
+                              checked={inputModeData.customAmountType === 'total'}
+                              onChange={() => setInputModeData({ ...inputModeData, customAmountType: 'total' })}
+                              className="w-3 h-3"
+                            />
+                            <span>Gesamtbetrag</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
                     <label className="block text-[10px] font-medium mb-1">
-                      {inputModeData.mode === 'YEARLY' ? 'Jahresbetrag:' : 'Gesamtbetrag:'}
+                      {inputModeData.mode === 'YEARLY' 
+                        ? 'Jahresbetrag:' 
+                        : inputModeData.customAmountType === 'total' 
+                          ? 'Gesamtbetrag:' 
+                          : 'Betrag pro Zahlung:'}
                     </label>
                     <input
                       type="number"
@@ -482,10 +751,21 @@ function CategoryRow({
                       className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                     />
                     <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
-                      Monatlich: {formatCurrency(
-                        parseFloat(inputModeData.yearlyAmount || '0') /
-                        (inputModeData.mode === 'YEARLY' ? 12 : inputModeData.customMonths),
-                        displayCurrency
+                      {inputModeData.mode === 'YEARLY' ? (
+                        <>Monatlich: {formatCurrency(
+                          parseFloat(inputModeData.yearlyAmount || '0') / 12,
+                          displayCurrency
+                        )}</>
+                      ) : inputModeData.customAmountType === 'total' ? (
+                        <>Pro Zahlung ({inputModeData.customMonths}x): {formatCurrency(
+                          parseFloat(inputModeData.yearlyAmount || '0') / inputModeData.customMonths,
+                          displayCurrency
+                        )}</>
+                      ) : (
+                        <>Gesamt ({inputModeData.customMonths}x): {formatCurrency(
+                          parseFloat(inputModeData.yearlyAmount || '0') * inputModeData.customMonths,
+                          displayCurrency
+                        )}</>
                       )}
                     </p>
                   </div>
@@ -627,6 +907,39 @@ function CategoryRow({
           </td>
         </tr>
       ))}
+          {/* Total Row for INCOME, FIXED_EXPENSE and VARIABLE_EXPENSE */}
+          {(type === 'INCOME' || type === 'FIXED_EXPENSE' || type === 'VARIABLE_EXPENSE') && categories.length > 0 && (
+            <tr className={`${TYPE_COLORS[type]} border-t-2 border-gray-300 dark:border-gray-600 font-bold`}>
+              <td className="px-4 py-3 text-sm font-bold sticky left-0 border-r border-gray-300 dark:border-gray-600">
+                Gesamt
+              </td>
+              <td className="px-3 py-3 text-center">
+                {/* Empty cell for category type column */}
+              </td>
+              {displayMonths.map((month) => {
+                const monthlyTotal = categories.reduce((sum, category) => {
+                  return sum + getCategoryAmountForMonth(category, month)
+                }, 0)
+                return (
+                  <td
+                    key={month}
+                    className="px-3 py-3 text-center text-sm border font-bold"
+                  >
+                    {formatCurrency(monthlyTotal, displayCurrency)}
+                  </td>
+                )
+              })}
+              <td className="px-3 py-3 text-center text-sm font-bold bg-gray-50 dark:bg-gray-700/50">
+                {formatCurrency(
+                  categories.reduce((sum, category) => sum + calculateTotal(category), 0),
+                  displayCurrency
+                )}
+              </td>
+              <td className="px-3 py-3 text-center">
+                {/* Empty cell for delete button column */}
+              </td>
+            </tr>
+          )}
         </>
       )}
     </>
