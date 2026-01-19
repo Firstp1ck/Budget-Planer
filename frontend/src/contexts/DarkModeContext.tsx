@@ -29,13 +29,13 @@ export function DarkModeProvider({ children }: { children: ReactNode }) {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // Sync state with actual HTML class on mount
+  // Sync state with actual HTML class on mount only
   useEffect(() => {
     const root = document.documentElement;
     const hasDarkClass = root.classList.contains('dark');
     const stored = localStorage.getItem('darkMode');
     
-    // If there's a mismatch, sync it
+    // If there's a stored value, ensure DOM matches it
     if (stored !== null) {
       const shouldBeDark = stored === 'true';
       if (shouldBeDark !== hasDarkClass) {
@@ -45,25 +45,33 @@ export function DarkModeProvider({ children }: { children: ReactNode }) {
           root.classList.remove('dark');
         }
       }
-      // Update state if it doesn't match
-      if (shouldBeDark !== isDark) {
-        // Use requestAnimationFrame to avoid synchronous setState in effect
+    } else {
+      // If no stored value, sync state with current DOM state (from system preference)
+      // The state was initialized from system preference, but DOM might differ
+      // So we sync state to match what the DOM actually has (set by index.html script)
+      if (hasDarkClass !== isDark) {
         requestAnimationFrame(() => {
-          setIsDark(shouldBeDark);
+          setIsDark(hasDarkClass);
         });
       }
     }
-  }, [isDark]); // Include isDark to check for changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount - isDark is intentionally excluded as we want initial value
 
   // Apply dark class whenever isDark changes
   useEffect(() => {
     const root = document.documentElement;
     
     if (isDark) {
-      root.classList.add('dark');
+      if (!root.classList.contains('dark')) {
+        root.classList.add('dark');
+      }
       localStorage.setItem('darkMode', 'true');
     } else {
-      root.classList.remove('dark');
+      // Explicitly remove the dark class to ensure light mode works
+      if (root.classList.contains('dark')) {
+        root.classList.remove('dark');
+      }
       localStorage.setItem('darkMode', 'false');
     }
   }, [isDark]);
@@ -75,10 +83,15 @@ export function DarkModeProvider({ children }: { children: ReactNode }) {
       
       // Force update DOM immediately for instant feedback
       if (newValue) {
-        root.classList.add('dark');
+        if (!root.classList.contains('dark')) {
+          root.classList.add('dark');
+        }
         localStorage.setItem('darkMode', 'true');
       } else {
-        root.classList.remove('dark');
+        // Explicitly remove the dark class to ensure light mode works
+        if (root.classList.contains('dark')) {
+          root.classList.remove('dark');
+        }
         localStorage.setItem('darkMode', 'false');
       }
       

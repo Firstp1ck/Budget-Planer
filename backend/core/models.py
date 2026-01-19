@@ -4,27 +4,20 @@ from decimal import Decimal
 
 
 class Budget(models.Model):
-    """Main budget model representing a yearly budget plan"""
-    name = models.CharField(max_length=200)
-    year = models.IntegerField(
-        validators=[MinValueValidator(2000), MaxValueValidator(2100)]
-    )
+    """Main budget model representing a budget plan (can span multiple years)"""
+    name = models.CharField(max_length=200, unique=True)
     currency = models.CharField(max_length=3, default='CHF')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-year', 'name']
-        unique_together = ['name', 'year']
+        ordering = ['name']
 
     def __str__(self):
-        return f"{self.name} ({self.year})"
+        return self.name
 
-    def get_monthly_summary(self, month, year=None):
-        """Calculate income, expenses, and balance for a specific month"""
-        if year is None:
-            year = self.year
-
+    def get_monthly_summary(self, month, year):
+        """Calculate income, expenses, and balance for a specific month and year"""
         entries = BudgetEntry.objects.filter(
             category__budget=self,
             month=month,
@@ -50,25 +43,32 @@ class Budget(models.Model):
             'entries': entries
         }
 
-    def get_yearly_summary(self):
-        """Calculate annual totals and projections"""
+    def get_yearly_summary(self, year):
+        """Calculate annual totals and projections for a specific year"""
         monthly_summaries = []
         total_income = Decimal('0')
         total_expenses = Decimal('0')
 
         for month in range(1, 13):
-            summary = self.get_monthly_summary(month)
+            summary = self.get_monthly_summary(month, year)
             monthly_summaries.append(summary)
             total_income += summary['total_income']
             total_expenses += summary['total_expenses']
 
         return {
-            'year': self.year,
+            'year': year,
             'total_income': total_income,
             'total_expenses': total_expenses,
             'balance': total_income - total_expenses,
             'monthly_summaries': monthly_summaries
         }
+
+    def get_available_years(self):
+        """Get list of years that have entries in this budget"""
+        years = BudgetEntry.objects.filter(
+            category__budget=self
+        ).values_list('year', flat=True).distinct().order_by('year')
+        return list(years)
 
 
 class BudgetCategory(models.Model):
@@ -123,11 +123,8 @@ class BudgetCategory(models.Model):
     def __str__(self):
         return f"{self.budget.name} - {self.name} ({self.get_category_type_display()})"
 
-    def get_monthly_total(self, month, year=None):
-        """Sum all entries for this category in a specific month"""
-        if year is None:
-            year = self.budget.year
-
+    def get_monthly_total(self, month, year):
+        """Sum all entries for this category in a specific month and year"""
         entries = self.entries.filter(month=month, year=year)
         total_planned = sum(Decimal(e.planned_amount) for e in entries)
         total_actual = sum(
@@ -142,9 +139,9 @@ class BudgetCategory(models.Model):
             'total_actual': total_actual
         }
 
-    def get_yearly_total(self):
-        """Sum all entries for this category across the year"""
-        entries = self.entries.filter(year=self.budget.year)
+    def get_yearly_total(self, year):
+        """Sum all entries for this category across a specific year"""
+        entries = self.entries.filter(year=year)
         total_planned = sum(Decimal(e.planned_amount) for e in entries)
         total_actual = sum(
             Decimal(e.actual_amount) if e.actual_amount else Decimal('0')
@@ -152,7 +149,7 @@ class BudgetCategory(models.Model):
         )
 
         return {
-            'year': self.budget.year,
+            'year': year,
             'total_planned': total_planned,
             'total_actual': total_actual
         }

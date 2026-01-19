@@ -75,7 +75,16 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if not typing in an input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+      // Check both target and currentTarget to be safe
+      const target = e.target as HTMLElement
+      if (
+        target instanceof HTMLInputElement || 
+        target instanceof HTMLTextAreaElement || 
+        target instanceof HTMLSelectElement ||
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT'
+      ) {
         return
       }
 
@@ -111,9 +120,11 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
+                  e.stopPropagation()
                   handleSave()
                 } else if (e.key === 'Escape') {
                   e.preventDefault()
+                  e.stopPropagation()
                   setIsEditing(false)
                   setValue(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
                 }

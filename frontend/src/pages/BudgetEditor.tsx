@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -18,16 +18,12 @@ import {
   getExchangeRates,
 } from '../utils/currency'
 
-const MONTHS = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-]
 
 function BudgetEditor() {
   const { id } = useParams<{ id: string }>()
   const budgetId = parseInt(id || '0')
   const queryClient = useQueryClient()
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [selectedCurrency, setDisplayCurrency] = useState<Currency>(getSelectedCurrency())
   const [isLoadingRates, setIsLoadingRates] = useState(false)
   const [showTemplateDialog, setShowTemplateDialog] = useState(false)
@@ -42,6 +38,16 @@ function BudgetEditor() {
       return response.data
     },
     enabled: budgetId > 0,
+  })
+
+  // Fetch templates for autocomplete suggestions
+  const { data: templatesData } = useQuery({
+    queryKey: ['templates'],
+    queryFn: async () => {
+      const response = await templateApi.getAll()
+      return response.data.results || []
+    },
+    enabled: showTemplateDialog, // Only fetch when dialog is open
   })
 
   const createTemplateMutation = useMutation({
@@ -123,6 +129,44 @@ function BudgetEditor() {
     }
   }
 
+  // Extract data safely - use empty defaults if not loaded yet
+  const { budget, categories, entries = [], tax_entries, salary_reductions, actual_balances = [] } = summaryData || {}
+  const rates = getExchangeRates()
+
+  // Calculate available years from entries - must be called before early returns
+  const availableYears = useMemo(() => {
+    if (!entries || entries.length === 0) {
+      return [new Date().getFullYear()]
+    }
+    const years = new Set<number>()
+    entries.forEach(entry => years.add(entry.year))
+    if (actual_balances) {
+      actual_balances.forEach(balance => years.add(balance.year))
+    }
+    const sortedYears = Array.from(years).sort((a, b) => b - a)
+    return sortedYears.length > 0 ? sortedYears : [new Date().getFullYear()]
+  }, [entries, actual_balances])
+
+  // Set default selected year on mount or when years change
+  useEffect(() => {
+    if (selectedYear === null && availableYears.length > 0) {
+      setSelectedYear(availableYears[0]) // Default to most recent year
+    }
+  }, [availableYears, selectedYear])
+
+  // Filter entries and balances by selected year - must be called before early returns
+  const filteredEntries = useMemo(() => {
+    if (!entries || entries.length === 0) return []
+    if (selectedYear === null) return entries
+    return entries.filter(entry => entry.year === selectedYear)
+  }, [entries, selectedYear])
+
+  const filteredActualBalances = useMemo(() => {
+    if (!actual_balances || actual_balances.length === 0) return []
+    if (selectedYear === null) return actual_balances
+    return actual_balances.filter(balance => balance.year === selectedYear)
+  }, [actual_balances, selectedYear])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -154,9 +198,6 @@ function BudgetEditor() {
     )
   }
 
-  const { budget, categories, entries, tax_entries, salary_reductions, actual_balances = [] } = summaryData
-  const rates = getExchangeRates()
-
   return (
     <div className="min-h-screen">
       <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 animate-fade-in">
@@ -179,10 +220,6 @@ function BudgetEditor() {
               {budget.name}
             </h1>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <span className="text-blue-600 dark:text-blue-400 font-semibold text-sm">📅</span>
-                <span className="text-blue-700 dark:text-blue-300 font-semibold text-sm">{budget.year}</span>
-              </div>
               <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
                 <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">Basis:</span>
                 <span className="text-slate-700 dark:text-slate-300 font-semibold text-sm">{budget.currency}</span>
@@ -237,61 +274,82 @@ function BudgetEditor() {
               </div>
             </div>
 
-            {/* Month Selector */}
+            {/* Year Selector */}
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide text-center">
-                Monatsansicht
+                Jahr
               </label>
               <select
-                value={selectedMonth || ''}
-                onChange={(e) => setSelectedMonth(e.target.value ? parseInt(e.target.value) : null)}
+                value={selectedYear || ''}
+                onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : null)}
                 className="px-5 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white font-medium text-sm shadow-sm transition-all bg-white"
               >
-                <option value="">🗓️ Alle Monate</option>
-                {MONTHS.map((month, index) => (
-                  <option key={index} value={index + 1}>
-                    {month}
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
                   </option>
                 ))}
               </select>
             </div>
+
           </div>
 
           {/* Exchange Rate Info */}
-          {selectedCurrency !== 'CHF' && (
-            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">💱</span>
-                <div>
-                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                    Aktueller Kurs: 1 CHF = {rates[selectedCurrency].toFixed(4)} {CURRENCY_SYMBOLS[selectedCurrency]}
-                  </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                    Stand: {new Date(rates.lastUpdated).toLocaleDateString('de-DE', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
+          <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">💱</span>
+              <div className="flex-1">
+                {selectedCurrency !== 'CHF' ? (
+                  <>
+                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                      Aktueller Kurs: 1 CHF = {rates[selectedCurrency].toFixed(4)} {CURRENCY_SYMBOLS[selectedCurrency]}
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                      Stand: {new Date(rates.lastUpdated).toLocaleDateString('de-DE', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">
+                      Aktuelle Wechselkurse (Basis: CHF):
+                    </p>
+                    <div className="flex flex-wrap gap-4 text-xs text-blue-700 dark:text-blue-300">
+                      <span>1 CHF = {rates.EUR.toFixed(4)} {CURRENCY_SYMBOLS.EUR}</span>
+                      <span>1 CHF = {rates.USD.toFixed(4)} {CURRENCY_SYMBOLS.USD}</span>
+                    </div>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1.5">
+                      Stand: {new Date(rates.lastUpdated).toLocaleDateString('de-DE', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Balance Difference Card */}
         <div className="mb-12">
           <BalanceDifferenceCard
             categories={categories}
-            entries={entries}
+            entries={filteredEntries}
             taxEntries={tax_entries || []}
             salaryReductions={salary_reductions || []}
-            actualBalances={actual_balances}
-            selectedMonth={selectedMonth}
+            actualBalances={filteredActualBalances}
+            selectedMonth={null}
             displayCurrency={selectedCurrency}
-            budgetYear={budget.year}
+            budgetYear={selectedYear || new Date().getFullYear()}
           />
         </div>
 
@@ -300,10 +358,10 @@ function BudgetEditor() {
           <BudgetSummary
             budgetId={budgetId}
             categories={categories}
-            entries={entries}
+            entries={filteredEntries}
             salaryReductions={salary_reductions || []}
             taxEntries={tax_entries || []}
-            selectedMonth={selectedMonth}
+            selectedMonth={null}
             displayCurrency={selectedCurrency}
           />
         </div>
@@ -352,24 +410,24 @@ function BudgetEditor() {
             <BudgetTable
               budgetId={budgetId}
               categories={categories}
-              entries={entries}
+              entries={filteredEntries}
               taxEntries={tax_entries || []}
               salaryReductions={salary_reductions || []}
-              selectedMonth={selectedMonth}
+              selectedMonth={null}
               displayCurrency={selectedCurrency}
-              budgetYear={budget.year}
-              actualBalances={actual_balances}
+              budgetYear={selectedYear || new Date().getFullYear()}
+              actualBalances={filteredActualBalances}
             />
           </div>
         ) : (
           <BudgetGraphs
             categories={categories}
-            entries={entries}
+            entries={filteredEntries}
             taxEntries={tax_entries || []}
             salaryReductions={salary_reductions || []}
-            actualBalances={actual_balances}
+            actualBalances={filteredActualBalances}
             displayCurrency={selectedCurrency}
-            budgetYear={budget.year}
+            budgetYear={selectedYear || new Date().getFullYear()}
           />
         )}
 
@@ -397,22 +455,30 @@ function BudgetEditor() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Vorlagenname:
                 </label>
-                <input
-                  type="text"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  placeholder="z.B. Standard Budget 2026"
-                  className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSaveAsTemplate()
-                    } else if (e.key === 'Escape') {
-                      setShowTemplateDialog(false)
-                      setTemplateName('')
-                    }
-                  }}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="template-suggestions"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="z.B. Standard Budget 2026"
+                    className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveAsTemplate()
+                      } else if (e.key === 'Escape') {
+                        setShowTemplateDialog(false)
+                        setTemplateName('')
+                      }
+                    }}
+                  />
+                  <datalist id="template-suggestions">
+                    {templatesData?.map((template) => (
+                      <option key={template.id} value={template.name} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
               <div className="flex gap-3">
                 <button

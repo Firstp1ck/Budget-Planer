@@ -188,8 +188,6 @@ function BudgetCard({ budget, onDelete, isDeleting }: BudgetCardProps) {
                 {budget.name}
               </h3>
               <div className="flex items-center gap-3 text-sm">
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{budget.year}</span>
-                <span className="text-slate-400">•</span>
                 <span className="px-2.5 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-semibold">
                   {budget.currency}
                 </span>
@@ -198,15 +196,8 @@ function BudgetCard({ budget, onDelete, isDeleting }: BudgetCardProps) {
           </div>
 
           <div className="mb-5 pb-5 border-b border-gray-200 dark:border-gray-700">
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-              Erstellt am {new Date(budget.created_at).toLocaleDateString('de-DE', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric'
-              })}
-            </p>
             {yearlyBalance !== null && (
-              <div className="mt-3">
+              <div>
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
                   Jährliche SOLL Bilanz
                 </p>
@@ -234,6 +225,23 @@ function BudgetCard({ budget, onDelete, isDeleting }: BudgetCardProps) {
             >
               🗑️
             </button>
+          </div>
+
+          <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <p className="text-xs italic text-gray-500 dark:text-gray-400">
+              Erstellt am {new Date(budget.created_at).toLocaleDateString('de-DE', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric'
+              })}
+            </p>
+            <p className="text-xs italic text-gray-500 dark:text-gray-400">
+              Aktualisiert am {new Date(budget.updated_at).toLocaleDateString('de-DE', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric'
+              })}
+            </p>
           </div>
         </div>
       </div>

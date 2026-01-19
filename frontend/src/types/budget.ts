@@ -7,7 +7,6 @@ export type BudgetStatus = 'WITHIN_BUDGET' | 'WARNING' | 'OVER_BUDGET'
 export interface Budget {
   id: number
   name: string
-  year: number
   currency: string
   created_at: string
   updated_at: string

@@ -185,53 +185,98 @@ function TaxesSection({
 
   const sortedTaxEntries = [...taxEntries].sort((a, b) => a.order - b.order)
 
+  // Calculate total taxes across all months
+  const calculateTotalTaxes = (): number => {
+    return displayMonths.reduce((sum, month) => {
+      return sum + sortedTaxEntries
+        .filter(t => t.is_active)
+        .reduce((taxSum, tax) => taxSum + calculateTaxAmount(tax, month), 0)
+    }, 0)
+  }
+
   return (
     <>
       <tr
-        className="bg-red-100 dark:bg-red-900/30 border-t-4 border-red-400 dark:border-red-600"
+        className="bg-red-100 dark:bg-red-900/30 border-t-2 border-gray-300 dark:border-gray-600"
       >
-        <td
-          colSpan={displayMonths.length + 4}
-          className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300"
-        >
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-red-300 dark:border-red-600"
-              title={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
-              aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
-            >
-              <span className={`text-sm transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-90'}`}>
-                ▶
-              </span>
-            </button>
-            <span>💰 Steuern</span>
-            <span className="text-xs font-normal opacity-75">({taxEntries.length})</span>
-            {!isAddingTax && (
+        {isCollapsed ? (
+          <>
+            {/* When collapsed, show individual cells with total in Gesamt column */}
+            <td className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-gray-300 dark:border-gray-600">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsCollapsed(!isCollapsed)}
+                  className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
+                  title="Aufklappen"
+                  aria-label="Aufklappen"
+                >
+                  <span className="text-sm transition-transform duration-200 rotate-0">
+                    ▶
+                  </span>
+                </button>
+                <span>💰 Steuern</span>
+                <span className="text-xs font-normal opacity-75">({taxEntries.length})</span>
+              </div>
+            </td>
+            <td className="px-3 py-2 text-center">
+              {/* Empty cell for type column */}
+            </td>
+            {displayMonths.map((month) => (
+              <td key={month} className="px-3 py-2 text-center">
+                {/* Empty cells for month columns */}
+              </td>
+            ))}
+            <td className="px-3 py-2 text-center text-sm font-bold text-red-800 dark:text-red-300 bg-red-100 dark:bg-red-900/30">
+              {formatCurrency(calculateTotalTaxes(), displayCurrency)}
+            </td>
+            <td className="px-3 py-2 text-center">
+              {/* Empty cell for actions column */}
+            </td>
+          </>
+        ) : (
+          <td
+            colSpan={displayMonths.length + 4}
+            className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300"
+          >
+            <div className="flex items-center gap-3">
               <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIsAddingTax(true)
-                }}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
+                title="Zuklappen"
+                aria-label="Zuklappen"
               >
-                + Steuer hinzufügen
+                <span className="text-sm transition-transform duration-200 rotate-90">
+                  ▶
+                </span>
               </button>
-            )}
-            {!salaryCategory && (
-              <span className="text-xs font-normal text-orange-600 dark:text-orange-400">
-                ⚠️ Keine Gehalt-Kategorie gefunden
-              </span>
-            )}
-          </div>
-        </td>
+              <span>💰 Steuern</span>
+              <span className="text-xs font-normal opacity-75">({taxEntries.length})</span>
+              {!isAddingTax && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsAddingTax(true)
+                  }}
+                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
+                >
+                  + Steuer hinzufügen
+                </button>
+              )}
+              {!salaryCategory && (
+                <span className="text-xs font-normal text-orange-600 dark:text-orange-400">
+                  ⚠️ Keine Gehalt-Kategorie gefunden
+                </span>
+              )}
+            </div>
+          </td>
+        )}
       </tr>
       {!isCollapsed && (
         <>
           {sortedTaxEntries.map((tax) => (
             <tr
               key={tax.id}
-              className="group bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors"
+              className="group bg-red-50 dark:bg-red-900/10 border-b border-gray-200 dark:border-gray-700 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors"
             >
               {editingTaxId === tax.id ? (
                 <>
@@ -388,11 +433,11 @@ function TaxesSection({
           ))}
           {/* Total Row */}
           {sortedTaxEntries.length > 0 && (
-            <tr className="bg-red-100 dark:bg-red-900/30 border-t-2 border-red-400 dark:border-red-600 font-bold">
-              <td className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-400 dark:border-red-600">
+            <tr className="bg-red-100 dark:bg-red-900/30 border-b-2 border-red-300 dark:border-red-600 font-bold">
+              <td className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-300 dark:border-red-600">
                 Gesamt
               </td>
-              <td className="px-3 py-2 text-center">
+              <td className="px-3 py-2 text-center border-r border-red-300 dark:border-red-600">
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 dark:bg-red-800/50 text-red-900 dark:text-red-200">
                   {sortedTaxEntries
                     .filter(t => t.is_active)
@@ -407,7 +452,7 @@ function TaxesSection({
                 return (
                   <td
                     key={month}
-                    className="px-3 py-2 text-center text-sm border bg-red-100 dark:bg-red-900/30"
+                    className="px-3 py-2 text-center text-sm border-r border-red-300 dark:border-red-600 bg-red-100 dark:bg-red-900/30"
                   >
                     <div className="font-bold text-red-800 dark:text-red-200">
                       {formatCurrency(totalTaxAmount, displayCurrency)}
@@ -415,7 +460,7 @@ function TaxesSection({
                   </td>
                 )
               })}
-              <td className="px-3 py-2 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30">
+              <td className="px-3 py-2 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30 border-r border-red-300 dark:border-red-600">
                 {formatCurrency(
                   displayMonths.reduce((sum, month) => {
                     return sum + sortedTaxEntries
@@ -431,7 +476,7 @@ function TaxesSection({
             </tr>
           )}
           {isAddingTax && (
-            <tr className="bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-800">
+            <tr className="bg-red-50 dark:bg-red-900/10 border-b border-gray-200 dark:border-gray-700">
               <td className="px-4 py-2">
                 <input
                   type="text"
@@ -508,45 +553,6 @@ function TaxesSection({
                     ✕
                   </button>
                 </div>
-              </td>
-            </tr>
-          )}
-          {!isAddingTax && (
-            <tr className="bg-red-100 dark:bg-red-900/30 border-t-2 border-red-400 dark:border-red-600 font-bold">
-              <td className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-400 dark:border-red-600">
-                Gesamt
-              </td>
-              <td className="px-3 py-2 text-center">
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 dark:bg-red-800/50 text-red-900 dark:text-red-200">
-                  {sortedTaxEntries
-                    .filter(t => t.is_active)
-                    .reduce((sum, tax) => sum + parseFloat(tax.percentage), 0)
-                    .toFixed(2)}%
-                </span>
-              </td>
-              {displayMonths.map((month) => (
-                <td key={month} className="px-3 py-2 text-center text-sm border bg-red-100 dark:bg-red-900/30">
-                  <div className="font-bold text-red-800 dark:text-red-200">
-                    {formatCurrency(
-                      sortedTaxEntries
-                        .filter(t => t.is_active)
-                        .reduce((sum, tax) => sum + calculateTaxAmount(tax, month), 0),
-                      displayCurrency
-                    )}
-                  </div>
-                </td>
-              ))}
-              <td className="px-3 py-2 text-center text-sm font-bold text-red-800 dark:text-red-200 bg-red-100 dark:bg-red-900/30">
-                {formatCurrency(
-                  displayMonths.reduce((sum, month) => {
-                    return sum + sortedTaxEntries
-                      .filter(t => t.is_active)
-                      .reduce((taxSum, tax) => taxSum + calculateTaxAmount(tax, month), 0)
-                  }, 0),
-                  displayCurrency
-                )}
-              </td>
-              <td className="px-4 py-2 text-center">
               </td>
             </tr>
           )}

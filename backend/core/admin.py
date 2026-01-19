@@ -4,8 +4,8 @@ from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, Monthly
 
 @admin.register(Budget)
 class BudgetAdmin(admin.ModelAdmin):
-    list_display = ('name', 'year', 'currency', 'created_at')
-    list_filter = ('year', 'currency')
+    list_display = ('name', 'currency', 'created_at')
+    list_filter = ('currency',)
     search_fields = ('name',)
 
 

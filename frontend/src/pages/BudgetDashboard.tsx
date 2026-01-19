@@ -11,7 +11,6 @@ function BudgetDashboard() {
   const navigate = useNavigate()
   const [isCreating, setIsCreating] = useState(false)
   const [newBudgetName, setNewBudgetName] = useState('')
-  const [newBudgetYear, setNewBudgetYear] = useState(new Date().getFullYear())
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
 
   const { data: budgets, isLoading, error } = useQuery({
@@ -126,7 +125,6 @@ function BudgetDashboard() {
           })
           setIsCreating(false)
           setNewBudgetName('')
-          setNewBudgetYear(new Date().getFullYear())
           setSelectedTemplateId(null)
           toast.success('Budget mit Vorlage erfolgreich erstellt!')
           navigate(`/budget/${budgetId}`)
@@ -179,7 +177,6 @@ function BudgetDashboard() {
     if (newBudgetName.trim()) {
       createMutation.mutate({
         name: newBudgetName,
-        year: newBudgetYear,
         currency: 'CHF',
       })
     } else {
@@ -280,21 +277,8 @@ function BudgetDashboard() {
                   }
                 }}
                 className="w-full px-5 py-3.5 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700/50 dark:text-white transition-all shadow-sm focus:shadow-md"
-                placeholder="z.B. Haushaltsbudget 2026"
+                placeholder="z.B. Haushaltsbudget"
                 autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Jahr *
-              </label>
-              <input
-                type="number"
-                value={newBudgetYear}
-                onChange={(e) => setNewBudgetYear(parseInt(e.target.value))}
-                className="w-full px-5 py-3.5 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700/50 dark:text-white transition-all shadow-sm focus:shadow-md"
-                min="2000"
-                max="2100"
               />
             </div>
             <div>

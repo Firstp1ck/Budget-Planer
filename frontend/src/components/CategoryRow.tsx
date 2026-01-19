@@ -654,8 +654,12 @@ function CategoryRow({
                     onChange={(e) => setCategoryName(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        e.preventDefault()
+                        e.stopPropagation()
                         handleSaveName(category.id)
                       } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        e.stopPropagation()
                         handleCancelEditName()
                       }
                     }}
@@ -1054,8 +1058,8 @@ function CategoryRow({
       ))}
           {/* Total Row for INCOME, FIXED_EXPENSE and VARIABLE_EXPENSE */}
           {(type === 'INCOME' || type === 'FIXED_EXPENSE' || type === 'VARIABLE_EXPENSE') && categories.length > 0 && (
-            <tr className={`${TYPE_COLORS[type]} border-t-2 border-gray-300 dark:border-gray-600 font-bold`}>
-              <td className="px-4 py-2 text-sm font-bold sticky left-0 border-r border-gray-300 dark:border-gray-600">
+            <tr className={`${TYPE_COLORS[type]} border-t-2 ${type === 'VARIABLE_EXPENSE' ? 'border-purple-300 dark:border-purple-600' : 'border-gray-300 dark:border-gray-600'} font-bold`}>
+              <td className={`px-4 py-2 text-sm font-bold sticky left-0 border-r ${type === 'VARIABLE_EXPENSE' ? 'border-purple-300 dark:border-purple-600' : 'border-gray-300 dark:border-gray-600'}`}>
                 Gesamt
               </td>
               <td className="px-3 py-2 text-center">
@@ -1068,7 +1072,7 @@ function CategoryRow({
                 return (
                   <td
                     key={month}
-                    className="px-3 py-2 text-center text-sm border font-bold"
+                    className={`px-3 py-2 text-center text-sm border font-bold ${type === 'VARIABLE_EXPENSE' ? 'border-purple-300 dark:border-purple-600' : ''}`}
                   >
                     {formatCurrency(monthlyTotal, displayCurrency)}
                   </td>

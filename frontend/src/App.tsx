@@ -5,7 +5,6 @@ import { DarkModeProvider } from './contexts/DarkModeContext'
 import Layout from './components/Layout'
 import BudgetDashboard from './pages/BudgetDashboard'
 import BudgetEditor from './pages/BudgetEditor'
-import MonthlyView from './pages/MonthlyView'
 import { initializeExchangeRates } from './utils/currency'
 
 function App() {
@@ -52,7 +51,6 @@ function App() {
           <Routes>
             <Route path="/" element={<BudgetDashboard />} />
             <Route path="/budget/:id" element={<BudgetEditor />} />
-            <Route path="/budget/:id/month/:month" element={<MonthlyView />} />
           </Routes>
         </Layout>
       </DarkModeProvider>

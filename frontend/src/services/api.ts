@@ -28,10 +28,10 @@ export const budgetApi = {
   update: (id: number, data: Partial<Budget>) => api.put<Budget>(`/budgets/${id}/`, data),
   delete: (id: number) => api.delete(`/budgets/${id}/`),
   getSummary: (id: number) => api.get<BudgetSummaryData>(`/budgets/${id}/summary/`),
-  getMonthlySummary: (id: number, month: number) =>
-    api.get<MonthlySummary>(`/budgets/${id}/monthly/${month}/`),
-  getYearlySummary: (id: number) =>
-    api.get<YearlySummary>(`/budgets/${id}/yearly/`),
+  getMonthlySummary: (id: number, month: number, year: number) =>
+    api.get<MonthlySummary>(`/budgets/${id}/monthly/${month}/`, { params: { year } }),
+  getYearlySummary: (id: number, year: number) =>
+    api.get<YearlySummary>(`/budgets/${id}/yearly/`, { params: { year } }),
 }
 
 // Category endpoints

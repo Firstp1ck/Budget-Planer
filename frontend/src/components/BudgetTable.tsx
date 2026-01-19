@@ -518,7 +518,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               onCollapseChange={(collapsed) => handleCollapseChange('TAXES', collapsed)}
             />
             {/* Monthly Balance Header */}
-            <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-4 border-slate-400 dark:border-slate-500">
+            <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50">
               <td
                 colSpan={displayMonths.length + 4}
                 className="px-4 py-2 text-sm font-bold text-slate-900 dark:text-white"
@@ -602,8 +602,8 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               </td>
             </tr>
             {/* Actual Balance Section - Income Row */}
-            <tr className="bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-t-4 border-purple-400 dark:border-purple-500">
-              <td className="px-4 py-2 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-r border-slate-300 dark:border-slate-600 z-10" rowSpan={3}>
+            <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-2 border-slate-400 dark:border-slate-500">
+              <td className="px-4 py-2 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-r border-slate-300 dark:border-slate-600 z-10" rowSpan={3}>
                 Monatliche Bilanz IST
               </td>
               <td className="px-3 py-2 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
@@ -632,7 +632,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               </td>
             </tr>
             {/* Actual Balance Section - Expenses Row */}
-            <tr className="bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50">
+            <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50">
               <td className="px-3 py-2 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
                 <div className="flex items-center justify-center gap-1">
                   <span>💸</span>
@@ -659,7 +659,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               </td>
             </tr>
             {/* Actual Balance Section - Balance Row */}
-            <tr className="bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-b-2 border-purple-400 dark:border-purple-500">
+            <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-b-2 border-slate-400 dark:border-slate-500">
               <td className="px-3 py-2 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
                 <div className="flex items-center justify-center gap-1">
                   <span>📈</span>

@@ -50,9 +50,10 @@ class BudgetViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='monthly/(?P<month>[0-9]+)')
     def monthly(self, request, pk=None, month=None):
-        """Get monthly summary for a specific month"""
+        """Get monthly summary for a specific month and year"""
         budget = self.get_object()
         month = int(month)
+        year = request.query_params.get('year', None)
 
         if month < 1 or month > 12:
             return Response(
@@ -60,15 +61,45 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        summary = budget.get_monthly_summary(month)
+        if year is None:
+            return Response(
+                {'error': 'Year parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            year = int(year)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Year must be a valid integer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        summary = budget.get_monthly_summary(month, year)
         serializer = MonthlySummarySerializer(summary)
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
     def yearly(self, request, pk=None):
-        """Get yearly summary with all months"""
+        """Get yearly summary with all months for a specific year"""
         budget = self.get_object()
-        summary = budget.get_yearly_summary()
+        year = request.query_params.get('year', None)
+
+        if year is None:
+            return Response(
+                {'error': 'Year parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            year = int(year)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Year must be a valid integer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        summary = budget.get_yearly_summary(year)
         serializer = YearlySummarySerializer(summary)
         return Response(serializer.data)
 

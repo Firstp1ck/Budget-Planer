@@ -219,7 +219,16 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if not typing in an input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+      // Check both target and currentTarget to be safe
+      const target = e.target as HTMLElement
+      if (
+        target instanceof HTMLInputElement || 
+        target instanceof HTMLTextAreaElement || 
+        target instanceof HTMLSelectElement ||
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT'
+      ) {
         return
       }
 
@@ -283,9 +292,11 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
+                  e.stopPropagation()
                   handleSave()
                 } else if (e.key === 'Escape') {
                   e.preventDefault()
+                  e.stopPropagation()
                   setIsEditing(false)
                   setPlannedAmount(entry?.planned_amount || '0.00')
                   setActualAmount(entry?.actual_amount || '')
@@ -336,9 +347,11 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
+                    e.stopPropagation()
                     handleSave()
                   } else if (e.key === 'Escape') {
                     e.preventDefault()
+                    e.stopPropagation()
                     setIsEditing(false)
                     setPlannedAmount(entry?.planned_amount || '0.00')
                     setActualAmount(entry?.actual_amount || '')
