@@ -217,12 +217,12 @@ function BudgetEditor() {
           {/* Budget Info - Centered */}
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">
-              {budget.name}
+              {budget?.name || 'Budget'}
             </h1>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
                 <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">Basis:</span>
-                <span className="text-slate-700 dark:text-slate-300 font-semibold text-sm">{budget.currency}</span>
+                <span className="text-slate-700 dark:text-slate-300 font-semibold text-sm">{budget?.currency || 'CHF'}</span>
               </div>
             </div>
           </div>
@@ -342,7 +342,7 @@ function BudgetEditor() {
         {/* Balance Difference Card */}
         <div className="mb-12">
           <BalanceDifferenceCard
-            categories={categories}
+            categories={categories || []}
             entries={filteredEntries}
             taxEntries={tax_entries || []}
             salaryReductions={salary_reductions || []}
@@ -357,7 +357,7 @@ function BudgetEditor() {
         <div className="mb-12">
           <BudgetSummary
             budgetId={budgetId}
-            categories={categories}
+            categories={categories || []}
             entries={filteredEntries}
             salaryReductions={salary_reductions || []}
             taxEntries={tax_entries || []}
@@ -409,7 +409,7 @@ function BudgetEditor() {
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 overflow-hidden w-full">
             <BudgetTable
               budgetId={budgetId}
-              categories={categories}
+              categories={categories || []}
               entries={filteredEntries}
               taxEntries={tax_entries || []}
               salaryReductions={salary_reductions || []}
@@ -421,7 +421,7 @@ function BudgetEditor() {
           </div>
         ) : (
           <BudgetGraphs
-            categories={categories}
+            categories={categories || []}
             entries={filteredEntries}
             taxEntries={tax_entries || []}
             salaryReductions={salary_reductions || []}

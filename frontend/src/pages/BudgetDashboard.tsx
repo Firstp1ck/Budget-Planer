@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { budgetApi, templateApi, categoryApi, taxApi } from '../services/api'
-import type { Budget, BudgetTemplate } from '../types/budget'
+import type { Budget, BudgetTemplate, CategoryType, BudgetSummaryData } from '../types/budget'
 import BudgetCard from '../components/BudgetCard'
 
 function BudgetDashboard() {
@@ -12,6 +12,7 @@ function BudgetDashboard() {
   const [isCreating, setIsCreating] = useState(false)
   const [newBudgetName, setNewBudgetName] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: budgets, isLoading, error } = useQuery({
     queryKey: ['budgets'],
@@ -45,7 +46,7 @@ function BudgetDashboard() {
   const createDefaultCategoriesAndTaxes = async (budgetId: number) => {
     try {
       // Create default categories in order
-      const defaultCategories = [
+      const defaultCategories: Array<{ name: string; category_type: CategoryType; order: number }> = [
         { name: 'Gehalt', category_type: 'INCOME', order: 0 },
         { name: 'Miete', category_type: 'FIXED_EXPENSE', order: 0 },
         { name: 'Krankenversicherung', category_type: 'FIXED_EXPENSE', order: 1 },
@@ -153,7 +154,6 @@ function BudgetDashboard() {
 
       setIsCreating(false)
       setNewBudgetName('')
-      setNewBudgetYear(new Date().getFullYear())
       setSelectedTemplateId(null)
     },
     onError: (error: any) => {
@@ -190,6 +190,71 @@ function BudgetDashboard() {
     }
   }
 
+  const handleExport = async (budgetId: number) => {
+    try {
+      const response = await budgetApi.export(budgetId)
+      const data = response.data
+      
+      // Create a JSON blob
+      const jsonString = JSON.stringify(data, null, 2)
+      const blob = new Blob([jsonString], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      
+      // Create a temporary link and trigger download
+      const link = document.createElement('a')
+      link.href = url
+      // Sanitize budget name for filename
+      const sanitizedName = data.budget.name.replace(/[^a-zA-Z0-9_-]/g, '_')
+      link.download = `budget_${sanitizedName}_${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast.success('Budget erfolgreich exportiert!')
+    } catch (error: any) {
+      console.error('Export error:', error)
+      toast.error('Fehler beim Exportieren des Budgets')
+    }
+  }
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const data: BudgetSummaryData = JSON.parse(text)
+      
+      // Validate the data structure
+      if (!data.budget || !data.categories) {
+        toast.error('Ungültige Budget-Datei')
+        return
+      }
+
+      // Import the budget
+      const response = await budgetApi.import(data)
+      const newBudget = response.data
+      
+      queryClient.invalidateQueries({ queryKey: ['budgets'] })
+      toast.success('Budget erfolgreich importiert!')
+      navigate(`/budget/${newBudget.id}`)
+    } catch (error: any) {
+      console.error('Import error:', error)
+      toast.error(error.response?.data?.message || 'Fehler beim Importieren des Budgets')
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -202,11 +267,21 @@ function BudgetDashboard() {
   }
 
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler'
+    const errorDetails = error instanceof Error && 'response' in error 
+      ? (error as any).response?.data || (error as any).response?.statusText || errorMessage
+      : errorMessage
+    
+    console.error('Budget loading error:', error)
+    
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center bg-white dark:bg-slate-800 rounded-xl p-12 shadow-md border border-slate-200 dark:border-slate-700">
+        <div className="text-center bg-white dark:bg-slate-800 rounded-xl p-12 shadow-md border border-slate-200 dark:border-slate-700 max-w-2xl">
           <div className="text-7xl mb-6 animate-pulse">⚠️</div>
-          <p className="text-xl font-bold text-red-600 dark:text-red-400 mb-6">Fehler beim Laden der Budgets</p>
+          <p className="text-xl font-bold text-red-600 dark:text-red-400 mb-4">Fehler beim Laden der Budgets</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 font-mono break-all">
+            {String(errorDetails)}
+          </p>
           <button
             onClick={() => queryClient.invalidateQueries({ queryKey: ['budgets'] })}
             className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
@@ -237,9 +312,9 @@ function BudgetDashboard() {
         </div>
       </div>
 
-      {/* Create Budget Button */}
+      {/* Action Buttons */}
       {!isCreating && (
-        <div className="mb-8">
+        <div className="mb-8 flex flex-wrap gap-3">
           <button
             onClick={() => setIsCreating(true)}
             className="group px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 font-medium flex items-center gap-2 text-sm"
@@ -247,6 +322,20 @@ function BudgetDashboard() {
             <span className="text-base group-hover:scale-110 transition-transform">+</span>
             Neues Budget erstellen
           </button>
+          <button
+            onClick={handleImportClick}
+            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 font-medium flex items-center gap-2 text-sm"
+          >
+            <span className="text-base">📥</span>
+            Budget importieren
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileChange}
+            className="hidden"
+          />
         </div>
       )}
 
@@ -353,6 +442,7 @@ function BudgetDashboard() {
               key={budget.id}
               budget={budget}
               onDelete={handleDelete}
+              onExport={handleExport}
               isDeleting={deleteMutation.isPending}
             />
           ))}

@@ -129,6 +129,125 @@ class BudgetViewSet(viewsets.ModelViewSet):
         budget = self.get_object()
         return export_budget_to_excel(budget)
 
+    @action(detail=False, methods=['post'], url_path='import')
+    def import_budget(self, request):
+        """Import a budget from JSON data"""
+        
+        data = request.data
+        budget_data = data.get('budget', {})
+        categories_data = data.get('categories', [])
+        entries_data = data.get('entries', [])
+        tax_entries_data = data.get('tax_entries', [])
+        salary_reductions_data = data.get('salary_reductions', [])
+        actual_balances_data = data.get('actual_balances', [])
+
+        # Create the budget - handle duplicate names by appending timestamp
+        budget_name = budget_data.get('name', 'Imported Budget')
+        # Check if name already exists and append timestamp if needed
+        if Budget.objects.filter(name=budget_name).exists():
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            budget_name = f"{budget_name} (Import {timestamp})"
+        
+        budget_serializer = BudgetSerializer(data={
+            'name': budget_name,
+            'currency': budget_data.get('currency', 'CHF'),
+        })
+        if not budget_serializer.is_valid():
+            return Response(budget_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        budget = budget_serializer.save()
+
+        # Create categories
+        category_id_mapping = {}  # Map old category IDs to new ones
+        for cat_data in categories_data:
+            old_id = cat_data.get('id')
+            category_serializer = BudgetCategorySerializer(data={
+                'name': cat_data.get('name'),
+                'category_type': cat_data.get('category_type'),
+                'order': cat_data.get('order', 0),
+                'is_active': cat_data.get('is_active', True),
+                'input_mode': cat_data.get('input_mode', 'MONTHLY'),
+                'custom_months': cat_data.get('custom_months'),
+                'custom_start_month': cat_data.get('custom_start_month'),
+                'yearly_amount': cat_data.get('yearly_amount'),
+            })
+            if category_serializer.is_valid():
+                category = category_serializer.save(budget=budget)
+                if old_id:
+                    category_id_mapping[old_id] = category.id
+            else:
+                budget.delete()  # Clean up on error
+                return Response(category_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create entries
+        for entry_data in entries_data:
+            old_category_id = entry_data.get('category')
+            new_category_id = category_id_mapping.get(old_category_id)
+            if not new_category_id:
+                continue  # Skip if category mapping not found
+            
+            entry_serializer = BudgetEntrySerializer(data={
+                'category': new_category_id,
+                'month': entry_data.get('month'),
+                'year': entry_data.get('year'),
+                'planned_amount': entry_data.get('planned_amount'),
+                'actual_amount': entry_data.get('actual_amount'),
+                'notes': entry_data.get('notes', ''),
+            })
+            if entry_serializer.is_valid():
+                entry_serializer.save()
+            else:
+                budget.delete()  # Clean up on error
+                return Response(entry_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create tax entries
+        for tax_data in tax_entries_data:
+            tax_serializer = TaxEntrySerializer(data={
+                'name': tax_data.get('name'),
+                'percentage': tax_data.get('percentage'),
+                'order': tax_data.get('order', 0),
+                'is_active': tax_data.get('is_active', True),
+            })
+            if tax_serializer.is_valid():
+                tax_serializer.save(budget=budget)
+            else:
+                budget.delete()  # Clean up on error
+                return Response(tax_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create salary reductions
+        for reduction_data in salary_reductions_data:
+            reduction_serializer = SalaryReductionSerializer(data={
+                'name': reduction_data.get('name'),
+                'reduction_type': reduction_data.get('reduction_type'),
+                'value': reduction_data.get('value'),
+                'order': reduction_data.get('order', 0),
+                'is_active': reduction_data.get('is_active', True),
+            })
+            if reduction_serializer.is_valid():
+                reduction_serializer.save(budget=budget)
+            else:
+                budget.delete()  # Clean up on error
+                return Response(reduction_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create actual balances
+        for balance_data in actual_balances_data:
+            balance_serializer = MonthlyActualBalanceSerializer(data={
+                'month': balance_data.get('month'),
+                'year': balance_data.get('year'),
+                'actual_income': balance_data.get('actual_income'),
+                'actual_expenses': balance_data.get('actual_expenses'),
+            })
+            if balance_serializer.is_valid():
+                balance_serializer.save(budget=budget)
+            else:
+                budget.delete()  # Clean up on error
+                return Response(balance_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Return the created budget
+        budget_serializer = BudgetSerializer(budget)
+        return Response(budget_serializer.data, status=status.HTTP_201_CREATED)
+
 
 class BudgetCategoryViewSet(viewsets.ModelViewSet):
     """ViewSet for BudgetCategory model"""

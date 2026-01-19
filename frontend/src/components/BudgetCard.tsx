@@ -1,16 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { budgetApi } from '../services/api'
-import type { Budget } from '../types/budget'
+import type { Budget, TaxEntry } from '../types/budget'
 import { formatCurrency, Currency } from '../utils/currency'
 
 interface BudgetCardProps {
   budget: Budget
   onDelete: (id: number, name: string) => void
+  onExport: (id: number) => void
   isDeleting: boolean
 }
 
-function BudgetCard({ budget, onDelete, isDeleting }: BudgetCardProps) {
+function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps) {
   const displayCurrency: Currency = budget.currency as Currency || 'CHF'
 
   // Fetch summary data to calculate yearly SOLL balance
@@ -161,8 +162,9 @@ function BudgetCard({ budget, onDelete, isDeleting }: BudgetCardProps) {
   const yearlyBalance = calculateYearlyBalance()
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Don't navigate if clicking on the delete button
-    if ((e.target as HTMLElement).closest('button[data-delete-button]')) {
+    // Don't navigate if clicking on the delete or export button
+    if ((e.target as HTMLElement).closest('button[data-delete-button]') ||
+        (e.target as HTMLElement).closest('button[data-export-button]')) {
       return
     }
     // Navigation is handled by the Link wrapper
@@ -172,6 +174,12 @@ function BudgetCard({ budget, onDelete, isDeleting }: BudgetCardProps) {
     e.preventDefault()
     e.stopPropagation()
     onDelete(budget.id, budget.name)
+  }
+
+  const handleExportClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onExport(budget.id)
   }
 
   return (
@@ -216,6 +224,14 @@ function BudgetCard({ budget, onDelete, isDeleting }: BudgetCardProps) {
             <div className="flex-1 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm flex items-center justify-center">
               Öffnen
             </div>
+            <button
+              data-export-button
+              onClick={handleExportClick}
+              className="px-4 py-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-all font-medium shadow-sm border border-green-200 dark:border-green-800 text-sm"
+              title="Budget exportieren"
+            >
+              📤
+            </button>
             <button
               data-delete-button
               onClick={handleDeleteClick}

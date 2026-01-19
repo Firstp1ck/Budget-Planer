@@ -250,7 +250,6 @@ function BalanceDifferenceCard({
   const plannedTotals = calculatePlannedTotalsForPeriod()
   const actualTotals = calculateActualTotals()
   const difference = actualTotals.balance - plannedTotals.balance
-  const monthsToInclude = getMonthsToInclude()
   const showToggle = !selectedMonth && isCurrentYear
 
   return (

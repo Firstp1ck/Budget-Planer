@@ -24,7 +24,7 @@ function SalaryReductionsSection({
   entries,
   displayMonths,
   displayCurrency,
-  budgetYear,
+  budgetYear: _budgetYear,
   isCollapsed: externalIsCollapsed,
   onCollapseChange,
 }: SalaryReductionsSectionProps) {

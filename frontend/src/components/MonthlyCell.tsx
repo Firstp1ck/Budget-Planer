@@ -493,8 +493,6 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     if (month !== startMonth && isPaymentMonth) {
       // If yearly_amount is set, show calculated amount (which is the payment amount)
       if (calculatedMonthlyAmount > 0) {
-        const hasExistingEntry = entry && (entry.planned_amount !== '0' || entry.actual_amount)
-
         return (
           <td
             className="px-3 py-2 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"

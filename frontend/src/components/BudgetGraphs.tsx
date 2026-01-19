@@ -109,22 +109,6 @@ function BudgetGraphs({
     return 0
   }
 
-  // Calculate total reductions for a month
-  const getTotalReductionsForMonth = (month: number): number => {
-    const grossSalary = getGrossSalaryForMonth(month)
-    if (grossSalary === 0) return 0
-
-    return salaryReductions.reduce((sum, reduction) => {
-      if (!reduction.is_active) return sum
-      
-      if (reduction.reduction_type === 'PERCENTAGE') {
-        return sum + (grossSalary * parseFloat(reduction.value)) / 100
-      } else {
-        return sum + parseFloat(reduction.value)
-      }
-    }, 0)
-  }
-
   // Calculate tax amount for a tax entry in a specific month
   const calculateTaxAmount = (tax: TaxEntry, month: number): number => {
     const salary = getGrossSalaryForMonth(month)
@@ -547,12 +531,11 @@ function BudgetGraphs({
                   cy="50%"
                   labelLine={false}
                   label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                  labelStyle={{ fill: '#fff', fontSize: 12, fontWeight: 500 }}
                   outerRadius={120}
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {categoryDistribution.map((entry, index) => (
+                  {categoryDistribution.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
                   ))}
                 </Pie>

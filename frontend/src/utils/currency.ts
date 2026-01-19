@@ -39,9 +39,6 @@ export function getExchangeRates(): ExchangeRates {
     const stored = localStorage.getItem('exchangeRates')
     if (stored) {
       const rates = JSON.parse(stored) as ExchangeRates
-      const lastUpdated = new Date(rates.lastUpdated)
-      const now = new Date()
-      const hoursDiff = (now.getTime() - lastUpdated.getTime()) / (1000 * 60 * 60)
 
       // Return cached rates even if old - they're better than fallback
       // Caller should check age and fetch new ones if needed

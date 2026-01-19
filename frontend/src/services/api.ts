@@ -13,12 +13,71 @@ import type {
   MonthlyActualBalance,
 } from '../types/budget'
 
+// Determine API base URL based on environment
+// In Tauri, we need to use the full URL since proxy doesn't work
+// In development (Vite dev server), the proxy handles /api
+const getBaseURL = () => {
+  // Check if we're running in Tauri
+  // In Tauri, window.location.href is typically "tauri://localhost" or similar
+  // Also check for Tauri global object
+  let isTauri = false
+  
+  if (typeof window !== 'undefined') {
+    const href = window.location.href
+    // Tauri uses tauri:// protocol
+    isTauri = href.startsWith('tauri://') || 
+              (window as any).__TAURI__ !== undefined ||
+              import.meta.env.VITE_TAURI === 'true'
+  }
+  
+  if (isTauri) {
+    // Use environment variable or default to localhost:8000
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+    console.log('Using Tauri API URL:', apiUrl)
+    return apiUrl
+  }
+  // In Vite dev server, use relative path (proxy will handle it)
+  console.log('Using dev server API URL: /api')
+  return '/api'
+}
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 second timeout
 })
+
+// Add request interceptor for debugging
+api.interceptors.request.use(
+  (config) => {
+    console.log('API Request:', config.method?.toUpperCase(), config.url)
+    return config
+  },
+  (error) => {
+    console.error('API Request Error:', error)
+    return Promise.reject(error)
+  }
+)
+
+// Add response interceptor for error handling
+api.interceptors.response.use(
+  (response) => {
+    console.log('API Response:', response.status, response.config.url)
+    return response
+  },
+  (error) => {
+    console.error('API Response Error:', error.message)
+    if (error.response) {
+      console.error('Response status:', error.response.status)
+      console.error('Response data:', error.response.data)
+    } else if (error.request) {
+      console.error('No response received:', error.request)
+    }
+    return Promise.reject(error)
+  }
+)
 
 // Budget endpoints
 export const budgetApi = {
@@ -32,6 +91,8 @@ export const budgetApi = {
     api.get<MonthlySummary>(`/budgets/${id}/monthly/${month}/`, { params: { year } }),
   getYearlySummary: (id: number, year: number) =>
     api.get<YearlySummary>(`/budgets/${id}/yearly/`, { params: { year } }),
+  export: (id: number) => api.get<BudgetSummaryData>(`/budgets/${id}/summary/`),
+  import: (data: BudgetSummaryData) => api.post<Budget>('/budgets/import/', data),
 }
 
 // Category endpoints

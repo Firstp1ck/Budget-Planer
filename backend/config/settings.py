@@ -64,10 +64,17 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
+# Allow custom database path via environment variable (for Tauri app)
+database_path = os.getenv('DATABASE_PATH')
+if database_path:
+    db_name = Path(database_path)
+else:
+    db_name = BASE_DIR / 'db.sqlite3'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': db_name,
     }
 }
 
@@ -113,9 +120,20 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = os.getenv(
+# Allow Tauri app origins (tauri://localhost) and dev server
+cors_origins = os.getenv(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:5173'
 ).split(',')
+# Add Tauri origins
+cors_origins.extend([
+    'tauri://localhost',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+])
+CORS_ALLOWED_ORIGINS = cors_origins
+
+# Also allow all origins in development (for Tauri)
+CORS_ALLOW_ALL_ORIGINS = os.getenv('DEBUG', 'True') == 'True'
 
 CORS_ALLOW_CREDENTIALS = True
