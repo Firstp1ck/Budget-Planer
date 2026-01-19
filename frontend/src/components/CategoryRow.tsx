@@ -541,71 +541,29 @@ function CategoryRow({
           }`}
         >
           <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50">
-            <div className="flex items-center justify-between gap-2 min-w-0">
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <span 
-                  className="cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 select-none inline-block px-1" 
-                  title="Ziehen zum Neuanordnen"
-                  draggable
-                  onDragStart={(e) => {
-                    handleDragStart(e, category.id)
-                  }}
-                  onDragEnd={handleDragEnd}
-                >⋮⋮</span>
-                <span className="truncate">{category.name}</span>
-                {/* Show "Brutto" label for salary category */}
-                {category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt') && (
-                  <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded flex-shrink-0" title="Bruttogehalt">
-                    Brutto
-                  </span>
-                )}
-                {/* Subtle input mode indicator */}
-                <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0" title="Eingabemodus">
-                  {category.input_mode === 'YEARLY' && '📅'}
-                  {category.input_mode === 'MONTHLY' && '📆'}
-                  {category.input_mode === 'CUSTOM' && '📊'}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span 
+                className="cursor-grab active:cursor-grabbing text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 select-none inline-block px-1" 
+                title="Ziehen zum Neuanordnen"
+                draggable
+                onDragStart={(e) => {
+                  handleDragStart(e, category.id)
+                }}
+                onDragEnd={handleDragEnd}
+              >⋮⋮</span>
+              <span className="truncate">{category.name}</span>
+              {/* Show "Brutto" label for salary category */}
+              {category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt') && (
+                <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded flex-shrink-0" title="Bruttogehalt">
+                  Brutto
                 </span>
-              </div>
-              {/* Action buttons - only visible on hover */}
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-                {/* Rename button */}
-                <button
-                  onClick={() => handleEditName(category)}
-                  className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
-                  title="Kategorie umbenennen"
-                >
-                  ✏️
-                </button>
-                {/* Input mode edit button */}
-                <button
-                  onClick={() => handleEditInputMode(category)}
-                  className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
-                  title="Eingabemodus ändern"
-                >
-                  ⚙️
-                </button>
-                {/* Autofill button - only in monthly mode and yearly view */}
-                {category.input_mode === 'MONTHLY' && displayMonths.length === 12 && (
-                  <button
-                    onClick={() => handleOpenAutofill(category)}
-                    className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
-                    title="Alle Monate automatisch ausfüllen"
-                  >
-                    🔄
-                  </button>
-                )}
-                {/* Copy button - only in monthly mode and single month view */}
-                {category.input_mode === 'MONTHLY' && displayMonths.length === 1 && displayMonths[0] > 1 && (
-                  <button
-                    onClick={() => copyPreviousMonthMutation.mutate({ categoryId: category.id, month: displayMonths[0] })}
-                    disabled={copyPreviousMonthMutation.isPending}
-                    className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
-                    title="Vormonat kopieren"
-                  >
-                    ⏮️
-                  </button>
-                )}
-              </div>
+              )}
+              {/* Subtle input mode indicator */}
+              <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0" title="Eingabemodus">
+                {category.input_mode === 'YEARLY' && '📅'}
+                {category.input_mode === 'MONTHLY' && '📆'}
+                {category.input_mode === 'CUSTOM' && '📊'}
+              </span>
             </div>
             {/* Rename Category Dialog */}
             {editingName === category.id && (
@@ -896,14 +854,69 @@ function CategoryRow({
             {formatCurrency(calculateTotal(category), displayCurrency)}
           </td>
           <td className="px-3 py-3 text-center">
-            <button
-              onClick={() => handleDeleteCategory(category.id, category.name)}
-              disabled={deleteCategoryMutation.isPending}
-              className="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 text-xs disabled:opacity-50"
-              title="Kategorie löschen"
-            >
-              🗑️
-            </button>
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 flex-wrap">
+              {/* Rename button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleEditName(category)
+                }}
+                className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                title="Kategorie umbenennen"
+              >
+                ✏️
+              </button>
+              {/* Input mode edit button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleEditInputMode(category)
+                }}
+                className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                title="Eingabemodus ändern"
+              >
+                ⚙️
+              </button>
+              {/* Autofill button - only in monthly mode and yearly view */}
+              {category.input_mode === 'MONTHLY' && displayMonths.length === 12 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleOpenAutofill(category)
+                  }}
+                  className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                  title="Alle Monate automatisch ausfüllen"
+                >
+                  🔄
+                </button>
+              )}
+              {/* Copy button - only in monthly mode and single month view */}
+              {category.input_mode === 'MONTHLY' && displayMonths.length === 1 && displayMonths[0] > 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyPreviousMonthMutation.mutate({ categoryId: category.id, month: displayMonths[0] })
+                  }}
+                  disabled={copyPreviousMonthMutation.isPending}
+                  className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Vormonat kopieren"
+                >
+                  ⏮️
+                </button>
+              )}
+              {/* Delete button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteCategory(category.id, category.name)
+                }}
+                disabled={deleteCategoryMutation.isPending}
+                className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Kategorie löschen"
+              >
+                🗑️
+              </button>
+            </div>
           </td>
         </tr>
       ))}
@@ -936,7 +949,7 @@ function CategoryRow({
                 )}
               </td>
               <td className="px-3 py-3 text-center">
-                {/* Empty cell for delete button column */}
+                {/* Empty cell for actions column */}
               </td>
             </tr>
           )}

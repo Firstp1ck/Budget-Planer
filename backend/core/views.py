@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
-from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction
+from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction, MonthlyActualBalance
 from .serializers import (
     BudgetSerializer,
     BudgetCategorySerializer,
@@ -14,6 +14,7 @@ from .serializers import (
     MonthlySummarySerializer,
     YearlySummarySerializer,
     BudgetSummarySerializer,
+    MonthlyActualBalanceSerializer,
 )
 from .utils import export_budget_to_excel
 
@@ -33,13 +34,15 @@ class BudgetViewSet(viewsets.ModelViewSet):
         ).select_related('category')
         tax_entries = budget.tax_entries.filter(is_active=True)
         salary_reductions = budget.salary_reductions.filter(is_active=True)
+        actual_balances = budget.actual_balances.all()
 
         data = {
             'budget': budget,
             'categories': categories,
             'entries': entries,
             'tax_entries': tax_entries,
-            'salary_reductions': salary_reductions
+            'salary_reductions': salary_reductions,
+            'actual_balances': actual_balances
         }
 
         serializer = BudgetSummarySerializer(data)
@@ -213,6 +216,37 @@ class TaxEntryViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Set budget when creating tax entry"""
+        budget_id = self.request.data.get('budget')
+        if budget_id:
+            budget = get_object_or_404(Budget, pk=budget_id)
+            serializer.save(budget=budget)
+        else:
+            serializer.save()
+
+
+class MonthlyActualBalanceViewSet(viewsets.ModelViewSet):
+    """ViewSet for MonthlyActualBalance model"""
+    queryset = MonthlyActualBalance.objects.all()
+    serializer_class = MonthlyActualBalanceSerializer
+
+    def get_queryset(self):
+        """Filter by budget, month, or year if provided"""
+        queryset = super().get_queryset()
+        budget_id = self.request.query_params.get('budget', None)
+        month = self.request.query_params.get('month', None)
+        year = self.request.query_params.get('year', None)
+
+        if budget_id is not None:
+            queryset = queryset.filter(budget_id=budget_id)
+        if month is not None:
+            queryset = queryset.filter(month=month)
+        if year is not None:
+            queryset = queryset.filter(year=year)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        """Set budget when creating actual balance"""
         budget_id = self.request.data.get('budget')
         if budget_id:
             budget = get_object_or_404(Budget, pk=budget_id)

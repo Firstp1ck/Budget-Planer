@@ -259,7 +259,7 @@ function SalaryReductionsSection({
       {!isCollapsed && (
         <>
           {sortedReductions.map((reduction) => (
-            <tr key={reduction.id} className="bg-orange-50 dark:bg-orange-900/10 border-b border-orange-200 dark:border-orange-800">
+            <tr key={reduction.id} className="group bg-orange-50 dark:bg-orange-900/10 border-b border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/20 transition-colors">
               {editingReductionId === reduction.id ? (
                 <>
                   <td className="px-4 py-3">
@@ -267,19 +267,58 @@ function SalaryReductionsSection({
                       type="text"
                       value={reductionFormData.name}
                       onChange={(e) => setReductionFormData({ ...reductionFormData, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleUpdateReduction()
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault()
+                          handleCancelEdit()
+                        }
+                      }}
                       className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="Name"
                     />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <select
-                      value={reductionFormData.reduction_type}
-                      onChange={(e) => setReductionFormData({ ...reductionFormData, reduction_type: e.target.value as ReductionType })}
-                      className="px-4 py-3 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    >
-                      <option value="PERCENTAGE">Prozent</option>
-                      <option value="FIXED">Fixbetrag</option>
-                    </select>
+                    <div className="space-y-2">
+                      <select
+                        value={reductionFormData.reduction_type}
+                        onChange={(e) => setReductionFormData({ ...reductionFormData, reduction_type: e.target.value as ReductionType })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleUpdateReduction()
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            handleCancelEdit()
+                          }
+                        }}
+                        className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      >
+                        <option value="PERCENTAGE">Prozent</option>
+                        <option value="FIXED">Fixbetrag</option>
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max={reductionFormData.reduction_type === 'PERCENTAGE' ? '100' : undefined}
+                        value={reductionFormData.value}
+                        onChange={(e) => setReductionFormData({ ...reductionFormData, value: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleUpdateReduction()
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            handleCancelEdit()
+                          }
+                        }}
+                        className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? 'Prozent (z.B. 5.125)' : 'Betrag'}
+                      />
+                    </div>
                   </td>
                   {displayMonths.map((month) => (
                     <td key={month} className="px-3 py-3 text-center text-sm text-gray-900 dark:text-white">
@@ -295,15 +334,23 @@ function SalaryReductionsSection({
                   <td className="px-4 py-3 text-center">
                     <div className="flex gap-2 justify-center">
                       <button
-                        onClick={handleUpdateReduction}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleUpdateReduction()
+                        }}
                         disabled={updateReductionMutation.isPending}
-                        className="px-5 py-3 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 text-sm"
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Speichern"
                       >
                         ✓
                       </button>
                       <button
-                        onClick={handleCancelEdit}
-                        className="px-5 py-3 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCancelEdit()
+                        }}
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                        title="Abbrechen"
                       >
                         ✕
                       </button>
@@ -330,18 +377,24 @@ function SalaryReductionsSection({
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <div className="flex gap-2 justify-center">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 justify-center">
                       <button
-                        onClick={() => handleEditReduction(reduction)}
-                        className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEditReduction(reduction)
+                        }}
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
                         title="Bearbeiten"
                       >
                         ✏️
                       </button>
                       <button
-                        onClick={() => handleDeleteReduction(reduction.id, reduction.name)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteReduction(reduction.id, reduction.name)
+                        }}
                         disabled={deleteReductionMutation.isPending}
-                        className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-900/50 text-xs disabled:opacity-50"
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Löschen"
                       >
                         🗑️
@@ -359,6 +412,15 @@ function SalaryReductionsSection({
                   type="text"
                   value={reductionFormData.name}
                   onChange={(e) => setReductionFormData({ ...reductionFormData, name: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAddReduction()
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      handleCancelEdit()
+                    }
+                  }}
                   className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   placeholder="Name (z.B. AHV, Krankenkasse)"
                 />
@@ -368,6 +430,15 @@ function SalaryReductionsSection({
                   <select
                     value={reductionFormData.reduction_type}
                     onChange={(e) => setReductionFormData({ ...reductionFormData, reduction_type: e.target.value as ReductionType })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddReduction()
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        handleCancelEdit()
+                      }
+                    }}
                     className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   >
                     <option value="PERCENTAGE">Prozent</option>
@@ -378,6 +449,15 @@ function SalaryReductionsSection({
                     step={reductionFormData.reduction_type === 'PERCENTAGE' ? '0.01' : '0.01'}
                     value={reductionFormData.value}
                     onChange={(e) => setReductionFormData({ ...reductionFormData, value: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddReduction()
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        handleCancelEdit()
+                      }
+                    }}
                     className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                     placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? 'Prozent (z.B. 5.125)' : 'Betrag'}
                   />
@@ -394,15 +474,23 @@ function SalaryReductionsSection({
               <td className="px-4 py-3 text-center">
                 <div className="flex gap-2 justify-center">
                   <button
-                    onClick={handleAddReduction}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleAddReduction()
+                    }}
                     disabled={createReductionMutation.isPending}
-                    className="px-5 py-3 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 text-sm"
+                    className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Speichern"
                   >
                     ✓
                   </button>
                   <button
-                    onClick={handleCancelEdit}
-                    className="px-5 py-3 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCancelEdit()
+                    }}
+                    className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                    title="Abbrechen"
                   >
                     ✕
                   </button>
@@ -432,7 +520,6 @@ function SalaryReductionsSection({
                 )}
               </td>
               <td className="px-4 py-3 text-center text-gray-900 dark:text-white">
-                -
               </td>
             </tr>
           )}

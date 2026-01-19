@@ -10,6 +10,7 @@ import type {
   MonthlySummary,
   YearlySummary,
   PaginatedResponse,
+  MonthlyActualBalance,
 } from '../types/budget'
 
 const api = axios.create({
@@ -70,6 +71,16 @@ export const taxApi = {
   create: (data: Partial<TaxEntry>) => api.post<TaxEntry>('/taxes/', data),
   update: (id: number, data: Partial<TaxEntry>) => api.patch<TaxEntry>(`/taxes/${id}/`, data),
   delete: (id: number) => api.delete(`/taxes/${id}/`),
+}
+
+// Actual Balance endpoints
+export const actualBalanceApi = {
+  getAll: (params?: { budget?: number; month?: number; year?: number }) =>
+    api.get<PaginatedResponse<MonthlyActualBalance>>('/actual-balances/', { params }),
+  create: (data: Partial<MonthlyActualBalance>) => api.post<MonthlyActualBalance>('/actual-balances/', data),
+  update: (id: number, data: Partial<MonthlyActualBalance>) =>
+    api.patch<MonthlyActualBalance>(`/actual-balances/${id}/`, data),
+  delete: (id: number) => api.delete(`/actual-balances/${id}/`),
 }
 
 // Template endpoints

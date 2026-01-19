@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction
+from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction, MonthlyActualBalance
 
 
 class BudgetSerializer(serializers.ModelSerializer):
@@ -70,6 +70,16 @@ class TaxEntrySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'budget']
 
 
+class MonthlyActualBalanceSerializer(serializers.ModelSerializer):
+    """Serializer for MonthlyActualBalance model"""
+    balance = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = MonthlyActualBalance
+        fields = ['id', 'budget', 'month', 'year', 'actual_income', 'actual_expenses', 'balance', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'balance', 'created_at', 'updated_at']
+
+
 class BudgetTemplateSerializer(serializers.ModelSerializer):
     """Serializer for BudgetTemplate model"""
 
@@ -105,3 +115,4 @@ class BudgetSummarySerializer(serializers.Serializer):
     entries = BudgetEntrySerializer(many=True)
     tax_entries = TaxEntrySerializer(many=True)
     salary_reductions = SalaryReductionSerializer(many=True)
+    actual_balances = MonthlyActualBalanceSerializer(many=True)

@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { categoryApi } from '../services/api'
-import type { BudgetCategory, BudgetEntry, TaxEntry, SalaryReduction } from '../types/budget'
+import type { BudgetCategory, BudgetEntry, TaxEntry, SalaryReduction, MonthlyActualBalance } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
 import CategoryRow from './CategoryRow'
 import TaxesSection from './TaxesSection'
 import SalaryReductionsSection from './SalaryReductionsSection'
+import ActualBalanceCell from './ActualBalanceCell'
 
 interface BudgetTableProps {
   budgetId: number
@@ -17,6 +18,7 @@ interface BudgetTableProps {
   selectedMonth: number | null
   displayCurrency: Currency
   budgetYear: number
+  actualBalances?: MonthlyActualBalance[]
 }
 
 const MONTHS = [
@@ -59,12 +61,16 @@ const COMMON_CATEGORIES: Record<string, { name: string; type: 'INCOME' | 'FIXED_
   ],
 }
 
-function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductions, selectedMonth, displayCurrency, budgetYear }: BudgetTableProps) {
+function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductions, selectedMonth, displayCurrency, budgetYear, actualBalances = [] }: BudgetTableProps) {
   const queryClient = useQueryClient()
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryType, setNewCategoryType] = useState<'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS'>('VARIABLE_EXPENSE')
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false)
+
+  const getActualBalanceForMonth = (month: number): MonthlyActualBalance | undefined => {
+    return actualBalances.find(b => b.month === month && b.year === budgetYear)
+  }
 
   const addCategoryMutation = useMutation({
     mutationFn: (data: Partial<BudgetCategory>) => categoryApi.create(budgetId, data),
@@ -329,10 +335,29 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
             {/* Monthly Summary Row */}
             <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-4 border-slate-400 dark:border-slate-500">
               <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-r border-slate-300 dark:border-slate-600 z-10">
-                Monatliche Bilanz
+                Monatliche Bilanz SOLL
               </td>
-              <td className="px-3 py-4 text-center text-xs text-slate-600 dark:text-slate-400">
-                -
+              <td className="px-3 py-4 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
+                <div className="space-y-1.5">
+                  <div className="text-sm font-semibold text-green-700 dark:text-green-400">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>💰</span>
+                      <span className="opacity-75">Einnahme</span>
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-red-700 dark:text-red-400">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>💸</span>
+                      <span className="opacity-75">Ausgabe</span>
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-slate-300 dark:border-slate-600">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>📈</span>
+                      <span className="opacity-75">Bilanz</span>
+                    </div>
+                  </div>
+                </div>
               </td>
               {displayMonths.map((month) => {
                 const totals = calculateMonthlyTotals(month)
@@ -342,31 +367,19 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                     className="px-3 py-4 text-center border-l border-r border-slate-200 dark:border-slate-600 bg-white/50 dark:bg-slate-800/30"
                   >
                     <div className="space-y-1.5">
-                      <div className="text-[10px] font-semibold text-green-700 dark:text-green-400">
-                        <div className="flex items-center justify-center gap-1">
-                          <span>💰</span>
-                          <span className="text-[9px] opacity-75">Einnahme:</span>
-                        </div>
+                      <div className="text-sm font-semibold text-green-700 dark:text-green-400">
                         <div className="mt-0.5">{formatCurrency(totals.income, displayCurrency)}</div>
                       </div>
-                      <div className="text-[10px] font-semibold text-red-700 dark:text-red-400">
-                        <div className="flex items-center justify-center gap-1">
-                          <span>💸</span>
-                          <span className="text-[9px] opacity-75">Ausgabe:</span>
-                        </div>
+                      <div className="text-sm font-semibold text-red-700 dark:text-red-400">
                         <div className="mt-0.5">{formatCurrency(totals.expenses, displayCurrency)}</div>
                       </div>
                       <div
-                        className={`text-xs font-bold pt-1 border-t border-slate-300 dark:border-slate-600 ${
+                        className={`text-sm font-bold pt-1 border-t border-slate-300 dark:border-slate-600 ${
                           totals.balance >= 0
                             ? 'text-blue-700 dark:text-blue-400'
                             : 'text-orange-700 dark:text-orange-400'
                         }`}
                       >
-                        <div className="flex items-center justify-center gap-1">
-                          <span>{totals.balance >= 0 ? '📈' : '📉'}</span>
-                          <span className="text-[9px] opacity-75">Bilanz:</span>
-                        </div>
                         <div className="mt-0.5">
                           {totals.balance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totals.balance), displayCurrency)}
                         </div>
@@ -376,10 +389,72 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 )
               })}
               <td className="px-3 py-4 text-center text-sm font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-700/50">
-                -
               </td>
               <td className="px-3 py-4 text-center">
-                -
+              </td>
+            </tr>
+            {/* Actual Balance Section - Combined Row like SOLL */}
+            <tr className="bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-t-4 border-purple-400 dark:border-purple-500">
+              <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-purple-100 to-purple-200 dark:from-purple-700/50 dark:to-purple-800/50 border-r border-slate-300 dark:border-slate-600 z-10">
+                Monatliche Bilanz IST
+              </td>
+              <td className="px-3 py-4 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
+                <div className="space-y-1.5">
+                  <div className="text-sm font-semibold text-green-700 dark:text-green-400">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>💰</span>
+                      <span className="opacity-75">Einnahme</span>
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-red-700 dark:text-red-400">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>💸</span>
+                      <span className="opacity-75">Ausgabe</span>
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-slate-300 dark:border-slate-600">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>📈</span>
+                      <span className="opacity-75">Bilanz</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              {displayMonths.map((month) => {
+                const balance = getActualBalanceForMonth(month)
+                const actualIncome = balance ? parseFloat(balance.actual_income) : 0
+                const actualExpenses = balance ? parseFloat(balance.actual_expenses) : 0
+                const actualBalance = balance ? parseFloat(balance.balance) : 0
+                return (
+                  <td
+                    key={month}
+                    className="px-3 py-4 text-center border-l border-r border-slate-200 dark:border-slate-600 bg-white/50 dark:bg-slate-800/30"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="text-sm font-semibold text-green-700 dark:text-green-400">
+                        <div className="mt-0.5">{formatCurrency(actualIncome, displayCurrency)}</div>
+                      </div>
+                      <div className="text-sm font-semibold text-red-700 dark:text-red-400">
+                        <div className="mt-0.5">{formatCurrency(actualExpenses, displayCurrency)}</div>
+                      </div>
+                      <div
+                        className={`text-sm font-bold pt-1 border-t border-slate-300 dark:border-slate-600 ${
+                          actualBalance >= 0
+                            ? 'text-blue-700 dark:text-blue-400'
+                            : 'text-orange-700 dark:text-orange-400'
+                        }`}
+                      >
+                        <div className="mt-0.5">
+                          {actualBalance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(actualBalance), displayCurrency)}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                )
+              })}
+              <td className="px-3 py-4 text-center text-sm font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-700/50">
+              </td>
+              <td className="px-3 py-4 text-center">
               </td>
             </tr>
           </tbody>

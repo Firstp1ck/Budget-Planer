@@ -5,6 +5,8 @@ import toast from 'react-hot-toast'
 import { budgetApi, templateApi } from '../services/api'
 import BudgetTable from '../components/BudgetTable'
 import BudgetSummary from '../components/BudgetSummary'
+import BalanceDifferenceCard from '../components/BalanceDifferenceCard'
+import BudgetGraphs from '../components/BudgetGraphs'
 import {
   Currency,
   CURRENCY_SYMBOLS,
@@ -31,6 +33,7 @@ function BudgetEditor() {
   const [showTemplateDialog, setShowTemplateDialog] = useState(false)
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false)
   const [templateName, setTemplateName] = useState('')
+  const [activeTab, setActiveTab] = useState<'table' | 'graphs'>('table')
 
   const { data: summaryData, isLoading, error } = useQuery({
     queryKey: ['budget', budgetId, 'summary'],
@@ -151,14 +154,14 @@ function BudgetEditor() {
     )
   }
 
-  const { budget, categories, entries, tax_entries, salary_reductions } = summaryData
+  const { budget, categories, entries, tax_entries, salary_reductions, actual_balances = [] } = summaryData
   const rates = getExchangeRates()
 
   return (
     <div className="min-h-screen">
       <div className="w-full px-4 py-8 animate-fade-in">
         {/* Header */}
-        <div className="mb-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 border border-slate-200 dark:border-slate-700">
+        <div className="mb-12 bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-8 border border-slate-200 dark:border-slate-700">
           {/* Back Link */}
           <div className="mb-6">
             <Link
@@ -278,8 +281,22 @@ function BudgetEditor() {
           )}
         </div>
 
+        {/* Balance Difference Card */}
+        <div className="mb-12">
+          <BalanceDifferenceCard
+            categories={categories}
+            entries={entries}
+            taxEntries={tax_entries || []}
+            salaryReductions={salary_reductions || []}
+            actualBalances={actual_balances}
+            selectedMonth={selectedMonth}
+            displayCurrency={selectedCurrency}
+            budgetYear={budget.year}
+          />
+        </div>
+
         {/* Summary Cards */}
-        <div className="mb-6">
+        <div className="mb-12">
           <BudgetSummary
             budgetId={budgetId}
             categories={categories}
@@ -291,19 +308,70 @@ function BudgetEditor() {
           />
         </div>
 
-        {/* Budget Table */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 overflow-hidden w-full">
-          <BudgetTable
-            budgetId={budgetId}
+        {/* Tab Navigation */}
+        <div className="mb-12 bg-white dark:bg-slate-800 rounded-xl shadow-lg border-2 border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="flex gap-1 p-1.5 bg-slate-50 dark:bg-slate-900/50">
+            <button
+              onClick={() => setActiveTab('table')}
+              className={`flex-1 px-8 py-4 rounded-lg font-semibold text-base transition-all duration-200 relative group ${
+                activeTab === 'table'
+                  ? 'bg-blue-600 text-white shadow-lg transform scale-[1.02]'
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <span className="text-xl">📊</span>
+                <span>Tabelle</span>
+              </span>
+              {activeTab === 'table' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-white dark:bg-blue-300 rounded-t-full"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('graphs')}
+              className={`flex-1 px-8 py-4 rounded-lg font-semibold text-base transition-all duration-200 relative group ${
+                activeTab === 'graphs'
+                  ? 'bg-blue-600 text-white shadow-lg transform scale-[1.02]'
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <span className="text-xl">📈</span>
+                <span>Grafiken</span>
+              </span>
+              {activeTab === 'graphs' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-white dark:bg-blue-300 rounded-t-full"></div>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'table' ? (
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 overflow-hidden w-full">
+            <BudgetTable
+              budgetId={budgetId}
+              categories={categories}
+              entries={entries}
+              taxEntries={tax_entries || []}
+              salaryReductions={salary_reductions || []}
+              selectedMonth={selectedMonth}
+              displayCurrency={selectedCurrency}
+              budgetYear={budget.year}
+              actualBalances={actual_balances}
+            />
+          </div>
+        ) : (
+          <BudgetGraphs
             categories={categories}
             entries={entries}
             taxEntries={tax_entries || []}
             salaryReductions={salary_reductions || []}
-            selectedMonth={selectedMonth}
+            actualBalances={actual_balances}
             displayCurrency={selectedCurrency}
             budgetYear={budget.year}
           />
-        </div>
+        )}
 
         {/* Help Text */}
         <div className="mt-6 text-center">

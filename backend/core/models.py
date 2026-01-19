@@ -307,6 +307,44 @@ class TaxEntry(models.Model):
         return (salary_amount * self.percentage) / Decimal('100')
 
 
+class MonthlyActualBalance(models.Model):
+    """Actual (IST) monthly balance data - separate from planned (SOLL) balance"""
+    budget = models.ForeignKey(Budget, on_delete=models.CASCADE, related_name='actual_balances')
+    month = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
+    year = models.IntegerField(
+        validators=[MinValueValidator(2000), MaxValueValidator(2100)]
+    )
+    actual_income = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Actual income (Einnahmen) for this month"
+    )
+    actual_expenses = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Actual expenses (Ausgaben) for this month"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['year', 'month']
+        verbose_name_plural = 'Monthly Actual Balances'
+        unique_together = ['budget', 'month', 'year']
+
+    def __str__(self):
+        return f"{self.budget.name} - {self.year}/{self.month:02d} (IST)"
+
+    @property
+    def balance(self):
+        """Calculate balance as income - expenses"""
+        return self.actual_income - self.actual_expenses
+
+
 class BudgetTemplate(models.Model):
     """Template for quick budget creation with predefined categories"""
     name = models.CharField(max_length=200, unique=True)

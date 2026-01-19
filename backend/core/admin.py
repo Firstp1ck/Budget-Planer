@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate
+from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, MonthlyActualBalance
 
 
 @admin.register(Budget)
@@ -29,3 +29,12 @@ class BudgetEntryAdmin(admin.ModelAdmin):
 class BudgetTemplateAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
+
+
+@admin.register(MonthlyActualBalance)
+class MonthlyActualBalanceAdmin(admin.ModelAdmin):
+    list_display = ('budget', 'month', 'year', 'actual_income', 'actual_expenses', 'balance', 'updated_at')
+    list_filter = ('year', 'month', 'budget')
+    search_fields = ('budget__name',)
+    ordering = ('year', 'month')
+    readonly_fields = ('balance', 'created_at', 'updated_at')

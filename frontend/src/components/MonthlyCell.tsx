@@ -252,6 +252,17 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
               step="0.01"
               value={plannedAmount}
               onChange={(e) => setPlannedAmount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleSave()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setIsEditing(false)
+                  setPlannedAmount(entry?.planned_amount || '0.00')
+                  setActualAmount(entry?.actual_amount || '')
+                }
+              }}
               placeholder="0.00"
               className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
             />
@@ -284,19 +295,32 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
               </div>
             )}
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Ist
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={actualAmount}
-              onChange={(e) => setActualAmount(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-            />
-          </div>
+          {(!plannedAmount || plannedAmount === '0' || plannedAmount === '0.00') && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Ist
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={actualAmount}
+                onChange={(e) => setActualAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleSave()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setIsEditing(false)
+                    setPlannedAmount(entry?.planned_amount || '0.00')
+                    setActualAmount(entry?.actual_amount || '')
+                  }
+                }}
+                placeholder="0.00"
+                className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+          )}
           <div className="flex gap-2 pt-2">
             {category.input_mode === 'CUSTOM' && category.custom_months && month === (category.custom_start_month || 1) && (
               <div className="text-[10px] text-blue-600 dark:text-blue-400 mb-1">

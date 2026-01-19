@@ -84,8 +84,7 @@ function TaxesSection({
     mutationFn: (data: Partial<TaxEntry>) => taxApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      setIsAddingTax(false)
-      setTaxFormData({ name: '', percentage: '' })
+      handleCancelEdit()
       toast.success('Steuer hinzugefügt')
     },
     onError: () => {
@@ -98,8 +97,7 @@ function TaxesSection({
       taxApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      setEditingTaxId(null)
-      setTaxFormData({ name: '', percentage: '' })
+      handleCancelEdit()
       toast.success('Steuer aktualisiert')
     },
     onError: () => {
@@ -150,10 +148,19 @@ function TaxesSection({
     }
   }
 
+  const handleUpdateTax = () => {
+    handleSaveTax()
+  }
+
   const handleEditTax = (tax: TaxEntry) => {
     setEditingTaxId(tax.id)
     setTaxFormData({ name: tax.name, percentage: tax.percentage })
-    setIsAddingTax(true)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingTaxId(null)
+    setIsAddingTax(false)
+    setTaxFormData({ name: '', percentage: '' })
   }
 
   const handleDeleteTax = (id: number, name: string) => {
@@ -161,6 +168,7 @@ function TaxesSection({
       deleteTaxMutation.mutate(id)
     }
   }
+
 
   const sortedTaxEntries = [...taxEntries].sort((a, b) => a.order - b.order)
 
@@ -191,73 +199,169 @@ function TaxesSection({
           {sortedTaxEntries.map((tax) => (
             <tr
               key={tax.id}
-              className="group hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+              className="group bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors"
             >
-              <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 group-hover:bg-gray-50 dark:group-hover:bg-gray-700/50">
-                <div className="flex items-center justify-between gap-2 min-w-0">
-                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <span className="truncate">{tax.name}</span>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-                    <button
-                      onClick={() => handleEditTax(tax)}
-                      className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
-                      title="Steuer bearbeiten"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTax(tax.id, tax.name)}
-                      disabled={deleteTaxMutation.isPending}
-                      className="text-[10px] px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 text-xs disabled:opacity-50"
-                      title="Steuer löschen"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-              </td>
-              <td className="px-3 py-3 text-center">
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-                  {tax.percentage}%
-                </span>
-              </td>
-              {displayMonths.map((month) => {
-                const taxAmount = calculateTaxAmount(tax, month)
-                const salary = getSalaryForMonth(month)
-                return (
-                  <td
-                    key={month}
-                    className="px-3 py-3 text-center text-sm border bg-red-50 dark:bg-red-900/10"
-                    title={`Berechnet: ${formatCurrency(salary, displayCurrency)} × ${tax.percentage}% = ${formatCurrency(taxAmount, displayCurrency)}`}
-                  >
-                    <div>
-                      <div className="font-semibold text-xs text-red-700 dark:text-red-300">
-                        {formatCurrency(taxAmount, displayCurrency)}
-                      </div>
-                      <div className="text-[10px] mt-0.5 text-red-600 dark:text-red-400">
-                        📊 Berechnet
+              {editingTaxId === tax.id ? (
+                <>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={taxFormData.name}
+                      onChange={(e) => setTaxFormData({ ...taxFormData, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleUpdateTax()
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault()
+                          handleCancelEdit()
+                        }
+                      }}
+                      className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="Name"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={taxFormData.percentage}
+                          onChange={(e) => setTaxFormData({ ...taxFormData, percentage: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleUpdateTax()
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault()
+                              handleCancelEdit()
+                            }
+                          }}
+                          className="flex-1 px-4 py-3 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          placeholder="Prozent (z.B. 10.5)"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">%</span>
                       </div>
                     </div>
                   </td>
-                )
-              })}
-              <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
-                {formatCurrency(
-                  displayMonths.reduce((sum, month) => sum + calculateTaxAmount(tax, month), 0),
-                  displayCurrency
-                )}
-              </td>
-              <td className="px-3 py-3 text-center">
-                <button
-                  onClick={() => handleDeleteTax(tax.id, tax.name)}
-                  disabled={deleteTaxMutation.isPending}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 text-xs disabled:opacity-50"
-                  title="Steuer löschen"
-                >
-                  🗑️
-                </button>
-              </td>
+                  {displayMonths.map((month) => {
+                    const taxAmount = calculateTaxAmount({ ...tax, percentage: taxFormData.percentage }, month)
+                    return (
+                      <td
+                        key={month}
+                        className="px-3 py-3 text-center text-sm border bg-red-50 dark:bg-red-900/10"
+                      >
+                        <div>
+                          <div className="font-semibold text-xs text-red-700 dark:text-red-300">
+                            {formatCurrency(taxAmount, displayCurrency)}
+                          </div>
+                          <div className="text-[10px] mt-0.5 text-red-600 dark:text-red-400">
+                            📊 Berechnet
+                          </div>
+                        </div>
+                      </td>
+                    )
+                  })}
+                  <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
+                    {formatCurrency(
+                      displayMonths.reduce((sum, month) => sum + calculateTaxAmount({ ...tax, percentage: taxFormData.percentage }, month), 0),
+                      displayCurrency
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex gap-2 justify-center">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleUpdateTax()
+                        }}
+                        disabled={updateTaxMutation.isPending}
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Speichern"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCancelEdit()
+                        }}
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                        title="Abbrechen"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-red-50 dark:bg-red-900/10 border-r border-gray-200 dark:border-gray-700 group-hover:bg-red-100 dark:group-hover:bg-red-900/20">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{tax.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
+                      {tax.percentage}%
+                    </span>
+                  </td>
+                  {displayMonths.map((month) => {
+                    const taxAmount = calculateTaxAmount(tax, month)
+                    const salary = getSalaryForMonth(month)
+                    return (
+                      <td
+                        key={month}
+                        className="px-3 py-3 text-center text-sm border bg-red-50 dark:bg-red-900/10"
+                        title={`Berechnet: ${formatCurrency(salary, displayCurrency)} × ${tax.percentage}% = ${formatCurrency(taxAmount, displayCurrency)}`}
+                      >
+                        <div>
+                          <div className="font-semibold text-xs text-red-700 dark:text-red-300">
+                            {formatCurrency(taxAmount, displayCurrency)}
+                          </div>
+                          <div className="text-[10px] mt-0.5 text-red-600 dark:text-red-400">
+                            📊 Berechnet
+                          </div>
+                        </div>
+                      </td>
+                    )
+                  })}
+                  <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700/50">
+                    {formatCurrency(
+                      displayMonths.reduce((sum, month) => sum + calculateTaxAmount(tax, month), 0),
+                      displayCurrency
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEditTax(tax)
+                        }}
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                        title="Steuer bearbeiten"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteTax(tax.id, tax.name)
+                        }}
+                        disabled={deleteTaxMutation.isPending}
+                        className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Steuer löschen"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </>
+              )}
             </tr>
           ))}
           {/* Total Row */}
@@ -304,91 +408,118 @@ function TaxesSection({
               </td>
             </tr>
           )}
-          {/* Add/Edit Tax Form */}
           {isAddingTax && (
-            <tr className="bg-blue-50 dark:bg-blue-900/20">
-              <td colSpan={displayMonths.length + 4} className="px-4 py-4">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-                      {editingTaxId ? '✏️ Steuer bearbeiten' : '➕ Neue Steuer hinzufügen'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Steuername
-                      </label>
-                      <input
-                        type="text"
-                        value={taxFormData.name}
-                        onChange={(e) => setTaxFormData({ ...taxFormData, name: e.target.value })}
-                        placeholder="z.B. Einkommenssteuer, AHV"
-                        className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
-                        autoFocus
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Prozentsatz
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="100"
-                          value={taxFormData.percentage}
-                          onChange={(e) => setTaxFormData({ ...taxFormData, percentage: e.target.value })}
-                          placeholder="z.B. 10.5"
-                          className="flex-1 px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
-                        />
-                        <span className="text-sm text-slate-600 dark:text-slate-400 font-medium">%</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={handleSaveTax}
-                      disabled={createTaxMutation.isPending || updateTaxMutation.isPending}
-                      className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium disabled:opacity-50 shadow-md hover:shadow-lg text-sm"
-                    >
-                      {(createTaxMutation.isPending || updateTaxMutation.isPending) ? (
-                        <span className="flex items-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Speichern...
-                        </span>
-                      ) : (
-                        `✓ ${editingTaxId ? 'Aktualisieren' : 'Hinzufügen'}`
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsAddingTax(false)
-                        setEditingTaxId(null)
-                        setTaxFormData({ name: '', percentage: '' })
+            <tr className="bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-800">
+              <td className="px-4 py-3">
+                <input
+                  type="text"
+                  value={taxFormData.name}
+                  onChange={(e) => setTaxFormData({ ...taxFormData, name: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleSaveTax()
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      handleCancelEdit()
+                    }
+                  }}
+                  className="px-4 py-3 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Name (z.B. Einkommenssteuer, AHV)"
+                />
+              </td>
+              <td className="px-4 py-3 text-center">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={taxFormData.percentage}
+                      onChange={(e) => setTaxFormData({ ...taxFormData, percentage: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleSaveTax()
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault()
+                          handleCancelEdit()
+                        }
                       }}
-                      disabled={createTaxMutation.isPending || updateTaxMutation.isPending}
-                      className="px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm text-sm"
-                    >
-                      ✕ Abbrechen
-                    </button>
+                      className="flex-1 px-4 py-3 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="Prozent (z.B. 10.5)"
+                    />
+                    <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">%</span>
                   </div>
+                </div>
+              </td>
+              {displayMonths.map((month) => (
+                <td key={month} className="px-3 py-3 text-center text-sm text-gray-400 dark:text-gray-500">
+                  -
+                </td>
+              ))}
+              <td className="px-3 py-3 text-center text-sm text-gray-400 dark:text-gray-500">
+                -
+              </td>
+              <td className="px-4 py-3 text-center">
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleSaveTax()
+                    }}
+                    disabled={createTaxMutation.isPending}
+                    className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Speichern"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCancelEdit()
+                    }}
+                    className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                    title="Abbrechen"
+                  >
+                    ✕
+                  </button>
                 </div>
               </td>
             </tr>
           )}
-          {/* Add Tax Button */}
           {!isAddingTax && (
-            <tr>
-              <td colSpan={displayMonths.length + 4} className="px-4 py-3">
+            <tr className="bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-800">
+              <td colSpan={2} className="px-4 py-3 text-sm font-bold text-gray-900 dark:text-white">
                 <button
                   onClick={() => setIsAddingTax(true)}
-                  className="px-5 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-2 text-sm"
+                  className="px-5 py-3 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
                 >
-                  <span className="text-xl">+</span>
-                  Steuer hinzufügen
+                  + Steuer hinzufügen
                 </button>
+              </td>
+              {displayMonths.map((month) => (
+                <td key={month} className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white">
+                  {formatCurrency(
+                    sortedTaxEntries
+                      .filter(t => t.is_active)
+                      .reduce((sum, tax) => sum + calculateTaxAmount(tax, month), 0),
+                    displayCurrency
+                  )}
+                </td>
+              ))}
+              <td className="px-3 py-3 text-center text-sm font-bold text-gray-900 dark:text-white">
+                {formatCurrency(
+                  displayMonths.reduce((sum, month) => {
+                    return sum + sortedTaxEntries
+                      .filter(t => t.is_active)
+                      .reduce((taxSum, tax) => taxSum + calculateTaxAmount(tax, month), 0)
+                  }, 0),
+                  displayCurrency
+                )}
+              </td>
+              <td className="px-4 py-3 text-center text-gray-900 dark:text-white">
               </td>
             </tr>
           )}

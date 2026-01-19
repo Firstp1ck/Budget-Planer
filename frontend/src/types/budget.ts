@@ -88,12 +88,25 @@ export interface TaxEntry {
   is_active: boolean
 }
 
+export interface MonthlyActualBalance {
+  id: number
+  budget: number
+  month: number
+  year: number
+  actual_income: string
+  actual_expenses: string
+  balance: string
+  created_at: string
+  updated_at: string
+}
+
 export interface BudgetSummaryData {
   budget: Budget
   categories: BudgetCategory[]
   entries: BudgetEntry[]
   tax_entries: TaxEntry[]
   salary_reductions: SalaryReduction[]
+  actual_balances: MonthlyActualBalance[]
 }
 
 export interface PaginatedResponse<T> {

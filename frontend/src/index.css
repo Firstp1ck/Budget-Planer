@@ -116,3 +116,35 @@ html {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* Button and dropdown hover styles */
+button:not(:disabled),
+select:not(:disabled) {
+  cursor: pointer;
+}
+
+/* Enhanced hover for buttons - adds brightness and shadow enhancement */
+button:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+button:not(:disabled):active {
+  filter: brightness(0.95);
+}
+
+/* Enhanced hover for dropdowns */
+select:not(:disabled):hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.dark select:not(:disabled):hover {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+/* Ensure disabled buttons don't have pointer cursor */
+button:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
