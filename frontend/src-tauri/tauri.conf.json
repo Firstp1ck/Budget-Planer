@@ -30,7 +30,6 @@
     "active": true,
     "targets": [
       "deb",
-      "appimage",
       "dmg",
       "app"
     ],
