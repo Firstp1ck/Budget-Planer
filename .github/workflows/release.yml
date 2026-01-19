@@ -200,26 +200,78 @@ jobs:
           name: budget-planer-macos
           path: artifacts/macos
 
-      - name: List artifacts
+      - name: Filter and prepare release artifacts
         run: |
-          echo "=== Linux artifacts ==="
-          find artifacts/linux -type f 2>/dev/null || echo "No Linux artifacts found"
+          echo "=== Filtering release artifacts ==="
+          
+          # Create a clean release directory
+          mkdir -p release_artifacts
+          
+          # Linux: Copy binary and DEB package only
+          if [ -f "artifacts/linux/budget-planer" ]; then
+            cp artifacts/linux/budget-planer release_artifacts/budget-planer-linux
+            echo "✓ Added Linux binary"
+          fi
+          if ls artifacts/linux/*.deb 1> /dev/null 2>&1; then
+            cp artifacts/linux/*.deb release_artifacts/
+            echo "✓ Added Linux DEB package(s)"
+          fi
+          
+          # Windows: Copy binary and installers only
+          if [ -f "artifacts/windows/budget-planer.exe" ]; then
+            cp artifacts/windows/budget-planer.exe release_artifacts/budget-planer-windows.exe
+            echo "✓ Added Windows binary"
+          fi
+          if ls artifacts/windows/*.msi 1> /dev/null 2>&1; then
+            cp artifacts/windows/*.msi release_artifacts/
+            echo "✓ Added Windows MSI installer(s)"
+          fi
+          if ls artifacts/windows/*.exe 1> /dev/null 2>&1; then
+            # Exclude the main binary (already copied as budget-planer-windows.exe)
+            for exe in artifacts/windows/*.exe; do
+              if [ "$(basename "$exe")" != "budget-planer.exe" ]; then
+                cp "$exe" release_artifacts/
+                echo "✓ Added Windows installer: $(basename "$exe")"
+              fi
+            done
+          fi
+          
+          # macOS: Copy binary, DMG, and app bundle only
+          if [ -f "artifacts/macos/budget-planer" ]; then
+            cp artifacts/macos/budget-planer release_artifacts/budget-planer-macos
+            echo "✓ Added macOS binary"
+          fi
+          if ls artifacts/macos/*.dmg 1> /dev/null 2>&1; then
+            cp artifacts/macos/*.dmg release_artifacts/
+            echo "✓ Added macOS DMG(s)"
+          fi
+          # macOS: Look for app bundle (handle spaces in name)
+          if [ -d "artifacts/macos/Budget Planer.app" ]; then
+            # Create a zip of the app bundle for easier distribution
+            cd artifacts/macos
+            zip -r ../../release_artifacts/Budget-Planer-macos.zip "Budget Planer.app" > /dev/null 2>&1
+            cd ../..
+            echo "✓ Added macOS app bundle (as zip)"
+          elif ls artifacts/macos/*.app 1> /dev/null 2>&1; then
+            # Fallback: any .app bundle
+            cd artifacts/macos
+            for app in *.app; do
+              zip -r "../../release_artifacts/$(basename "$app" .app)-macos.zip" "$app" > /dev/null 2>&1
+              echo "✓ Added macOS app bundle: $app (as zip)"
+            done
+            cd ../..
+          fi
+          
           echo ""
-          echo "=== Windows artifacts ==="
-          find artifacts/windows -type f 2>/dev/null || echo "No Windows artifacts found"
-          echo ""
-          echo "=== macOS artifacts ==="
-          find artifacts/macos -type f 2>/dev/null || echo "No macOS artifacts found"
+          echo "=== Release artifacts ready ==="
+          ls -lh release_artifacts/
 
       - name: Create and publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.get-version.outputs.version }}
           name: Release ${{ needs.get-version.outputs.version }}
-          files: |
-            artifacts/linux/**
-            artifacts/windows/**
-            artifacts/macos/**
+          files: release_artifacts/*
           draft: false
           prerelease: false
           fail_on_unmatched_files: false

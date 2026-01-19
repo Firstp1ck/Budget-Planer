@@ -272,7 +272,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
                 <select
                   value={incomeMode}
                   onChange={(e) => setIncomeMode(e.target.value as IncomeCalculationMode)}
-                  className="w-full md:w-auto px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-600 text-slate-900 dark:text-white text-sm"
+                  className="w-full md:w-auto px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-600 text-slate-900 dark:text-white text-sm cursor-pointer"
                 >
                   <option value="gross">Brutto + alles andere</option>
                   <option value="net">Netto + alles andere</option>

@@ -253,7 +253,7 @@ function BudgetEditor() {
                 <select
                   value={selectedCurrency}
                   onChange={(e) => handleCurrencyChange(e.target.value as Currency)}
-                  className="px-5 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white font-medium text-sm shadow-sm transition-all bg-white"
+                  className="px-5 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white font-medium text-sm shadow-sm transition-all bg-white cursor-pointer"
                 >
                   <option value="CHF">🇨🇭 {CURRENCY_SYMBOLS.CHF} {CURRENCY_NAMES.CHF}</option>
                   <option value="EUR">🇪🇺 {CURRENCY_SYMBOLS.EUR} {CURRENCY_NAMES.EUR}</option>
@@ -282,7 +282,7 @@ function BudgetEditor() {
               <select
                 value={selectedYear || ''}
                 onChange={(e) => setSelectedYear(e.target.value ? parseInt(e.target.value) : null)}
-                className="px-5 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white font-medium text-sm shadow-sm transition-all bg-white"
+                className="px-5 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-slate-900 dark:text-white font-medium text-sm shadow-sm transition-all bg-white cursor-pointer"
               >
                 {availableYears.map((year) => (
                   <option key={year} value={year}>
