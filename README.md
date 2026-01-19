@@ -1,67 +1,356 @@
 # Budget Planer
 
-Eine moderne Web-Anwendung zur Budgetplanung mit monatlicher Übersicht, Steuerberechnung und Gehaltsabzügen.
+A modern budget planning application with monthly overview, tax calculation, and salary deductions. Available as both a web application and a native desktop app built with Tauri.
 
-## Schnellstart
+## Features
 
-### Voraussetzungen
+- ✅ **Monthly and yearly budget overview** - Track your finances across the entire year
+- ✅ **Multiple input modes** - Flexible data entry options:
+  - **Monthly**: Enter amounts for each month individually
+  - **Yearly**: Annual amount automatically distributed across 12 months
+  - **Custom Period**: Distribute amount across X months per year (e.g., quarterly payments)
+- ✅ **Category management** - Organize your budget with four category types:
+  - Income
+  - Fixed Expenses
+  - Variable Expenses
+  - Savings
+- ✅ **Salary deductions** - Calculate net salary from gross with:
+  - Percentage-based deductions (e.g., social security)
+  - Fixed amount deductions (e.g., health insurance)
+- ✅ **Tax calculation** - Automatic tax calculation based on gross salary percentage
+- ✅ **Gross to Net salary conversion** - Automatically calculate net income after deductions
+- ✅ **Currency conversion** - Support for multiple currencies (CHF, EUR, USD) with live exchange rates
+- ✅ **Budget templates** - Save categories as templates for reuse
+- ✅ **Drag & Drop** - Reorder categories with intuitive drag-and-drop
+- ✅ **Visual analytics** - Comprehensive charts and graphs:
+  - Monthly income vs expenses line chart
+  - Monthly balance trend
+  - Planned vs actual comparison
+  - Category distribution pie chart
+  - Expense breakdown by type
+- ✅ **Actual balance tracking** - Record and compare actual vs planned balances
+- ✅ **Budget import/export** - Import and export budgets as JSON files
+- ✅ **Dark mode** - Full dark mode support for comfortable viewing
+- ✅ **Desktop app** - Native desktop application for Windows, Linux, and macOS (via Tauri)
 
-- Python 3.10 oder höher
-- [uv](https://github.com/astral-sh/uv) - Python Paket-Manager
-- [bun](https://bun.sh) - JavaScript Runtime
+## Tech Stack
 
-### Installation und Start
+### Backend
+- **Django** 4.2+ - Python web framework
+- **Django REST Framework** - RESTful API
+- **SQLite** - Database (default, can be configured for production)
+- **Python 3.10+** - Runtime
 
-1. **Repository klonen oder herunterladen**
+### Frontend
+- **React 19** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool and dev server
+- **Tailwind CSS** - Styling
+- **Recharts** - Data visualization
+- **React Query** - Data fetching and caching
+- **React Router** - Navigation
+- **React Hook Form + Zod** - Form validation
 
-2. **Start-Script ausführbar machen:**
+### Desktop App
+- **Tauri 2** - Native desktop app framework
+- **Rust** - Backend runtime
+
+### Package Managers
+- **uv** - Python package manager
+- **bun** - JavaScript/TypeScript runtime and package manager
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.10 or higher
+- [uv](https://github.com/astral-sh/uv) - Python package manager
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+- [bun](https://bun.sh) - JavaScript runtime
+  ```bash
+  curl -fsSL https://bun.sh/install | bash
+  ```
+
+### Installation and Start
+
+1. **Clone or download the repository**
+
+2. **Make the start script executable:**
    ```bash
    chmod +x start.sh
    ```
 
-3. **Server starten:**
+3. **Start the servers:**
    ```bash
    ./start.sh
    ```
 
-Das Script installiert automatisch alle benötigten Abhängigkeiten und startet Backend und Frontend.
+   The script will automatically:
+   - Check for required dependencies
+   - Create a Python virtual environment
+   - Install all Python dependencies
+   - Install all frontend dependencies
+   - Run database migrations
+   - Start both backend and frontend servers
 
-4. **Anwendung öffnen:**
+4. **Access the application:**
    - Frontend: http://localhost:5173
    - Backend API: http://localhost:8000
 
-5. **Server stoppen:**
-   Drücken Sie `Ctrl+C` im Terminal
+5. **Stop the servers:**
+   Press `Ctrl+C` in the terminal
 
-## Erste Schritte
+### Setup Only (Without Starting Servers)
 
-1. **Neues Budget erstellen**
-   - Klicken Sie auf "Neues Budget erstellen"
-   - Geben Sie einen Namen und Jahr ein
+To install dependencies without starting the servers:
 
-2. **Kategorien hinzufügen**
-   - Klicken Sie auf "+ Kategorie hinzufügen"
-   - Wählen Sie den Typ: Einnahmen, Fixkosten, Variable Kosten oder Sparen
+```bash
+./start.sh --setup-only
+```
 
-3. **Beträge eingeben**
-   - Klicken Sie auf eine Zelle im Monatsgitter
-   - Geben Sie geplante und tatsächliche Beträge ein
+## Getting Started
 
-4. **Eingabemodi**
-   - **Monatlich**: Jeden Monat einzeln eingeben
-   - **Jährlich**: Jahresbetrag wird auf 12 Monate verteilt
-   - **Benutzerdefiniert (X Monate)**: Betrag wird X-mal im Jahr verteilt (z.B. 4x pro Jahr)
+### 1. Create a New Budget
 
-## Features
+- Click on "Create New Budget" (or "Neues Budget erstellen")
+- Enter a name and select the year
+- The budget will be created with CHF as the default currency
 
-- ✅ Monatliche und jährliche Budgetübersicht
-- ✅ Gehaltsabzüge (Brutto → Netto Berechnung)
-- ✅ Steuerberechnung basierend auf Bruttogehalt
-- ✅ Kategorien als Vorlage speichern
-- ✅ Drag & Drop zum Neuanordnen von Kategorien
-- ✅ Verschiedene Berechnungsmodi für Gesamteinnahmen
-- ✅ Dark Mode Unterstützung
+### 2. Add Categories
 
-## Hilfe
+- Click on "+ Add Category" (or "+ Kategorie hinzufügen")
+- Choose the category type:
+  - **Income**: Money coming in (e.g., Salary)
+  - **Fixed Expense**: Regular fixed costs (e.g., Rent, Insurance)
+  - **Variable Expense**: Variable costs (e.g., Groceries, Utilities)
+  - **Savings**: Money set aside for savings
+- Configure the input mode:
+  - **Monthly**: Enter amounts for each month separately
+  - **Yearly**: Enter total annual amount (automatically divided by 12)
+  - **Custom Period**: Enter total amount and specify how many times per year (e.g., 4x for quarterly)
 
-Bei Problemen oder Fragen erstellen Sie bitte ein Issue im GitHub Repository.
+### 3. Enter Amounts
+
+- Click on any cell in the monthly grid
+- Enter planned and actual amounts
+- The system automatically calculates totals and balances
+
+### 4. Configure Salary Deductions
+
+- In the budget editor, find the "Salary Reductions" section
+- Add deductions (e.g., social security, health insurance)
+- Choose between percentage-based or fixed amount reductions
+- Net salary is automatically calculated: Gross Salary - Deductions
+
+### 5. Configure Taxes
+
+- In the budget editor, find the "Taxes" section
+- Add tax entries with percentage of gross salary
+- Taxes are automatically calculated and added to expenses
+
+### 6. View Analytics
+
+- Navigate to the "Graphs" tab in the budget editor
+- View various visualizations:
+  - Monthly income vs expenses
+  - Balance trends
+  - Category distributions
+  - Planned vs actual comparisons
+
+### 7. Track Actual Balances
+
+- Enter actual monthly balances to compare with planned values
+- View differences in the "Balance Difference" card
+- See visual comparisons in the graphs
+
+## Desktop Application
+
+The application can be built as a native desktop app using Tauri.
+
+### Building the Desktop App
+
+1. **Install Rust** (if not already installed):
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+
+2. **Install system dependencies** (platform-specific):
+   
+   **Linux:**
+   ```bash
+   sudo apt-get install -y \
+     libwebkit2gtk-4.1-dev \
+     build-essential \
+     curl \
+     wget \
+     file \
+     libssl-dev \
+     libgtk-3-dev \
+     libayatana-appindicator3-dev \
+     librsvg2-dev
+   ```
+   
+   **Windows:**
+   - Install [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+   - WebView2 Runtime (usually pre-installed on Windows 10/11)
+   
+   **macOS:**
+   ```bash
+   xcode-select --install
+   ```
+
+3. **Build the app:**
+   ```bash
+   cd frontend
+   bun install
+   bun run tauri:build
+   ```
+
+   The built application will be in `frontend/src-tauri/target/release/bundle/`
+
+4. **Development mode:**
+   ```bash
+   cd frontend
+   bun run tauri:dev
+   ```
+
+For more detailed setup instructions, see [TAURI_SETUP.md](TAURI_SETUP.md).
+
+## Project Structure
+
+```
+Budget-Planer/
+├── backend/              # Django backend
+│   ├── config/          # Django settings
+│   ├── core/            # Main app with models, views, serializers
+│   ├── manage.py
+│   └── requirements.txt
+├── frontend/            # React frontend
+│   ├── src/
+│   │   ├── components/  # React components
+│   │   ├── contexts/    # React contexts (DarkMode)
+│   │   ├── pages/       # Page components
+│   │   ├── services/    # API service
+│   │   ├── types/       # TypeScript types
+│   │   └── utils/       # Utility functions
+│   ├── src-tauri/       # Tauri desktop app
+│   └── package.json
+├── start.sh             # Startup script
+└── README.md
+```
+
+## API Endpoints
+
+The backend provides a RESTful API at `http://localhost:8000`:
+
+- `GET /api/budgets/` - List all budgets
+- `POST /api/budgets/` - Create a new budget
+- `GET /api/budgets/{id}/` - Get budget details
+- `PUT /api/budgets/{id}/` - Update budget
+- `DELETE /api/budgets/{id}/` - Delete budget
+- `GET /api/budgets/{id}/summary/` - Get budget summary
+- `GET /api/categories/` - List categories
+- `POST /api/categories/` - Create category
+- `GET /api/entries/` - List budget entries
+- `POST /api/entries/` - Create entry
+- And more...
+
+## Currency Support
+
+The application supports multiple currencies with automatic conversion:
+
+- **Base Currency**: CHF (Swiss Francs) - all data is stored in CHF
+- **Display Currencies**: CHF, EUR, USD
+- **Exchange Rates**: Automatically fetched from [exchangerate-api.com](https://www.exchangerate-api.com/)
+- **Caching**: Exchange rates are cached in localStorage and refreshed daily
+
+## Development
+
+### Backend Development
+
+```bash
+cd backend
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python manage.py runserver
+```
+
+### Frontend Development
+
+```bash
+cd frontend
+bun install
+bun run dev
+```
+
+### Running Tests
+
+**Backend:**
+```bash
+cd backend
+source .venv/bin/activate
+python manage.py test
+```
+
+**Frontend:**
+```bash
+cd frontend
+bun test  # If tests are configured
+```
+
+## Building for Production
+
+### Web Application
+
+**Backend:**
+```bash
+cd backend
+# Configure production settings
+# Set up production database (PostgreSQL recommended)
+python manage.py collectstatic
+python manage.py migrate
+# Use a production WSGI server (e.g., gunicorn)
+```
+
+**Frontend:**
+```bash
+cd frontend
+bun run build
+# Serve the dist/ directory with a web server
+```
+
+### Desktop Application
+
+The GitHub Actions workflow automatically builds desktop apps for all platforms on release. See `.github/workflows/release.yml` for details.
+
+Manual build:
+```bash
+cd frontend
+bun run tauri:build
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is open source. Please check the license file for details.
+
+## Support
+
+For issues, questions, or feature requests, please create an issue in the GitHub repository.
+
+## Acknowledgments
+
+- Built with [Django](https://www.djangoproject.com/) and [React](https://react.dev/)
+- Desktop app powered by [Tauri](https://tauri.app/)
+- Charts and graphs using [Recharts](https://recharts.org/)
+- Exchange rates from [exchangerate-api.com](https://www.exchangerate-api.com/)
