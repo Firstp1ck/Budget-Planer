@@ -142,6 +142,46 @@ if [ "$SETUP_ONLY" = true ]; then
     exit 0
 fi
 
+# Function to kill process on a port (cross-platform)
+kill_port() {
+    local port=$1
+    local killed=false
+    
+    # Try lsof first (Unix/Linux/macOS)
+    if command_exists lsof; then
+        local pid=$(lsof -ti:$port 2>/dev/null)
+        if [ ! -z "$pid" ]; then
+            kill -9 $pid 2>/dev/null && killed=true
+        fi
+    fi
+    
+    # Try netstat + taskkill (Windows/MSYS2)
+    if [ "$killed" = false ] && command_exists netstat && command_exists taskkill; then
+        # Windows netstat format: TCP    0.0.0.0:8000    0.0.0.0:0    LISTENING    12345
+        local pid=$(netstat -ano 2>/dev/null | grep -E ":$port[[:space:]]" | grep LISTENING | awk '{print $NF}' | head -1)
+        if [ ! -z "$pid" ] && [ "$pid" != "0" ]; then
+            taskkill //F //PID $pid 2>/dev/null && killed=true
+        fi
+    fi
+    
+    # Try ss (modern Linux alternative)
+    if [ "$killed" = false ] && command_exists ss; then
+        local pid=$(ss -lptn "sport = :$port" 2>/dev/null | grep -oP 'pid=\K\d+' | head -1)
+        if [ ! -z "$pid" ]; then
+            kill -9 $pid 2>/dev/null && killed=true
+        fi
+    fi
+    
+    # Try fuser (some Unix systems)
+    if [ "$killed" = false ] && command_exists fuser; then
+        fuser -k $port/tcp 2>/dev/null && killed=true
+    fi
+    
+    if [ "$killed" = true ]; then
+        print_info "Killed existing process on port $port"
+    fi
+}
+
 # Function to cleanup on exit
 cleanup() {
     print_info "Shutting down servers..."
@@ -156,8 +196,8 @@ cleanup() {
     # Wait a moment for graceful shutdown
     sleep 1
     # Force kill any remaining processes on ports 8000 and 5173
-    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-    lsof -ti:5173 | xargs kill -9 2>/dev/null || true
+    kill_port 8000 || true
+    kill_port 5173 || true
     # Also force kill the PIDs if they're still running
     kill -9 $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
     print_info "Servers stopped"
@@ -184,8 +224,8 @@ fi
 
 # Check and kill any existing processes on ports 8000 and 5173
 print_info "Checking for existing processes on ports 8000 and 5173..."
-lsof -ti:8000 | xargs kill -9 2>/dev/null && print_info "Killed existing process on port 8000" || true
-lsof -ti:5173 | xargs kill -9 2>/dev/null && print_info "Killed existing process on port 5173" || true
+kill_port 8000
+kill_port 5173
 sleep 1
 
 # Start backend server
