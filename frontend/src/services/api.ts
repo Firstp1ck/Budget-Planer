@@ -89,6 +89,8 @@ export const templateApi = {
   create: (data: Partial<BudgetTemplate>) => api.post<BudgetTemplate>('/templates/', data),
   createFromBudget: (budgetId: number, name: string, overwrite?: boolean) =>
     api.post<BudgetTemplate>('/templates/create_from_budget/', { budget_id: budgetId, name, overwrite: overwrite || false }),
+  apply: (templateId: number, budgetId: number) =>
+    api.post(`/templates/${templateId}/apply/`, { budget_id: budgetId }),
   delete: (id: number) => api.delete(`/templates/${id}/`),
 }
 

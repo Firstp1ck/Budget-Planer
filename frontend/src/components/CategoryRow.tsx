@@ -661,6 +661,15 @@ function CategoryRow({
                   <select
                     value={inputModeData.mode}
                     onChange={(e) => setInputModeData({ ...inputModeData, mode: e.target.value as InputMode })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleSaveInputMode(category.id)
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        setEditingInputMode(null)
+                      }
+                    }}
                     className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                   >
                     <option value="MONTHLY">Monatlich (einzeln eingeben)</option>
@@ -678,6 +687,15 @@ function CategoryRow({
                         max="12"
                         value={inputModeData.customMonths}
                         onChange={(e) => setInputModeData({ ...inputModeData, customMonths: parseInt(e.target.value) })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleSaveInputMode(category.id)
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            setEditingInputMode(null)
+                          }
+                        }}
                         className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                       />
                     </div>
@@ -686,6 +704,15 @@ function CategoryRow({
                       <select
                         value={inputModeData.customStartMonth}
                         onChange={(e) => setInputModeData({ ...inputModeData, customStartMonth: parseInt(e.target.value) })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleSaveInputMode(category.id)
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            setEditingInputMode(null)
+                          }
+                        }}
                         className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                       >
                         <option value={1}>Januar</option>
@@ -745,6 +772,15 @@ function CategoryRow({
                       step="0.01"
                       value={inputModeData.yearlyAmount}
                       onChange={(e) => setInputModeData({ ...inputModeData, yearlyAmount: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleSaveInputMode(category.id)
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault()
+                          setEditingInputMode(null)
+                        }
+                      }}
                       className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                     />
                     <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
@@ -800,6 +836,15 @@ function CategoryRow({
                     step="0.01"
                     value={autofillData.amount}
                     onChange={(e) => setAutofillData({ ...autofillData, amount: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAutofill(category.id)
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        setShowAutofillDialog(null)
+                      }
+                    }}
                     placeholder="0.00"
                     className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                     autoFocus
@@ -839,6 +884,15 @@ function CategoryRow({
                         <select
                           value={autofillData.startMonth}
                           onChange={(e) => setAutofillData({ ...autofillData, startMonth: parseInt(e.target.value) })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleAutofill(category.id)
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault()
+                              setShowAutofillDialog(null)
+                            }
+                          }}
                           className="px-1.5 py-0.5 text-[10px] border rounded dark:bg-gray-600 dark:border-gray-500"
                         >
                           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (

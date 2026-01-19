@@ -374,6 +374,16 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                   type="text"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAddCategory()
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      setIsAddingCategory(false)
+                      setNewCategoryName('')
+                    }
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-gray-900 dark:text-white"
                   placeholder="z.B. Miete, Lebensmittel..."
                   autoFocus
@@ -386,6 +396,16 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 <select
                   value={newCategoryType}
                   onChange={(e) => setNewCategoryType(e.target.value as 'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleAddCategory()
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      setIsAddingCategory(false)
+                      setNewCategoryName('')
+                    }
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-gray-900 dark:text-white"
                 >
                   <option value="INCOME">Einnahmen</option>

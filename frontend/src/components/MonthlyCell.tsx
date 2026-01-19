@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { entryApi, categoryApi } from '../services/api'
@@ -21,6 +21,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
   const [plannedAmount, setPlannedAmount] = useState(entry?.planned_amount || '0.00')
   const [actualAmount, setActualAmount] = useState(entry?.actual_amount || '')
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const cellRef = useRef<HTMLDivElement>(null)
 
   // Get previous month entry for this category
   const getPreviousMonthEntry = (): BudgetEntry | undefined => {
@@ -212,6 +213,33 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     }
   }
 
+  // Handle keyboard events for the entire editing cell
+  useEffect(() => {
+    if (!isEditing) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if not typing in an input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleSave()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        setIsEditing(false)
+        setPlannedAmount(entry?.planned_amount || '0.00')
+        setActualAmount(entry?.actual_amount || '')
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isEditing, plannedAmount, actualAmount, entry, category, categoryId, month, updateMutation, createMutation, distributeCustomAmountMutation])
+
   const getStatusColor = () => {
     if (!entry || !entry.actual_amount) return 'bg-white dark:bg-gray-800'
 
@@ -230,7 +258,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
   if (isEditing) {
     return (
       <td className="px-3 py-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600">
-        <div className="space-y-2 min-w-[150px]">
+        <div ref={cellRef} className="space-y-2 min-w-[150px]" tabIndex={-1}>
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">

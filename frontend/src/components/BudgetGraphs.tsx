@@ -65,7 +65,7 @@ function BudgetGraphs({
   displayCurrency,
   budgetYear,
 }: BudgetGraphsProps) {
-  const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('yearly')
+  const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('monthly')
   // Get gross salary for a specific month
   const getGrossSalaryForMonth = (month: number): number => {
     const salaryCategory = categories.find(

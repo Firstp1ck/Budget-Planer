@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { actualBalanceApi } from '../services/api'
@@ -18,6 +18,7 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
   const [value, setValue] = useState(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
+  const cellRef = useRef<HTMLDivElement>(null)
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<MonthlyActualBalance>) => actualBalanceApi.create(data),
@@ -68,10 +69,36 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
     }
   }
 
+  // Handle keyboard events for the entire editing cell
+  useEffect(() => {
+    if (!isEditing) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if not typing in an input field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        handleSave()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        setIsEditing(false)
+        setValue(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isEditing, value, balance, field, budgetId, month, budgetYear, updateMutation, createMutation])
+
   if (isEditing) {
     return (
       <td className="px-3 py-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600">
-        <div className="space-y-2 min-w-[150px]">
+        <div ref={cellRef} className="space-y-2 min-w-[150px]" tabIndex={-1}>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
               {field === 'income' ? 'Einnahmen' : 'Ausgaben'}
