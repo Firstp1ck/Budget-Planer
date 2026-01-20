@@ -273,6 +273,23 @@ fn initialize_database(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error:
   } else {
     warn!("Backend directory not found in any of these locations: {:?}", possible_backend_paths);
     warn!("Database will be created on first use when backend is available.");
+    
+    // For packaged apps, create an empty database file so the directory structure is correct
+    // The backend executable will handle migrations when it starts
+    if let Some(parent) = db_path.parent() {
+      if let Err(e) = std::fs::create_dir_all(parent) {
+        warn!("Failed to create database directory: {}", e);
+      } else {
+        // Create an empty database file - SQLite will initialize it properly when first accessed
+        if !db_path.exists() {
+          if let Err(e) = std::fs::File::create(&db_path) {
+            warn!("Failed to create database file: {}", e);
+          } else {
+            info!("Created empty database file at: {:?}", db_path);
+          }
+        }
+      }
+    }
   }
   
   Ok(())
@@ -825,19 +842,89 @@ pub fn run() {
         let exe_path = std::env::current_exe().unwrap_or_default();
         let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
         
+        info!("Looking for bundled backend executable...");
+        info!("Executable path: {:?}", exe_path);
+        info!("Executable directory: {:?}", exe_dir);
+        
         let mut possible_exe_paths: Vec<PathBuf> = vec![];
         
         // Try Tauri resource resolution (for bundled resources)
-        if let Ok(resource_dir) = app_handle.path().resource_dir() {
-          possible_exe_paths.push(resource_dir.join("backend-server.exe"));
-          possible_exe_paths.push(resource_dir.join("backend-server"));
+        match app_handle.path().resource_dir() {
+          Ok(resource_dir) => {
+            info!("Resource directory resolved: {:?}", resource_dir);
+            // Check if resource directory exists
+            if resource_dir.exists() {
+              info!("Resource directory exists, listing contents:");
+              if let Ok(entries) = std::fs::read_dir(&resource_dir) {
+                for entry in entries.flatten() {
+                  info!("  - {:?}", entry.path());
+                }
+              }
+            } else {
+              warn!("Resource directory does not exist: {:?}", resource_dir);
+            }
+            possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+            possible_exe_paths.push(resource_dir.join("backend-server"));
+          }
+          Err(e) => {
+            warn!("Could not resolve resource directory: {}", e);
+          }
+        }
+        
+        // Also try resolving the resource directly using Tauri's resolve method
+        // This might work better in some bundle configurations
+        // Note: In Tauri v2, resolve might work differently, so we try both approaches
+        if let Ok(resource_path) = app_handle.path().resolve("backend-server", tauri::path::BaseDirectory::Resource) {
+          info!("Resolved resource path (backend-server): {:?}", resource_path);
+          possible_exe_paths.push(resource_path);
+        }
+        if let Ok(resource_path) = app_handle.path().resolve("backend-server.exe", tauri::path::BaseDirectory::Resource) {
+          info!("Resolved resource path (backend-server.exe): {:?}", resource_path);
+          possible_exe_paths.push(resource_path);
+        }
+        
+        // For Linux AppImages, resources might be in a different location
+        // AppImages extract to a temporary directory, and resources are in usr/lib or usr/share
+        #[cfg(target_os = "linux")]
+        {
+          // Check AppImage extraction directory structure
+          if let Ok(appimage_path) = std::env::var("APPIMAGE") {
+            info!("Running as AppImage: {}", appimage_path);
+            if let Ok(appdir) = std::env::var("APPDIR") {
+              info!("AppImage APPDIR: {}", appdir);
+              let appdir_path = PathBuf::from(&appdir);
+              possible_exe_paths.push(appdir_path.join("usr").join("lib").join("backend-server"));
+              possible_exe_paths.push(appdir_path.join("usr").join("share").join("backend-server"));
+              possible_exe_paths.push(appdir_path.join("resources").join("backend-server"));
+            }
+          }
+          
+          // For DEB packages, resources are typically in /usr/lib or /usr/share
+          // Check if we're in a system installation
+          if exe_dir.starts_with("/usr") {
+            possible_exe_paths.push(PathBuf::from("/usr/lib/budget-planer/backend-server"));
+            possible_exe_paths.push(PathBuf::from("/usr/share/budget-planer/backend-server"));
+            possible_exe_paths.push(PathBuf::from("/usr/lib/com.budgetplaner/backend-server"));
+            possible_exe_paths.push(PathBuf::from("/usr/share/com.budgetplaner/backend-server"));
+          }
         }
         
         // Add paths relative to executable (fallback)
+        // For standalone binaries, resources might be next to the executable
         possible_exe_paths.push(exe_dir.join("backend-server.exe"));
         possible_exe_paths.push(exe_dir.join("backend-server"));
         possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
         possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+        
+        // For Linux, also check lib and share directories relative to executable
+        // This is common for Linux applications and standalone binaries
+        #[cfg(target_os = "linux")]
+        {
+          possible_exe_paths.push(exe_dir.join("lib").join("backend-server"));
+          possible_exe_paths.push(exe_dir.join("share").join("backend-server"));
+          possible_exe_paths.push(exe_dir.join("usr").join("lib").join("backend-server"));
+          possible_exe_paths.push(exe_dir.join("usr").join("share").join("backend-server"));
+        }
         
         // Also check parent directories (for nested bundle structures)
         if let Some(parent) = exe_dir.parent() {
@@ -845,6 +932,19 @@ pub fn run() {
           possible_exe_paths.push(parent.join("backend-server"));
           possible_exe_paths.push(parent.join("resources").join("backend-server.exe"));
           possible_exe_paths.push(parent.join("resources").join("backend-server"));
+          
+          #[cfg(target_os = "linux")]
+          {
+            possible_exe_paths.push(parent.join("lib").join("backend-server"));
+            possible_exe_paths.push(parent.join("share").join("backend-server"));
+          }
+        }
+        
+        // Log all paths being checked
+        info!("Checking the following paths for backend executable:");
+        for path in &possible_exe_paths {
+          let exists = path.exists();
+          info!("  {:?} - {}", path, if exists { "EXISTS" } else { "not found" });
         }
         
         let bundled_exe = possible_exe_paths.iter().find(|p| p.exists()).cloned();
