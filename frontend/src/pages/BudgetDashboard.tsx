@@ -379,6 +379,15 @@ function BudgetDashboard() {
         return
       }
 
+      // Debug: Log the data being sent
+      console.log('Sending import data:', {
+        hasBudget: !!data.budget,
+        budgetName: data.budget?.name,
+        categoriesCount: data.categories?.length,
+        entriesCount: data.entries?.length,
+        dataKeys: Object.keys(data)
+      })
+      
       // Import the budget
       const response = await budgetApi.import(data)
       const newBudget = response.data

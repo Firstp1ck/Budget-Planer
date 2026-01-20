@@ -3,6 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
+import json
+import logging
 from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction, MonthlyActualBalance
 from .serializers import (
     BudgetSerializer,
@@ -170,13 +172,66 @@ class BudgetViewSet(viewsets.ModelViewSet):
     def import_budget(self, request):
         """Import a budget from JSON data"""
         
+        logger = logging.getLogger(__name__)
+        
+        # Try to get data from request.data (Django REST Framework parsed)
         data = request.data
+        
+        # If request.data is empty or not a dict, try parsing request.body directly
+        if not data or not isinstance(data, dict):
+            try:
+                if hasattr(request, 'body') and request.body:
+                    logger.info("Parsing request.body directly")
+                    data = json.loads(request.body.decode('utf-8'))
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.error(f"Failed to parse JSON from request.body: {e}")
+                return Response(
+                    {'error': 'Invalid JSON format in request body.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Debug logging
+        logger.info(f"Import request received. Data type: {type(data)}")
+        logger.info(f"Request content type: {request.content_type}")
+        logger.info(f"Data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+        
+        # Validate that data is a dictionary
+        if not isinstance(data, dict):
+            logger.error(f"Invalid data type received: {type(data)}")
+            return Response(
+                {'error': 'Invalid data format. Expected JSON object.', 'received_type': str(type(data))},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Extract nested data structures
         budget_data = data.get('budget', {})
         categories_data = data.get('categories', [])
         entries_data = data.get('entries', [])
         tax_entries_data = data.get('tax_entries', [])
         salary_reductions_data = data.get('salary_reductions', [])
         actual_balances_data = data.get('actual_balances', [])
+        
+        # Validate required fields
+        if not budget_data:
+            logger.error(f"Budget data missing. Available keys: {list(data.keys())}")
+            return Response(
+                {'budget': ['Dieses Feld ist zwingend erforderlich.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not isinstance(budget_data, dict):
+            logger.error(f"Budget data is not a dict: {type(budget_data)}")
+            return Response(
+                {'budget': ['Budget data must be an object.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not budget_data.get('name'):
+            logger.error(f"Budget name missing. Budget data keys: {list(budget_data.keys())}")
+            return Response(
+                {'budget': {'name': ['Dieses Feld ist zwingend erforderlich.']}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Create the budget - handle duplicate names by appending timestamp
         budget_name = budget_data.get('name', 'Imported Budget')
