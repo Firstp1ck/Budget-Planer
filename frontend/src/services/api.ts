@@ -17,37 +17,66 @@ import type {
 // In Tauri, we need to use the full URL since proxy doesn't work
 // In development (Vite dev server), the proxy handles /api
 const getBaseURL = () => {
-  // Check if we're running in Tauri
-  // In Tauri, window.location.href is typically "tauri://localhost" or similar
-  // Also check for Tauri global object
+  // Check if we're running in Tauri or production build
+  // Multiple ways to detect Tauri:
+  // 1. Check for Tauri global object
+  // 2. Check window.location.protocol (tauri://)
+  // 3. Check environment variable
+  // 4. Check if we're in a built app (not localhost:5173)
   let isTauri = false
+  let isProduction = import.meta.env.PROD
   
   if (typeof window !== 'undefined') {
     const href = window.location.href
-    // Tauri uses tauri:// protocol
-    isTauri = href.startsWith('tauri://') || 
-              (window as any).__TAURI__ !== undefined ||
-              import.meta.env.VITE_TAURI === 'true'
+    const protocol = window.location.protocol
+    const hostname = window.location.hostname
+    
+    // Check for Tauri global object (most reliable)
+    isTauri = (window as any).__TAURI__ !== undefined ||
+              (window as any).__TAURI_INTERNALS__ !== undefined ||
+              // Check for tauri:// protocol
+              protocol === 'tauri:' ||
+              href.startsWith('tauri://') ||
+              // Check environment variable
+              import.meta.env.VITE_TAURI === 'true' ||
+              // If in production mode and not on localhost:5173, assume Tauri
+              (isProduction && hostname !== 'localhost' && !href.includes('localhost:5173') && !href.includes('127.0.0.1:5173'))
   }
   
-  if (isTauri) {
+  // Always use full URL in production/Tauri, use proxy in dev
+  if (isTauri || isProduction) {
     // Use environment variable or default to localhost:8000
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
-    console.log('Using Tauri API URL:', apiUrl)
+    console.log('Using full API URL:', apiUrl, '(Tauri:', isTauri, ', Production:', isProduction, ')')
+    console.log('Current location:', typeof window !== 'undefined' ? window.location.href : 'N/A')
     return apiUrl
   }
   // In Vite dev server, use relative path (proxy will handle it)
-  console.log('Using dev server API URL: /api')
+  console.log('Using dev server proxy API URL: /api')
   return '/api'
 }
 
+const baseURL = getBaseURL()
+
 const api = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 10000, // 10 second timeout
 })
+
+// Log API configuration on startup
+if (typeof window !== 'undefined') {
+  console.log('=== API Configuration ===')
+  console.log('Base URL:', baseURL)
+  console.log('Window location:', window.location.href)
+  console.log('Protocol:', window.location.protocol)
+  console.log('Hostname:', window.location.hostname)
+  console.log('Tauri detected:', (window as any).__TAURI__ !== undefined)
+  console.log('Production mode:', import.meta.env.PROD)
+  console.log('=======================')
+}
 
 // Add request interceptor for debugging
 api.interceptors.request.use(
@@ -65,6 +94,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     console.log('API Response:', response.status, response.config.url)
+    
+    // Check if we got HTML instead of JSON (common when API URL is wrong)
+    const contentType = response.headers['content-type'] || ''
+    if (contentType.includes('text/html') && typeof response.data === 'string' && response.data.includes('<!doctype')) {
+      console.error('Received HTML instead of JSON! This usually means the API URL is incorrect.')
+      console.error('Response URL:', response.config.url)
+      console.error('Base URL:', response.config.baseURL)
+      throw new Error('API returned HTML instead of JSON. Backend server may not be running or API URL is incorrect.')
+    }
+    
     return response
   },
   (error) => {
@@ -72,8 +111,20 @@ api.interceptors.response.use(
     if (error.response) {
       console.error('Response status:', error.response.status)
       console.error('Response data:', error.response.data)
+      
+      // Check if we got HTML error page
+      const contentType = error.response.headers['content-type'] || ''
+      if (contentType.includes('text/html')) {
+        console.error('Received HTML error page instead of JSON response')
+        console.error('This usually means:')
+        console.error('1. Backend server is not running')
+        console.error('2. API URL is incorrect')
+        console.error('3. Request is being routed to frontend instead of backend')
+        error.isHtmlResponse = true
+      }
     } else if (error.request) {
       console.error('No response received:', error.request)
+      console.error('This usually means the backend server is not running at http://localhost:8000')
     }
     return Promise.reject(error)
   }
@@ -93,6 +144,7 @@ export const budgetApi = {
     api.get<YearlySummary>(`/budgets/${id}/yearly/`, { params: { year } }),
   export: (id: number) => api.get<BudgetSummaryData>(`/budgets/${id}/summary/`),
   import: (data: BudgetSummaryData) => api.post<Budget>('/budgets/import/', data),
+  health: () => api.get<{status: string, message: string}>('/budgets/health/'),
 }
 
 // Category endpoints

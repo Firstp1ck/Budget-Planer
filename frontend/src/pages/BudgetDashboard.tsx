@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { budgetApi, templateApi, categoryApi, taxApi } from '../services/api'
-import type { Budget, BudgetTemplate, CategoryType, BudgetSummaryData } from '../types/budget'
+import type { Budget, BudgetTemplate, CategoryType, BudgetSummaryData, PaginatedResponse } from '../types/budget'
 import BudgetCard from '../components/BudgetCard'
 
 function BudgetDashboard() {
@@ -13,12 +13,43 @@ function BudgetDashboard() {
   const [newBudgetName, setNewBudgetName] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Test backend connection on mount
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        await budgetApi.health()
+        console.log('Backend connection test: SUCCESS')
+      } catch (error: any) {
+        console.error('Backend connection test: FAILED', error)
+        if (error?.message?.includes('Network Error') || error?.code === 'ERR_NETWORK') {
+          console.error('Backend server is not accessible. Please ensure:')
+          console.error('1. The backend server is running on http://localhost:8000')
+          console.error('2. No firewall is blocking the connection')
+          console.error('3. The Tauri app started the backend server successfully')
+        }
+      }
+    }
+    testConnection()
+  }, [])
 
   const { data: budgets, isLoading, error } = useQuery({
     queryKey: ['budgets'],
     queryFn: async () => {
-      const response = await budgetApi.getAll()
-      return response.data.results || []
+      try {
+        const response = await budgetApi.getAll()
+        // Check if response.data is actually an object (not HTML string)
+        // TypeScript type narrowing: check if data is a string first
+        const responseData = response.data as any
+        if (typeof responseData === 'string' && responseData.includes('<!doctype')) {
+          throw new Error('Received HTML instead of JSON. Backend server may not be running.')
+        }
+        // Now TypeScript knows it's not a string, so we can access .results
+        return (responseData as PaginatedResponse<Budget>).results || []
+      } catch (error: any) {
+        console.error('Error fetching budgets:', error)
+        throw error
+      }
     },
   })
 
@@ -102,15 +133,55 @@ function BudgetDashboard() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Partial<Budget>) => {
-      const response = await budgetApi.create(data)
-      return response.data
+      try {
+        const response = await budgetApi.create(data)
+        console.log('Budget creation API response:', response)
+        console.log('Budget creation response.data:', response.data)
+        console.log('Budget creation response.status:', response.status)
+        
+        // Handle different response structures
+        let budgetData = response.data
+        
+        // Check if response is wrapped in pagination format (shouldn't happen for POST, but check anyway)
+        if (budgetData && 'results' in budgetData && Array.isArray(budgetData.results) && budgetData.results.length > 0) {
+          budgetData = budgetData.results[0]
+          console.log('Found budget in pagination results:', budgetData)
+        }
+        
+        // Validate the response has an id
+        if (!budgetData || typeof budgetData.id === 'undefined') {
+          console.error('Invalid budget response structure:', {
+            response: response.data,
+            budgetData,
+            hasId: budgetData?.id !== undefined,
+            type: typeof budgetData?.id
+          })
+          throw new Error(`Invalid response: Budget ID not found. Response: ${JSON.stringify(response.data)}`)
+        }
+        
+        return budgetData
+      } catch (error: any) {
+        console.error('Budget creation error details:', {
+          error,
+          message: error?.message,
+          response: error?.response?.data,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText
+        })
+        throw error
+      }
     },
     onSuccess: async (newBudget) => {
-      console.log('Budget created:', newBudget)
+      console.log('Budget created successfully:', newBudget)
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
       
       if (!newBudget || !newBudget.id) {
-        console.error('Budget creation response:', newBudget)
+        console.error('Budget creation response missing ID:', {
+          newBudget,
+          hasId: newBudget?.id !== undefined,
+          idType: typeof newBudget?.id,
+          keys: newBudget ? Object.keys(newBudget) : []
+        })
         toast.error('Fehler: Budget-ID nicht erhalten')
         return
       }
@@ -158,7 +229,56 @@ function BudgetDashboard() {
     },
     onError: (error: any) => {
       console.error('Budget creation error:', error)
-      toast.error(error.response?.data?.message || 'Fehler beim Erstellen des Budgets')
+      console.error('Error details:', {
+        message: error?.message,
+        response: error?.response,
+        request: error?.request,
+        code: error?.code,
+        config: error?.config
+      })
+      
+      // Determine error message based on error type
+      let errorMessage = 'Fehler beim Erstellen des Budgets'
+      
+      if (error?.response) {
+        // Server responded with error status
+        const status = error.response.status
+        const data = error.response.data
+        
+        if (data?.message) {
+          errorMessage = data.message
+        } else if (data?.error) {
+          errorMessage = data.error
+        } else if (data?.detail) {
+          errorMessage = data.detail
+        } else if (status === 400) {
+          errorMessage = 'Ungültige Daten. Bitte überprüfen Sie Ihre Eingaben.'
+        } else if (status === 500) {
+          errorMessage = 'Serverfehler. Bitte versuchen Sie es später erneut.'
+        } else if (status === 404) {
+          errorMessage = 'API-Endpunkt nicht gefunden. Bitte überprüfen Sie die Backend-Konfiguration.'
+        } else {
+          errorMessage = `Serverfehler (${status}). Bitte versuchen Sie es später erneut.`
+        }
+      } else if (error?.request) {
+        // Request was made but no response received
+        errorMessage = 'Keine Verbindung zum Backend. Stellen Sie sicher, dass der Backend-Server läuft (http://localhost:8000).'
+      } else if (error?.message) {
+        // Network error or other error
+        if (error.message.includes('HTML instead of JSON') || error.isHtmlResponse) {
+          errorMessage = 'Backend-Server nicht erreichbar. Die Anfrage wurde an die falsche Adresse gesendet. Bitte starten Sie die Anwendung neu oder überprüfen Sie, ob der Backend-Server läuft.'
+        } else if (error.message.includes('Network Error') || error.message.includes('ERR_NETWORK')) {
+          errorMessage = 'Netzwerkfehler. Stellen Sie sicher, dass der Backend-Server läuft (http://localhost:8000).'
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Zeitüberschreitung. Der Server antwortet nicht. Bitte versuchen Sie es später erneut.'
+        } else {
+          errorMessage = `Fehler: ${error.message}`
+        }
+      }
+      
+      toast.error(errorMessage, {
+        duration: 5000, // Show for 5 seconds
+      })
     },
   })
 
@@ -272,6 +392,12 @@ function BudgetDashboard() {
       ? (error as any).response?.data || (error as any).response?.statusText || errorMessage
       : errorMessage
     
+    // Check if it's a network error
+    const isNetworkError = errorMessage.includes('Network Error') || 
+                          errorMessage.includes('ERR_NETWORK') ||
+                          (error as any)?.code === 'ERR_NETWORK' ||
+                          (error as any)?.message?.includes('Network Error')
+    
     console.error('Budget loading error:', error)
     
     return (
@@ -279,9 +405,32 @@ function BudgetDashboard() {
         <div className="text-center bg-white dark:bg-slate-800 rounded-xl p-12 shadow-md border border-slate-200 dark:border-slate-700 max-w-2xl">
           <div className="text-7xl mb-6 animate-pulse">⚠️</div>
           <p className="text-xl font-bold text-red-600 dark:text-red-400 mb-4">Fehler beim Laden der Budgets</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 font-mono break-all">
-            {String(errorDetails)}
-          </p>
+          {isNetworkError ? (
+            <>
+              <p className="text-base text-slate-700 dark:text-slate-300 mb-4 font-semibold">
+                Backend-Server nicht erreichbar
+              </p>
+              <div className="text-sm text-slate-600 dark:text-slate-400 mb-6 text-left bg-slate-50 dark:bg-slate-900 p-4 rounded-lg">
+                <p className="mb-2">Mögliche Ursachen:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Der Backend-Server wurde nicht gestartet</li>
+                  <li>Der Server läuft nicht auf Port 8000</li>
+                  <li>Eine Firewall blockiert die Verbindung</li>
+                  <li>Python oder die Backend-Abhängigkeiten fehlen</li>
+                </ul>
+                <p className="mt-4 mb-2">Bitte überprüfen Sie:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>Die Konsolen-Ausgabe der Anwendung</li>
+                  <li>Ob der Backend-Server erfolgreich gestartet wurde</li>
+                  <li>Die Logs für Fehlermeldungen</li>
+                </ul>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 font-mono break-all">
+              {String(errorDetails)}
+            </p>
+          )}
           <button
             onClick={() => queryClient.invalidateQueries({ queryKey: ['budgets'] })}
             className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"

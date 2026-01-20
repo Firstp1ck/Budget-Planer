@@ -64,10 +64,17 @@ fn initialize_database(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error:
     
     // Try to find Python in virtual environment first, then system Python
     let python_cmd = {
-      let venv_python = backend_path.join(".venv").join("bin").join("python");
-      if venv_python.exists() {
-        info!("Using virtual environment Python: {:?}", venv_python);
-        venv_python
+      // Check Windows path first (Scripts/python.exe)
+      let venv_python_windows = backend_path.join(".venv").join("Scripts").join("python.exe");
+      // Check Unix path (bin/python)
+      let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
+      
+      if venv_python_windows.exists() {
+        info!("Using virtual environment Python (Windows): {:?}", venv_python_windows);
+        venv_python_windows
+      } else if venv_python_unix.exists() {
+        info!("Using virtual environment Python (Unix): {:?}", venv_python_unix);
+        venv_python_unix
       } else {
         // Try python3, then python
         if Command::new("python3").arg("--version").output().is_ok() {
@@ -132,10 +139,17 @@ fn start_backend_server(
   
   // Try to find Python in virtual environment first, then system Python
   let python_cmd = {
-    let venv_python = backend_path.join(".venv").join("bin").join("python");
-    if venv_python.exists() {
-      info!("Using virtual environment Python: {:?}", venv_python);
-      venv_python
+    // Check Windows path first (Scripts/python.exe)
+    let venv_python_windows = backend_path.join(".venv").join("Scripts").join("python.exe");
+    // Check Unix path (bin/python)
+    let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
+    
+    if venv_python_windows.exists() {
+      info!("Using virtual environment Python (Windows): {:?}", venv_python_windows);
+      venv_python_windows
+    } else if venv_python_unix.exists() {
+      info!("Using virtual environment Python (Unix): {:?}", venv_python_unix);
+      venv_python_unix
     } else {
       // Try python3, then python
       if Command::new("python3").arg("--version").output().is_ok() {
@@ -148,6 +162,40 @@ fn start_backend_server(
     }
   };
   
+  // Run migrations before starting the server
+  info!("Running database migrations before starting server...");
+  let mut migrate_cmd = Command::new(&python_cmd);
+  migrate_cmd.current_dir(backend_path);
+  migrate_cmd.arg("manage.py");
+  migrate_cmd.arg("migrate");
+  migrate_cmd.arg("--noinput");
+  migrate_cmd.env("DATABASE_PATH", db_path.to_string_lossy().to_string());
+  migrate_cmd.env("DJANGO_SETTINGS_MODULE", "config.settings");
+  
+  match migrate_cmd.output() {
+    Ok(output) => {
+      if output.status.success() {
+        info!("Database migrations completed successfully");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.is_empty() {
+          info!("Migration output: {}", stdout);
+        }
+      } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        error!("Migration failed. stderr: {}", stderr);
+        if !stdout.is_empty() {
+          error!("stdout: {}", stdout);
+        }
+        warn!("Continuing anyway - server will start but may have database issues");
+      }
+    }
+    Err(e) => {
+      warn!("Could not run migrations before server start: {}. Server will start anyway.", e);
+    }
+  }
+  
+  // Now start the server
   let mut cmd = Command::new(&python_cmd);
   cmd.current_dir(backend_path);
   cmd.arg("manage.py");

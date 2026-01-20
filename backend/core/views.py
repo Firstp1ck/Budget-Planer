@@ -23,6 +23,43 @@ class BudgetViewSet(viewsets.ModelViewSet):
     """ViewSet for Budget model"""
     queryset = Budget.objects.all()
     serializer_class = BudgetSerializer
+    
+    @action(detail=False, methods=['get'])
+    def health(self, request):
+        """Health check endpoint"""
+        return Response({'status': 'ok', 'message': 'Backend is running'})
+    
+    def create(self, request, *args, **kwargs):
+        """Override create to ensure proper response with ID"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            logger.info(f"Budget creation request received: {request.data}")
+            serializer = self.get_serializer(data=request.data)
+            
+            if not serializer.is_valid():
+                logger.error(f"Serializer validation failed: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            
+            # Ensure the response includes the ID
+            response_data = serializer.data
+            if 'id' not in response_data and hasattr(serializer.instance, 'id'):
+                response_data['id'] = serializer.instance.id
+            
+            logger.info(f"Budget created successfully with ID: {response_data.get('id')}")
+            logger.info(f"Response data: {response_data}")
+            
+            return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+        except Exception as e:
+            logger.error(f"Error creating budget: {str(e)}", exc_info=True)
+            return Response(
+                {'error': str(e), 'message': f'Error creating budget: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['get'])
     def summary(self, request, pk=None):

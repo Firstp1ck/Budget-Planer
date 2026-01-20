@@ -68,13 +68,17 @@ WSGI_APPLICATION = 'config.wsgi.application'
 database_path = os.getenv('DATABASE_PATH')
 if database_path:
     db_name = Path(database_path)
+    # Ensure the directory exists (important for Windows paths)
+    db_dir = db_name.parent
+    if db_dir:
+        db_dir.mkdir(parents=True, exist_ok=True)
 else:
     db_name = BASE_DIR / 'db.sqlite3'
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': db_name,
+        'NAME': str(db_name),  # Convert to string for better Windows compatibility
     }
 }
 
