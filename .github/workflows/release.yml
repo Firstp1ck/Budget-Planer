@@ -107,13 +107,16 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
-      - name: Upload Linux binary
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: budget-planer-linux
           path: |
             frontend/src-tauri/target/release/budget-planer
-            frontend/src-tauri/target/release/bundle/deb/*.deb
+            frontend/src-tauri/target/release/bundle/**/*.deb
+            frontend/src-tauri/target/release/bundle/**/*.AppImage
+            frontend/src-tauri/target/release/bundle/**/*.rpm
+          if-no-files-found: warn
 
   build-windows:
     name: Build Windows
@@ -179,7 +182,8 @@ jobs:
           name: budget-planer-windows
           path: |
             frontend/src-tauri/target/release/budget-planer.exe
-            frontend/src-tauri/target/release/bundle/
+            frontend/src-tauri/target/release/bundle/**/*.msi
+            frontend/src-tauri/target/release/bundle/**/*.exe
           if-no-files-found: warn
 
   build-macos:
@@ -249,7 +253,9 @@ jobs:
           name: budget-planer-macos
           path: |
             frontend/src-tauri/target/release/budget-planer
-            frontend/src-tauri/target/release/bundle/
+            frontend/src-tauri/target/release/bundle/**/*.dmg
+            frontend/src-tauri/target/release/bundle/**/*.app
+            frontend/src-tauri/target/release/bundle/**/*.pkg
           if-no-files-found: warn
 
   publish-release:
@@ -282,60 +288,64 @@ jobs:
           # Create a clean release directory
           mkdir -p release_artifacts
           
-          # Linux: Copy binary and DEB package only
+          # Linux: Copy binary and all bundle types (search recursively)
           if [ -f "artifacts/linux/budget-planer" ]; then
             cp artifacts/linux/budget-planer release_artifacts/budget-planer-linux
             echo "✓ Added Linux binary"
           fi
-          if ls artifacts/linux/*.deb 1> /dev/null 2>&1; then
-            cp artifacts/linux/*.deb release_artifacts/
-            echo "✓ Added Linux DEB package(s)"
-          fi
+          find artifacts/linux -name "*.deb" -type f 2>/dev/null | while read -r file; do
+            cp "$file" release_artifacts/
+            echo "✓ Added Linux DEB package: $(basename "$file")"
+          done
+          find artifacts/linux -name "*.AppImage" -type f 2>/dev/null | while read -r file; do
+            cp "$file" release_artifacts/
+            echo "✓ Added Linux AppImage: $(basename "$file")"
+          done
+          find artifacts/linux -name "*.rpm" -type f 2>/dev/null | while read -r file; do
+            cp "$file" release_artifacts/
+            echo "✓ Added Linux RPM package: $(basename "$file")"
+          done
           
-          # Windows: Copy binary and installers only
+          # Windows: Copy binary and installers (search recursively)
           if [ -f "artifacts/windows/budget-planer.exe" ]; then
             cp artifacts/windows/budget-planer.exe release_artifacts/budget-planer-windows.exe
             echo "✓ Added Windows binary"
           fi
-          if ls artifacts/windows/*.msi 1> /dev/null 2>&1; then
-            cp artifacts/windows/*.msi release_artifacts/
-            echo "✓ Added Windows MSI installer(s)"
-          fi
-          if ls artifacts/windows/*.exe 1> /dev/null 2>&1; then
+          find artifacts/windows -name "*.msi" -type f 2>/dev/null | while read -r file; do
+            cp "$file" release_artifacts/
+            echo "✓ Added Windows MSI installer: $(basename "$file")"
+          done
+          find artifacts/windows -name "*.exe" -type f 2>/dev/null | while read -r file; do
             # Exclude the main binary (already copied as budget-planer-windows.exe)
-            for exe in artifacts/windows/*.exe; do
-              if [ "$(basename "$exe")" != "budget-planer.exe" ]; then
-                cp "$exe" release_artifacts/
-                echo "✓ Added Windows installer: $(basename "$exe")"
-              fi
-            done
-          fi
+            if [ "$(basename "$file")" != "budget-planer.exe" ]; then
+              cp "$file" release_artifacts/
+              echo "✓ Added Windows installer: $(basename "$file")"
+            fi
+          done
           
-          # macOS: Copy binary, DMG, and app bundle only
+          # macOS: Copy binary, DMG, app bundle, and PKG (search recursively)
           if [ -f "artifacts/macos/budget-planer" ]; then
             cp artifacts/macos/budget-planer release_artifacts/budget-planer-macos
             echo "✓ Added macOS binary"
           fi
-          if ls artifacts/macos/*.dmg 1> /dev/null 2>&1; then
-            cp artifacts/macos/*.dmg release_artifacts/
-            echo "✓ Added macOS DMG(s)"
-          fi
-          # macOS: Look for app bundle (handle spaces in name)
-          if [ -d "artifacts/macos/Budget Planer.app" ]; then
+          find artifacts/macos -name "*.dmg" -type f 2>/dev/null | while read -r file; do
+            cp "$file" release_artifacts/
+            echo "✓ Added macOS DMG: $(basename "$file")"
+          done
+          find artifacts/macos -name "*.pkg" -type f 2>/dev/null | while read -r file; do
+            cp "$file" release_artifacts/
+            echo "✓ Added macOS PKG installer: $(basename "$file")"
+          done
+          # macOS: Look for app bundle (handle spaces in name, search recursively)
+          RELEASE_DIR="$PWD/release_artifacts"
+          find artifacts/macos -name "*.app" -type d 2>/dev/null | while read -r app; do
+            app_name=$(basename "$app" .app)
+            app_dir=$(dirname "$app")
+            app_basename=$(basename "$app")
             # Create a zip of the app bundle for easier distribution
-            cd artifacts/macos
-            zip -r ../../release_artifacts/Budget-Planer-macos.zip "Budget Planer.app" > /dev/null 2>&1
-            cd ../..
-            echo "✓ Added macOS app bundle (as zip)"
-          elif ls artifacts/macos/*.app 1> /dev/null 2>&1; then
-            # Fallback: any .app bundle
-            cd artifacts/macos
-            for app in *.app; do
-              zip -r "../../release_artifacts/$(basename "$app" .app)-macos.zip" "$app" > /dev/null 2>&1
-              echo "✓ Added macOS app bundle: $app (as zip)"
-            done
-            cd ../..
-          fi
+            (cd "$app_dir" && zip -r "$RELEASE_DIR/${app_name}-macos.zip" "$app_basename" > /dev/null 2>&1)
+            echo "✓ Added macOS app bundle: $app_basename (as zip)"
+          done
           
           echo ""
           echo "=== Release artifacts ready ==="
