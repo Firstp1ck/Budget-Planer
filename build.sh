@@ -215,6 +215,16 @@ if [ "$BUILD_BACKEND" = true ]; then
                 print_warning "Dist directory does not exist"
             fi
         fi
+        
+        # Copy backend executable to Tauri resources directory and ensure it's executable
+        if [ -f "$EXE_PATH" ]; then
+            RESOURCES_DIR="$FRONTEND_DIR/src-tauri/resources"
+            mkdir -p "$RESOURCES_DIR"
+            print_info "Copying backend executable to Tauri resources..."
+            cp "$EXE_PATH" "$RESOURCES_DIR/"
+            chmod +x "$RESOURCES_DIR/$(basename "$EXE_PATH")"
+            print_success "Backend executable copied to resources with execute permissions"
+        fi
     else
         print_error "PyInstaller build failed. The app will fall back to using Python if available"
         print_info "Check the output above for error details"

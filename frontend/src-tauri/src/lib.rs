@@ -423,34 +423,117 @@ fn start_backend_server(
   let exe_path = std::env::current_exe().ok();
   let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
   
-  let mut possible_exe_paths: Vec<PathBuf> = vec![
-    backend_path.join("dist").join("backend-server.exe"),
-    backend_path.join("dist").join("backend-server"),
-  ];
+  // Build list of possible executable paths, prioritizing platform-specific executables
+  let mut possible_exe_paths: Vec<PathBuf> = vec![];
+  
+  // Platform-specific executable names (check platform-specific first)
+  #[cfg(windows)]
+  {
+    possible_exe_paths.push(backend_path.join("dist").join("backend-server.exe"));
+    possible_exe_paths.push(backend_path.join("dist").join("backend-server"));
+  }
+  
+  #[cfg(not(windows))]
+  {
+    possible_exe_paths.push(backend_path.join("dist").join("backend-server"));
+    possible_exe_paths.push(backend_path.join("dist").join("backend-server.exe"));
+  }
   
   // Try Tauri resource resolution (for bundled resources)
   if let Ok(resource_dir) = app.path().resource_dir() {
-    possible_exe_paths.push(resource_dir.join("backend-server.exe"));
-    possible_exe_paths.push(resource_dir.join("backend-server"));
+    #[cfg(windows)]
+    {
+      possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+      possible_exe_paths.push(resource_dir.join("backend-server"));
+    }
+    #[cfg(not(windows))]
+    {
+      possible_exe_paths.push(resource_dir.join("backend-server"));
+      possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+    }
   }
   
   // Add paths relative to executable (fallback)
   if let Some(exe_dir) = exe_dir {
-    possible_exe_paths.push(exe_dir.join("backend-server.exe"));
-    possible_exe_paths.push(exe_dir.join("backend-server"));
-    possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
-    possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+    #[cfg(windows)]
+    {
+      possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+      possible_exe_paths.push(exe_dir.join("backend-server"));
+      possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+      possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+    }
+    #[cfg(not(windows))]
+    {
+      possible_exe_paths.push(exe_dir.join("backend-server"));
+      possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+      possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+      possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+    }
+    
     // Also check parent directories (for nested bundle structures)
     if let Some(parent) = exe_dir.parent() {
-      possible_exe_paths.push(parent.join("backend-server.exe"));
-      possible_exe_paths.push(parent.join("backend-server"));
+      #[cfg(windows)]
+      {
+        possible_exe_paths.push(parent.join("backend-server.exe"));
+        possible_exe_paths.push(parent.join("backend-server"));
+      }
+      #[cfg(not(windows))]
+      {
+        possible_exe_paths.push(parent.join("backend-server"));
+        possible_exe_paths.push(parent.join("backend-server.exe"));
+      }
     }
   }
   
-  let backend_exe = possible_exe_paths.iter().find(|p| p.exists()).cloned();
+  // Find the first existing executable, filtering out placeholders (very small files)
+  let backend_exe = possible_exe_paths.iter().find(|p| {
+    if !p.exists() {
+      return false;
+    }
+    
+    // On non-Windows, skip .exe files (they're Windows executables)
+    #[cfg(not(windows))]
+    {
+      if p.file_name().and_then(|n| n.to_str()).map(|s| s.ends_with(".exe")).unwrap_or(false) {
+        return false;
+      }
+    }
+    
+    // Filter out placeholder files (very small files < 1KB are likely placeholders)
+    if let Ok(metadata) = std::fs::metadata(p) {
+      let size = metadata.len();
+      if size < 1024 {
+        warn!("Skipping potential placeholder file: {:?} (size: {} bytes)", p, size);
+        return false;
+      }
+    }
+    
+    true
+  }).cloned();
   
   if let Some(exe_path) = backend_exe {
     info!("Found bundled backend executable: {:?}", exe_path);
+    
+    // On Unix systems, ensure the executable has execute permissions
+    #[cfg(not(windows))]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      if let Ok(metadata) = std::fs::metadata(&exe_path) {
+        let mut perms = metadata.permissions();
+        let mode = perms.mode();
+        // Check if execute bit is set for owner, group, or others
+        if mode & 0o111 == 0 {
+          warn!("Backend executable does not have execute permissions, attempting to fix...");
+          perms.set_mode(mode | 0o111); // Add execute permissions for all
+          if let Err(e) = std::fs::set_permissions(&exe_path, perms) {
+            error!("Failed to set execute permissions on backend executable: {}", e);
+            return Err(format!("Backend executable at {:?} does not have execute permissions and could not be fixed: {}", exe_path, e).into());
+          } else {
+            info!("Successfully set execute permissions on backend executable");
+          }
+        }
+      }
+    }
     
     // Run migrations in background
     let exe_path_clone = exe_path.clone();
@@ -848,6 +931,41 @@ pub fn run() {
         
         let mut possible_exe_paths: Vec<PathBuf> = vec![];
         
+        // First, check backend/dist directory (development build location)
+        // Try to find the project root by going up from executable directory
+        let mut check_backend_dist = |base_dir: &std::path::Path| {
+          // Try various relative paths to find backend/dist
+          let candidates = vec![
+            base_dir.join("backend").join("dist"),
+            base_dir.join("..").join("backend").join("dist"),
+            base_dir.join("../..").join("backend").join("dist"),
+            base_dir.join("../../..").join("backend").join("dist"),
+            base_dir.join("../../../..").join("backend").join("dist"),
+          ];
+          
+          for backend_dist in candidates {
+            let backend_dist = backend_dist.canonicalize().unwrap_or(backend_dist);
+            #[cfg(windows)]
+            {
+              possible_exe_paths.push(backend_dist.join("backend-server.exe"));
+              possible_exe_paths.push(backend_dist.join("backend-server"));
+            }
+            #[cfg(not(windows))]
+            {
+              possible_exe_paths.push(backend_dist.join("backend-server"));
+              possible_exe_paths.push(backend_dist.join("backend-server.exe"));
+            }
+          }
+        };
+        
+        // Check from executable directory
+        check_backend_dist(exe_dir);
+        
+        // Also check from current working directory (for development)
+        if let Ok(current_dir) = std::env::current_dir() {
+          check_backend_dist(&current_dir);
+        }
+        
         // Try Tauri resource resolution (for bundled resources)
         match app_handle.path().resource_dir() {
           Ok(resource_dir) => {
@@ -863,8 +981,17 @@ pub fn run() {
             } else {
               warn!("Resource directory does not exist: {:?}", resource_dir);
             }
-            possible_exe_paths.push(resource_dir.join("backend-server.exe"));
-            possible_exe_paths.push(resource_dir.join("backend-server"));
+            // Prioritize platform-specific executables
+            #[cfg(windows)]
+            {
+              possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+              possible_exe_paths.push(resource_dir.join("backend-server"));
+            }
+            #[cfg(not(windows))]
+            {
+              possible_exe_paths.push(resource_dir.join("backend-server"));
+              possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+            }
           }
           Err(e) => {
             warn!("Could not resolve resource directory: {}", e);
@@ -874,13 +1001,24 @@ pub fn run() {
         // Also try resolving the resource directly using Tauri's resolve method
         // This might work better in some bundle configurations
         // Note: In Tauri v2, resolve might work differently, so we try both approaches
-        if let Ok(resource_path) = app_handle.path().resolve("backend-server", tauri::path::BaseDirectory::Resource) {
-          info!("Resolved resource path (backend-server): {:?}", resource_path);
-          possible_exe_paths.push(resource_path);
+        // Prioritize platform-specific executables
+        #[cfg(not(windows))]
+        {
+          if let Ok(resource_path) = app_handle.path().resolve("backend-server", tauri::path::BaseDirectory::Resource) {
+            info!("Resolved resource path (backend-server): {:?}", resource_path);
+            possible_exe_paths.push(resource_path);
+          }
         }
-        if let Ok(resource_path) = app_handle.path().resolve("backend-server.exe", tauri::path::BaseDirectory::Resource) {
-          info!("Resolved resource path (backend-server.exe): {:?}", resource_path);
-          possible_exe_paths.push(resource_path);
+        #[cfg(windows)]
+        {
+          if let Ok(resource_path) = app_handle.path().resolve("backend-server.exe", tauri::path::BaseDirectory::Resource) {
+            info!("Resolved resource path (backend-server.exe): {:?}", resource_path);
+            possible_exe_paths.push(resource_path);
+          }
+          if let Ok(resource_path) = app_handle.path().resolve("backend-server", tauri::path::BaseDirectory::Resource) {
+            info!("Resolved resource path (backend-server): {:?}", resource_path);
+            possible_exe_paths.push(resource_path);
+          }
         }
         
         // For Linux AppImages, resources might be in a different location
@@ -911,10 +1049,21 @@ pub fn run() {
         
         // Add paths relative to executable (fallback)
         // For standalone binaries, resources might be next to the executable
-        possible_exe_paths.push(exe_dir.join("backend-server.exe"));
-        possible_exe_paths.push(exe_dir.join("backend-server"));
-        possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
-        possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+        // Prioritize platform-specific executables
+        #[cfg(windows)]
+        {
+          possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+          possible_exe_paths.push(exe_dir.join("backend-server"));
+          possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+          possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+        }
+        #[cfg(not(windows))]
+        {
+          possible_exe_paths.push(exe_dir.join("backend-server"));
+          possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+          possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+          possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+        }
         
         // For Linux, also check lib and share directories relative to executable
         // This is common for Linux applications and standalone binaries
@@ -928,10 +1077,20 @@ pub fn run() {
         
         // Also check parent directories (for nested bundle structures)
         if let Some(parent) = exe_dir.parent() {
-          possible_exe_paths.push(parent.join("backend-server.exe"));
-          possible_exe_paths.push(parent.join("backend-server"));
-          possible_exe_paths.push(parent.join("resources").join("backend-server.exe"));
-          possible_exe_paths.push(parent.join("resources").join("backend-server"));
+          #[cfg(windows)]
+          {
+            possible_exe_paths.push(parent.join("backend-server.exe"));
+            possible_exe_paths.push(parent.join("backend-server"));
+            possible_exe_paths.push(parent.join("resources").join("backend-server.exe"));
+            possible_exe_paths.push(parent.join("resources").join("backend-server"));
+          }
+          #[cfg(not(windows))]
+          {
+            possible_exe_paths.push(parent.join("backend-server"));
+            possible_exe_paths.push(parent.join("backend-server.exe"));
+            possible_exe_paths.push(parent.join("resources").join("backend-server"));
+            possible_exe_paths.push(parent.join("resources").join("backend-server.exe"));
+          }
           
           #[cfg(target_os = "linux")]
           {
@@ -947,7 +1106,31 @@ pub fn run() {
           info!("  {:?} - {}", path, if exists { "EXISTS" } else { "not found" });
         }
         
-        let bundled_exe = possible_exe_paths.iter().find(|p| p.exists()).cloned();
+        // Find the first existing executable, filtering out placeholders and platform-incompatible files
+        let bundled_exe = possible_exe_paths.iter().find(|p| {
+          if !p.exists() {
+            return false;
+          }
+          
+          // On non-Windows, skip .exe files (they're Windows executables)
+          #[cfg(not(windows))]
+          {
+            if p.file_name().and_then(|n| n.to_str()).map(|s| s.ends_with(".exe")).unwrap_or(false) {
+              return false;
+            }
+          }
+          
+          // Filter out placeholder files (very small files < 1KB are likely placeholders)
+          if let Ok(metadata) = std::fs::metadata(p) {
+            let size = metadata.len();
+            if size < 1024 {
+              warn!("Skipping potential placeholder file: {:?} (size: {} bytes)", p, size);
+              return false;
+            }
+          }
+          
+          true
+        }).cloned();
         
         // If bundled executable found, use it directly
         if let Some(exe_path) = bundled_exe {
