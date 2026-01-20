@@ -4,6 +4,53 @@ use std::sync::Mutex;
 use log::{info, warn, error};
 use tauri::Manager;
 
+/// Kill the backend process and wait for it to terminate
+fn kill_backend_process(child: &mut Child) {
+  info!("Stopping backend server (PID: {:?})...", child.id());
+  
+  // Try to kill the process
+  if let Err(e) = child.kill() {
+    warn!("Failed to kill backend process: {}", e);
+  }
+  
+  // Wait for the process to terminate with a timeout
+  let timeout = std::time::Duration::from_secs(5);
+  let start = std::time::Instant::now();
+  
+  while start.elapsed() < timeout {
+    match child.try_wait() {
+      Ok(Some(status)) => {
+        info!("Backend server terminated with status: {:?}", status);
+        return;
+      }
+      Ok(None) => {
+        // Process still running, wait a bit
+        std::thread::sleep(std::time::Duration::from_millis(100));
+      }
+      Err(e) => {
+        warn!("Error waiting for backend process: {}", e);
+        return;
+      }
+    }
+  }
+  
+  // If we get here, the process didn't terminate in time
+  warn!("Backend process did not terminate within timeout, trying forceful termination");
+  
+  // On Windows, try using taskkill as a fallback to kill the process tree
+  #[cfg(windows)]
+  {
+    let pid = child.id();
+    let _ = Command::new("taskkill")
+      .args(&["/F", "/T", "/PID", &pid.to_string()])
+      .output();
+  }
+  
+  // Final wait attempt
+  let _ = child.wait();
+  info!("Backend server cleanup completed");
+}
+
 /// Initialize the database by checking if it exists and running migrations if needed
 fn initialize_database(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
   // Get the app data directory
@@ -352,15 +399,12 @@ pub fn run() {
       Ok(())
     })
     .on_window_event(|app, event| {
-      // Cleanup backend process when last window closes
+      // Cleanup backend process when window closes
       if let tauri::WindowEvent::CloseRequested { .. } = event {
         if let Some(state) = app.try_state::<Mutex<Option<Child>>>() {
           if let Ok(mut process) = state.lock() {
             if let Some(mut child) = process.take() {
-              info!("Stopping backend server...");
-              let _ = child.kill();
-              let _ = child.wait();
-              info!("Backend server stopped");
+              kill_backend_process(&mut child);
             }
           }
         }
@@ -371,9 +415,17 @@ pub fn run() {
       eprintln!("Fatal error starting Tauri application: {}", e);
       std::process::exit(1);
     })
-    .run(|_app, event| {
+    .run(|app, event| {
       if let tauri::RunEvent::ExitRequested { .. } = event {
-        eprintln!("App exit requested");
+        info!("App exit requested, cleaning up backend process...");
+        // Cleanup backend process on app exit
+        if let Some(state) = app.try_state::<Mutex<Option<Child>>>() {
+          if let Ok(mut process) = state.lock() {
+            if let Some(mut child) = process.take() {
+              kill_backend_process(&mut child);
+            }
+          }
+        }
       }
     });
 }
