@@ -240,7 +240,19 @@ jobs:
 
       - name: Build Tauri app
         working-directory: frontend
-        run: bunx tauri build
+        run: |
+          # Build the app - DMG may fail due to AppleScript permissions in CI, but app bundle should succeed
+          bunx tauri build || {
+            echo "Build completed with warnings/errors. Checking for app bundle..."
+            # Check if app bundle was created despite DMG failure
+            if [ -d "src-tauri/target/release/bundle/macos/Budget Planer.app" ]; then
+              echo "✓ App bundle created successfully (DMG may have failed)"
+              exit 0
+            else
+              echo "✗ App bundle not found - build failed"
+              exit 1
+            fi
+          }
         # Optional: Set these secrets in GitHub Settings → Secrets for code signing
         # If not set, Tauri will build without signing (linter warnings are expected)
         env:
