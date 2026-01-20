@@ -81,14 +81,19 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# Check if there are uncommitted changes
-if ! git diff-index --quiet HEAD --; then
-    print_warning "You have uncommitted changes"
-    read -p "Do you want to continue anyway? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Release cancelled"
-        exit 0
+# Check if there are uncommitted changes (only tracked files, ignore untracked)
+# Use git status --porcelain to check for actual changes (returns empty if clean)
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+    # Filter out untracked files (lines starting with ??)
+    TRACKED_CHANGES=$(git status --porcelain 2>/dev/null | grep -v '^??' || true)
+    if [ -n "$TRACKED_CHANGES" ]; then
+        print_warning "You have uncommitted changes in tracked files"
+        read -p "Do you want to continue anyway? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Release cancelled"
+            exit 0
+        fi
     fi
 fi
 

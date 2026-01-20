@@ -70,20 +70,19 @@ try {
     exit 1
 }
 
-# Check if there are uncommitted changes
-$UncommittedChanges = $false
-try {
-    $null = git diff-index --quiet HEAD -- 2>&1
-} catch {
-    $UncommittedChanges = $true
-}
-
-if ($UncommittedChanges) {
-    Write-Warning "You have uncommitted changes"
-    $Response = Read-Host "Do you want to continue anyway? (y/N)"
-    if ($Response -notmatch '^[Yy]$') {
-        Write-Info "Release cancelled"
-        exit 0
+# Check if there are uncommitted changes (only tracked files, ignore untracked)
+# Use git status --porcelain to check for actual changes
+$StatusOutput = git status --porcelain 2>&1
+if ($StatusOutput) {
+    # Filter out untracked files (lines starting with ??)
+    $TrackedChanges = $StatusOutput | Where-Object { $_ -notmatch '^\?\?' }
+    if ($TrackedChanges) {
+        Write-Warning "You have uncommitted changes in tracked files"
+        $Response = Read-Host "Do you want to continue anyway? (y/N)"
+        if ($Response -notmatch '^[Yy]$') {
+            Write-Info "Release cancelled"
+            exit 0
+        }
     }
 }
 
