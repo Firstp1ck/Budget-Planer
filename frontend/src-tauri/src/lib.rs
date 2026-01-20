@@ -218,14 +218,232 @@ fn initialize_database(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error:
   Ok(())
 }
 
+/// Check if Python dependencies are installed in virtual environment
+/// Returns true if Django can be imported
+fn check_backend_dependencies(python_cmd: &PathBuf) -> bool {
+  let mut check_cmd = Command::new(python_cmd);
+  check_cmd.arg("-c");
+  check_cmd.arg("import django; print(django.__version__)");
+  check_cmd.stdout(Stdio::null());
+  check_cmd.stderr(Stdio::null());
+  
+  #[cfg(windows)]
+  {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    check_cmd.creation_flags(CREATE_NO_WINDOW);
+  }
+  
+  check_cmd.output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+/// Setup backend virtual environment and install dependencies
+/// Returns true if setup was successful
+fn setup_backend_dependencies(backend_path: &PathBuf, python_cmd: &PathBuf) -> bool {
+  info!("Setting up backend dependencies...");
+  
+  // Check if virtual environment exists
+  let venv_python_windows = backend_path.join(".venv").join("Scripts").join("python.exe");
+  let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
+  
+  let venv_exists = venv_python_windows.exists() || venv_python_unix.exists();
+  
+  if !venv_exists {
+    info!("Creating virtual environment...");
+    let mut venv_cmd = Command::new(python_cmd);
+    venv_cmd.arg("-m");
+    venv_cmd.arg("venv");
+    venv_cmd.arg(".venv");
+    venv_cmd.current_dir(backend_path);
+    venv_cmd.stdout(Stdio::null());
+    venv_cmd.stderr(Stdio::null());
+    
+    #[cfg(windows)]
+    {
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
+      venv_cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    
+    if venv_cmd.output().is_err() {
+      warn!("Failed to create virtual environment");
+      return false;
+    }
+  }
+  
+  // Use venv Python for pip install
+  let venv_python = if venv_python_windows.exists() {
+    venv_python_windows
+  } else if venv_python_unix.exists() {
+    venv_python_unix
+  } else {
+    warn!("Virtual environment Python not found after creation");
+    return false;
+  };
+  
+  // Install dependencies
+  info!("Installing Python dependencies...");
+  let requirements_file = backend_path.join("requirements.txt");
+  if !requirements_file.exists() {
+    warn!("requirements.txt not found at {:?}", requirements_file);
+    return false;
+  }
+  
+  let mut pip_cmd = Command::new(&venv_python);
+  pip_cmd.arg("-m");
+  pip_cmd.arg("pip");
+  pip_cmd.arg("install");
+  pip_cmd.arg("-r");
+  pip_cmd.arg("requirements.txt");
+  pip_cmd.current_dir(backend_path);
+  pip_cmd.stdout(Stdio::null());
+  pip_cmd.stderr(Stdio::null());
+  
+  #[cfg(windows)]
+  {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    pip_cmd.creation_flags(CREATE_NO_WINDOW);
+  }
+  
+  match pip_cmd.output() {
+    Ok(output) => {
+      if output.status.success() {
+        info!("Dependencies installed successfully");
+        true
+      } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        warn!("Failed to install dependencies: {}", stderr);
+        false
+      }
+    }
+    Err(e) => {
+      warn!("Error installing dependencies: {}", e);
+      false
+    }
+  }
+}
+
 /// Start the Django backend server
 /// Returns immediately after spawning the process without blocking on server readiness
 /// The frontend will handle retries if the server isn't ready immediately
+/// 
+/// This function first tries to use a bundled backend executable (from PyInstaller),
+/// and falls back to Python if the executable is not found.
 fn start_backend_server(
+  app: &tauri::AppHandle,
   backend_path: &PathBuf,
   db_path: &PathBuf,
 ) -> Result<Child, Box<dyn std::error::Error>> {
   info!("Starting Django backend server...");
+  
+  // First, try to find bundled backend executable (PyInstaller bundle)
+  // Check multiple possible locations:
+  // 1. In backend/dist (development build)
+  // 2. Using Tauri's resource resolution (bundled resources)
+  // 3. Next to the executable (fallback)
+  let exe_path = std::env::current_exe().ok();
+  let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
+  
+  let mut possible_exe_paths: Vec<PathBuf> = vec![
+    backend_path.join("dist").join("backend-server.exe"),
+    backend_path.join("dist").join("backend-server"),
+  ];
+  
+  // Try Tauri resource resolution (for bundled resources)
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+    possible_exe_paths.push(resource_dir.join("backend-server"));
+  }
+  
+  // Add paths relative to executable (fallback)
+  if let Some(exe_dir) = exe_dir {
+    possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+    possible_exe_paths.push(exe_dir.join("backend-server"));
+    possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+    possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+    // Also check parent directories (for nested bundle structures)
+    if let Some(parent) = exe_dir.parent() {
+      possible_exe_paths.push(parent.join("backend-server.exe"));
+      possible_exe_paths.push(parent.join("backend-server"));
+    }
+  }
+  
+  let backend_exe = possible_exe_paths.iter().find(|p| p.exists()).cloned();
+  
+  if let Some(exe_path) = backend_exe {
+    info!("Found bundled backend executable: {:?}", exe_path);
+    
+    // Run migrations in background
+    let exe_path_clone = exe_path.clone();
+    let db_path_clone = db_path.clone();
+    std::thread::spawn(move || {
+      info!("Running database migrations in background...");
+      let mut migrate_cmd = Command::new(&exe_path_clone);
+      migrate_cmd.arg("--migrate");
+      migrate_cmd.arg("--database-path");
+      migrate_cmd.arg(db_path_clone.to_string_lossy().to_string());
+      
+      #[cfg(windows)]
+      {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        migrate_cmd.creation_flags(CREATE_NO_WINDOW);
+      }
+      
+      migrate_cmd.stdout(Stdio::null());
+      migrate_cmd.stderr(Stdio::null());
+      
+      match migrate_cmd.output() {
+        Ok(output) => {
+          if output.status.success() {
+            info!("Database migrations completed successfully");
+          } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            warn!("Migration failed. stderr: {}", stderr);
+          }
+        }
+        Err(e) => {
+          warn!("Could not run migrations: {}. Server is running anyway.", e);
+        }
+      }
+    });
+    
+    // Start the server
+    let mut cmd = Command::new(&exe_path);
+    cmd.arg("--host");
+    cmd.arg("127.0.0.1");
+    cmd.arg("--port");
+    cmd.arg("8000");
+    cmd.arg("--database-path");
+    cmd.arg(db_path.to_string_lossy().to_string());
+    
+    #[cfg(windows)]
+    {
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
+      cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    
+    let mut child = cmd.spawn()?;
+    info!("Backend server started with PID: {:?}", child.id());
+    
+    match child.try_wait() {
+      Ok(Some(status)) => {
+        return Err(format!("Backend server exited immediately with status: {:?}", status).into());
+      }
+      Ok(None) => {
+        info!("Backend server process is running");
+      }
+      Err(e) => {
+        return Err(format!("Error checking backend server status: {}", e).into());
+      }
+    }
+    
+    return Ok(child);
+  }
+  
+  // Fallback to Python if executable not found
+  warn!("Bundled backend executable not found, falling back to Python...");
+  info!("To use bundled backend, run: .\\build.ps1 (Windows) or ./build.sh (Linux/macOS) from the project root");
   
   // Try to find Python in virtual environment first, then system Python
   let python_cmd = {
@@ -256,10 +474,23 @@ fn start_backend_server(
       } else if check_python("python") {
         PathBuf::from("python")
       } else {
-        return Err("Python not found".into());
+        return Err("Python not found. Please install Python 3.10+ from https://www.python.org/downloads/ and run setup-backend.ps1, or build the app with build.ps1 to create a bundled backend executable".into());
       }
     }
   };
+  
+  // Check if dependencies are installed
+  if !check_backend_dependencies(&python_cmd) {
+    warn!("Backend dependencies not found. Attempting to set up automatically...");
+    if !setup_backend_dependencies(backend_path, &python_cmd) {
+      return Err(format!(
+        "Backend dependencies are not installed. Please run setup-backend.ps1 from the project root directory, or build the app with build.ps1 to create a bundled backend executable.\n\
+        Backend path: {:?}\n\
+        Python command: {:?}",
+        backend_path, python_cmd
+      ).into());
+    }
+  }
   
   // Run migrations in background - don't block server startup
   // Migrations will run concurrently with server startup
@@ -435,26 +666,39 @@ pub fn run() {
         
         // Start backend server if found - don't fail if this doesn't work
         if let Some(backend_path) = backend_path {
-          match start_backend_server(&backend_path, &db_path_clone) {
+          match start_backend_server(&app_handle, &backend_path, &db_path_clone) {
             Ok(child) => {
               // Store process in app state
               if let Some(state) = app_handle.try_state::<Mutex<Option<Child>>>() {
                 if let Ok(mut process) = state.lock() {
                   *process = Some(child);
-                  eprintln!("Backend server started successfully");
+                  info!("Backend server started successfully");
                 } else {
-                  eprintln!("Warning: Could not store backend process in app state");
+                  warn!("Could not store backend process in app state");
                 }
               }
             }
             Err(e) => {
-              eprintln!("Failed to start backend server: {}", e);
-              eprintln!("Backend server not started. API calls will fail.");
+              error!("Failed to start backend server: {}", e);
+              error!("Backend server not started. API calls will fail.");
+              error!("");
+              error!("To fix this issue:");
+              error!("1. Make sure Python 3.10+ is installed (https://www.python.org/downloads/)");
+              error!("2. Run setup-backend.ps1 from the project root directory");
+              error!("3. Make sure the backend directory exists at: {:?}", backend_path);
             }
           }
         } else {
-          eprintln!("Backend directory not found. Backend server not started.");
-          eprintln!("Searched in: {:?}", possible_backend_paths);
+          error!("Backend directory not found. Backend server not started.");
+          error!("Searched in the following locations:");
+          for path in &possible_backend_paths {
+            error!("  - {:?}", path);
+          }
+          error!("");
+          error!("To fix this issue:");
+          error!("1. Make sure the backend directory exists");
+          error!("2. If this is a packaged app, the backend needs to be bundled with the application");
+          error!("3. For development, make sure you're running from the project root");
         }
       });
       

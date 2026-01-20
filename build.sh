@@ -149,6 +149,54 @@ print_info "Running Django migrations..."
 python manage.py migrate --noinput > /dev/null 2>&1 || print_warning "Migrations may have failed (this is OK if database doesn't exist yet)"
 print_success "Backend setup completed"
 
+# Build backend executable with PyInstaller (optional, but recommended for standalone app)
+print_info "Building backend executable with PyInstaller..."
+if python -c "import PyInstaller" 2>/dev/null; then
+    print_success "PyInstaller is installed"
+else
+    print_info "Installing PyInstaller..."
+    pip install "pyinstaller>=6.0.0" > /dev/null 2>&1
+    print_success "PyInstaller installed"
+fi
+
+# Clean previous builds
+DIST_DIR="$BACKEND_DIR/dist"
+if [ -d "$DIST_DIR" ]; then
+    rm -rf "$DIST_DIR"
+fi
+
+# Build the executable
+print_info "Running PyInstaller..."
+if pyinstaller backend.spec --clean --noconfirm; then
+    # Check for executable (Windows uses .exe, Unix doesn't)
+    if [ "$PLATFORM" == "windows" ]; then
+        EXE_PATH="$DIST_DIR/backend-server.exe"
+    else
+        EXE_PATH="$DIST_DIR/backend-server"
+    fi
+    
+    if [ -f "$EXE_PATH" ]; then
+        print_success "Backend executable built successfully!"
+        if command_exists du; then
+            EXE_SIZE=$(du -h "$EXE_PATH" | cut -f1)
+            print_info "Executable: $EXE_PATH ($EXE_SIZE)"
+        else
+            print_info "Executable: $EXE_PATH"
+        fi
+    else
+        print_warning "Backend executable build completed but file not found at expected location: $EXE_PATH"
+        print_info "Checking dist directory contents..."
+        if [ -d "$DIST_DIR" ]; then
+            ls -la "$DIST_DIR" 2>/dev/null || print_warning "Could not list dist directory"
+        else
+            print_warning "Dist directory does not exist"
+        fi
+    fi
+else
+    print_error "PyInstaller build failed. The app will fall back to using Python if available"
+    print_info "Check the output above for error details"
+fi
+
 # Setup frontend
 print_info "Setting up frontend..."
 cd "$FRONTEND_DIR"

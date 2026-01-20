@@ -64,6 +64,32 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup backend
+        working-directory: backend
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Build backend executable
+        working-directory: backend
+        run: |
+          source .venv/bin/activate
+          pyinstaller backend.spec --clean --noconfirm
+
+      - name: Copy backend executable for Tauri (Linux)
+        run: |
+          mkdir -p frontend/src-tauri/resources
+          if [ -f "backend/dist/backend-server" ]; then
+            cp backend/dist/backend-server frontend/src-tauri/resources/
+            chmod +x frontend/src-tauri/resources/backend-server
+          fi
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: bun install
@@ -106,6 +132,29 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup backend
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          .venv\Scripts\activate
+          pip install -r requirements.txt
+
+      - name: Build backend executable
+        working-directory: backend
+        run: |
+          .venv\Scripts\activate
+          pyinstaller backend.spec --clean --noconfirm
+
+      - name: Copy backend executable for Tauri
+        run: |
+          New-Item -ItemType Directory -Force -Path frontend\src-tauri\resources | Out-Null
+          Copy-Item backend\dist\backend-server.exe frontend\src-tauri\resources\ -ErrorAction SilentlyContinue
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -150,6 +199,32 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup backend
+        working-directory: backend
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Build backend executable
+        working-directory: backend
+        run: |
+          source .venv/bin/activate
+          pyinstaller backend.spec --clean --noconfirm
+
+      - name: Copy backend executable for Tauri (macOS)
+        run: |
+          mkdir -p frontend/src-tauri/resources
+          if [ -f "backend/dist/backend-server" ]; then
+            cp backend/dist/backend-server frontend/src-tauri/resources/
+            chmod +x frontend/src-tauri/resources/backend-server
+          fi
 
       - name: Install frontend dependencies
         working-directory: frontend

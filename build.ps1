@@ -128,6 +128,53 @@ try {
 }
 Write-Success "Backend setup completed"
 
+# Build backend executable with PyInstaller (optional, but recommended for standalone app)
+Write-Info "Building backend executable with PyInstaller..."
+try {
+    # Check if PyInstaller is installed
+    $PyInstallerCheck = & python -c "import PyInstaller; print('ok')" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Info "Installing PyInstaller..."
+        pip install "pyinstaller>=6.0.0" | Out-Null
+        Write-Success "PyInstaller installed"
+    } else {
+        Write-Success "PyInstaller is installed"
+    }
+    
+    # Clean previous builds
+    $DistDir = Join-Path $BackendDir "dist"
+    if (Test-Path $DistDir) {
+        Remove-Item -Path $DistDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    
+    # Build the executable
+    Write-Info "Running PyInstaller..."
+    pyinstaller backend.spec --clean --noconfirm
+    
+    if ($LASTEXITCODE -eq 0) {
+        $ExePath = Join-Path $DistDir "backend-server.exe"
+        if (Test-Path $ExePath) {
+            Write-Success "Backend executable built successfully!"
+            $ExeSize = [math]::Round((Get-Item $ExePath).Length / 1MB, 2)
+            Write-Info "Executable: $ExePath ($ExeSize MB)"
+        } else {
+            Write-Warning "Backend executable build completed but file not found at expected location"
+            Write-Info "Checking dist directory contents..."
+            if (Test-Path $DistDir) {
+                Get-ChildItem -Path $DistDir | ForEach-Object { Write-Info "  - $($_.Name)" }
+            } else {
+                Write-Warning "Dist directory does not exist"
+            }
+        }
+    } else {
+        Write-Error "PyInstaller build failed. The app will fall back to using Python if available"
+        Write-Info "Check the output above for error details"
+    }
+} catch {
+    Write-Warning "Failed to build backend executable: $_"
+    Write-Warning "The app will fall back to using Python if available"
+}
+
 Pop-Location
 
 # Setup frontend

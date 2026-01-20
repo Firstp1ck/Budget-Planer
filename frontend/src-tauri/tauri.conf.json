@@ -42,6 +42,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "resources/backend-server.exe",
+      "resources/backend-server"
+    ],
     "linux": {
       "deb": {
         "depends": []

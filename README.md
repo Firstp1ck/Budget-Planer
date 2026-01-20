@@ -33,32 +33,6 @@ A modern budget planning application with monthly overview, tax calculation, and
 - ✅ **Dark mode** - Full dark mode support for comfortable viewing
 - ✅ **Desktop app** - Native desktop application for Windows, Linux, and macOS (via Tauri)
 
-## Tech Stack
-
-### Backend
-- **Django** 4.2+ - Python web framework
-- **Django REST Framework** - RESTful API
-- **SQLite** - Database (default, can be configured for production)
-- **Python 3.10+** - Runtime
-
-### Frontend
-- **React 19** - UI framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool and dev server
-- **Tailwind CSS** - Styling
-- **Recharts** - Data visualization
-- **React Query** - Data fetching and caching
-- **React Router** - Navigation
-- **React Hook Form + Zod** - Form validation
-
-### Desktop App
-- **Tauri 2** - Native desktop app framework
-- **Rust** - Backend runtime
-
-### Package Managers
-- **uv** - Python package manager
-- **bun** - JavaScript/TypeScript runtime and package manager
-
 ## Quick Start
 
 ### Prerequisites
@@ -96,8 +70,7 @@ A modern budget planning application with monthly overview, tax calculation, and
    - Start both backend and frontend servers
 
 4. **Access the application:**
-   - Frontend: http://localhost:5173
-   - Backend API: http://localhost:8000
+   - Open your browser and go to: http://localhost:5173
 
 5. **Stop the servers:**
    Press `Ctrl+C` in the terminal
@@ -167,95 +140,32 @@ To install dependencies without starting the servers:
 
 ## Desktop Application
 
-The application can be built as a native desktop app using Tauri.
+The application is available as a native desktop app for Windows, Linux, and macOS. Pre-built installers are available in the Releases section of the repository.
 
-### Building the Desktop App
+### Prerequisites
 
-1. **Install Rust** (if not already installed):
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
+**Windows:**
+- Windows 10 or higher
+- WebView2 Runtime (usually pre-installed on Windows 10/11)
 
-2. **Install system dependencies** (platform-specific):
-   
-   **Linux:**
-   ```bash
-   sudo apt-get install -y \
-     libwebkit2gtk-4.1-dev \
-     build-essential \
-     curl \
-     wget \
-     file \
-     libssl-dev \
-     libgtk-3-dev \
-     libayatana-appindicator3-dev \
-     librsvg2-dev
-   ```
-   
-   **Windows:**
-   - Install [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
-   - WebView2 Runtime (usually pre-installed on Windows 10/11)
-   
-   **macOS:**
-   ```bash
-   xcode-select --install
-   ```
+**Linux:**
+- Modern Linux distribution with GTK support
 
-3. **Build the app:**
-   ```bash
-   cd frontend
-   bun install
-   bun run tauri:build
-   ```
+**macOS:**
+- macOS 10.15 or higher
 
-   The built application will be in `frontend/src-tauri/target/release/bundle/`
+### Installation
 
-4. **Development mode:**
-   ```bash
-   cd frontend
-   bun run tauri:dev
-   ```
+1. Download the installer for your platform from the Releases page
+2. Run the installer and follow the setup wizard
+3. Launch the application from your applications menu
 
-For more detailed setup instructions, see [TAURI_SETUP.md](TAURI_SETUP.md).
+### Troubleshooting
 
-## Project Structure
-
-```
-Budget-Planer/
-├── backend/              # Django backend
-│   ├── config/          # Django settings
-│   ├── core/            # Main app with models, views, serializers
-│   ├── manage.py
-│   └── requirements.txt
-├── frontend/            # React frontend
-│   ├── src/
-│   │   ├── components/  # React components
-│   │   ├── contexts/    # React contexts (DarkMode)
-│   │   ├── pages/       # Page components
-│   │   ├── services/    # API service
-│   │   ├── types/       # TypeScript types
-│   │   └── utils/       # Utility functions
-│   ├── src-tauri/       # Tauri desktop app
-│   └── package.json
-├── start.sh             # Startup script
-└── README.md
-```
-
-## API Endpoints
-
-The backend provides a RESTful API at `http://localhost:8000`:
-
-- `GET /api/budgets/` - List all budgets
-- `POST /api/budgets/` - Create a new budget
-- `GET /api/budgets/{id}/` - Get budget details
-- `PUT /api/budgets/{id}/` - Update budget
-- `DELETE /api/budgets/{id}/` - Delete budget
-- `GET /api/budgets/{id}/summary/` - Get budget summary
-- `GET /api/categories/` - List categories
-- `POST /api/categories/` - Create category
-- `GET /api/entries/` - List budget entries
-- `POST /api/entries/` - Create entry
-- And more...
+**Application won't start:**
+- Make sure you have the latest version installed
+- Check that your system meets the minimum requirements
+- Try reinstalling the application
 
 ## Currency Support
 
@@ -266,79 +176,9 @@ The application supports multiple currencies with automatic conversion:
 - **Exchange Rates**: Automatically fetched from [exchangerate-api.com](https://www.exchangerate-api.com/)
 - **Caching**: Exchange rates are cached in localStorage and refreshed daily
 
-## Development
-
-### Backend Development
-
-```bash
-cd backend
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-python manage.py runserver
-```
-
-### Frontend Development
-
-```bash
-cd frontend
-bun install
-bun run dev
-```
-
-### Running Tests
-
-**Backend:**
-```bash
-cd backend
-source .venv/bin/activate
-python manage.py test
-```
-
-**Frontend:**
-```bash
-cd frontend
-bun test  # If tests are configured
-```
-
-## Building for Production
-
-### Web Application
-
-**Backend:**
-```bash
-cd backend
-# Configure production settings
-# Set up production database (PostgreSQL recommended)
-python manage.py collectstatic
-python manage.py migrate
-# Use a production WSGI server (e.g., gunicorn)
-```
-
-**Frontend:**
-```bash
-cd frontend
-bun run build
-# Serve the dist/ directory with a web server
-```
-
-### Desktop Application
-
-The GitHub Actions workflow automatically builds desktop apps for all platforms on release. See `.github/workflows/release.yml` for details.
-
-Manual build:
-```bash
-cd frontend
-bun run tauri:build
-```
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
 
 ## License
 
@@ -350,7 +190,4 @@ For issues, questions, or feature requests, please create an issue in the GitHub
 
 ## Acknowledgments
 
-- Built with [Django](https://www.djangoproject.com/) and [React](https://react.dev/)
-- Desktop app powered by [Tauri](https://tauri.app/)
-- Charts and graphs using [Recharts](https://recharts.org/)
-- Exchange rates from [exchangerate-api.com](https://www.exchangerate-api.com/)
+Exchange rates are provided by [exchangerate-api.com](https://www.exchangerate-api.com/).
