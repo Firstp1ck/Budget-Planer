@@ -14,23 +14,36 @@ function BudgetDashboard() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  // Test backend connection on mount
+  // Test backend connection on mount with retry logic
   useEffect(() => {
-    const testConnection = async () => {
-      try {
-        await budgetApi.health()
-        console.log('Backend connection test: SUCCESS')
-      } catch (error: any) {
-        console.error('Backend connection test: FAILED', error)
-        if (error?.message?.includes('Network Error') || error?.code === 'ERR_NETWORK') {
-          console.error('Backend server is not accessible. Please ensure:')
-          console.error('1. The backend server is running on http://localhost:8000')
-          console.error('2. No firewall is blocking the connection')
-          console.error('3. The Tauri app started the backend server successfully')
+    const testConnection = async (retries = 5, delay = 1000) => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          await budgetApi.health()
+          console.log('Backend connection test: SUCCESS')
+          return
+        } catch (error: any) {
+          console.log(`Backend connection test attempt ${i + 1}/${retries}: FAILED`)
+          if (i < retries - 1) {
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, delay))
+          } else {
+            console.error('Backend connection test: FAILED after all retries', error)
+            if (error?.message?.includes('Network Error') || error?.code === 'ERR_NETWORK') {
+              console.error('Backend server is not accessible. Please ensure:')
+              console.error('1. The backend server is running on http://localhost:8000')
+              console.error('2. No firewall is blocking the connection')
+              console.error('3. The Tauri app started the backend server successfully')
+              console.error('4. Try restarting the application')
+            }
+          }
         }
       }
     }
-    testConnection()
+    // Wait a bit before first check to give server time to start
+    setTimeout(() => {
+      testConnection()
+    }, 2000)
   }, [])
 
   const { data: budgets, isLoading, error } = useQuery({
