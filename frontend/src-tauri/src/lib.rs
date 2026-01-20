@@ -821,82 +821,134 @@ pub fn run() {
           // Don't fail startup if database init fails - it will be created on first use
         }
         
-        // Find backend directory
-        // Try multiple strategies to find the backend
+        // First, try to find bundled backend executable (for release builds)
         let exe_path = std::env::current_exe().unwrap_or_default();
         let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
         
-        let mut possible_backend_paths: Vec<PathBuf> = vec![
-          exe_dir.join("backend"),
-          exe_dir.join("../../backend"),
-          exe_dir.join("../../../backend"),  // From target/release/
-          exe_dir.join("../../../../backend"), // From target/release/ if deeper
-        ];
+        let mut possible_exe_paths: Vec<PathBuf> = vec![];
         
-        // Add parent directory paths
+        // Try Tauri resource resolution (for bundled resources)
+        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+          possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+          possible_exe_paths.push(resource_dir.join("backend-server"));
+        }
+        
+        // Add paths relative to executable (fallback)
+        possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+        possible_exe_paths.push(exe_dir.join("backend-server"));
+        possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+        possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+        
+        // Also check parent directories (for nested bundle structures)
         if let Some(parent) = exe_dir.parent() {
-          possible_backend_paths.push(parent.join("backend"));
-          if let Some(grandparent) = parent.parent() {
-            possible_backend_paths.push(grandparent.join("backend"));
-            if let Some(ggparent) = grandparent.parent() {
-              possible_backend_paths.push(ggparent.join("backend"));
-            }
-          }
+          possible_exe_paths.push(parent.join("backend-server.exe"));
+          possible_exe_paths.push(parent.join("backend-server"));
+          possible_exe_paths.push(parent.join("resources").join("backend-server.exe"));
+          possible_exe_paths.push(parent.join("resources").join("backend-server"));
         }
         
-        // Also try absolute path from project root (if we're in development)
-        if let Ok(current_dir) = std::env::current_dir() {
-          possible_backend_paths.push(current_dir.join("backend"));
-          if let Some(parent) = current_dir.parent() {
-            possible_backend_paths.push(parent.join("backend"));
-          }
-        }
+        let bundled_exe = possible_exe_paths.iter().find(|p| p.exists()).cloned();
         
-        let mut backend_path: Option<PathBuf> = None;
-        for path in &possible_backend_paths {
-          let manage_py = path.join("manage.py");
-          if manage_py.exists() {
-            backend_path = Some(path.clone());
-            info!("Found backend at: {:?}", path);
-            break;
-          }
-        }
-        
-        // Start backend server if found - don't fail if this doesn't work
-        if let Some(backend_path) = backend_path {
-          match start_backend_server(&app_handle, &backend_path, &db_path_clone) {
+        // If bundled executable found, use it directly
+        if let Some(exe_path) = bundled_exe {
+          info!("Found bundled backend executable: {:?}", exe_path);
+          
+          // Create a dummy backend_path for the function (it won't be used when executable is found)
+          let dummy_backend_path = exe_dir.join("backend");
+          
+          match start_backend_server(&app_handle, &dummy_backend_path, &db_path_clone) {
             Ok(child) => {
               // Store process in app state
               if let Some(state) = app_handle.try_state::<Mutex<Option<Child>>>() {
                 if let Ok(mut process) = state.lock() {
                   *process = Some(child);
-                  info!("Backend server started successfully");
+                  info!("Backend server started successfully using bundled executable");
                 } else {
                   warn!("Could not store backend process in app state");
                 }
               }
             }
             Err(e) => {
-              error!("Failed to start backend server: {}", e);
+              error!("Failed to start bundled backend server: {}", e);
               error!("Backend server not started. API calls will fail.");
-              error!("");
-              error!("To fix this issue:");
-              error!("1. Make sure Python 3.10+ is installed (https://www.python.org/downloads/)");
-              error!("2. Run setup-backend.ps1 from the project root directory");
-              error!("3. Make sure the backend directory exists at: {:?}", backend_path);
             }
           }
         } else {
-          error!("Backend directory not found. Backend server not started.");
-          error!("Searched in the following locations:");
-          for path in &possible_backend_paths {
-            error!("  - {:?}", path);
+          // Fallback: Find backend directory (for development)
+          info!("Bundled backend executable not found, looking for backend directory...");
+          
+          let mut possible_backend_paths: Vec<PathBuf> = vec![
+            exe_dir.join("backend"),
+            exe_dir.join("../../backend"),
+            exe_dir.join("../../../backend"),  // From target/release/
+            exe_dir.join("../../../../backend"), // From target/release/ if deeper
+          ];
+          
+          // Add parent directory paths
+          if let Some(parent) = exe_dir.parent() {
+            possible_backend_paths.push(parent.join("backend"));
+            if let Some(grandparent) = parent.parent() {
+              possible_backend_paths.push(grandparent.join("backend"));
+              if let Some(ggparent) = grandparent.parent() {
+                possible_backend_paths.push(ggparent.join("backend"));
+              }
+            }
           }
-          error!("");
-          error!("To fix this issue:");
-          error!("1. Make sure the backend directory exists");
-          error!("2. If this is a packaged app, the backend needs to be bundled with the application");
-          error!("3. For development, make sure you're running from the project root");
+          
+          // Also try absolute path from project root (if we're in development)
+          if let Ok(current_dir) = std::env::current_dir() {
+            possible_backend_paths.push(current_dir.join("backend"));
+            if let Some(parent) = current_dir.parent() {
+              possible_backend_paths.push(parent.join("backend"));
+            }
+          }
+          
+          let mut backend_path: Option<PathBuf> = None;
+          for path in &possible_backend_paths {
+            let manage_py = path.join("manage.py");
+            if manage_py.exists() {
+              backend_path = Some(path.clone());
+              info!("Found backend directory at: {:?}", path);
+              break;
+            }
+          }
+          
+          // Start backend server if found - don't fail if this doesn't work
+          if let Some(backend_path) = backend_path {
+            match start_backend_server(&app_handle, &backend_path, &db_path_clone) {
+              Ok(child) => {
+                // Store process in app state
+                if let Some(state) = app_handle.try_state::<Mutex<Option<Child>>>() {
+                  if let Ok(mut process) = state.lock() {
+                    *process = Some(child);
+                    info!("Backend server started successfully");
+                  } else {
+                    warn!("Could not store backend process in app state");
+                  }
+                }
+              }
+              Err(e) => {
+                error!("Failed to start backend server: {}", e);
+                error!("Backend server not started. API calls will fail.");
+                error!("");
+                error!("To fix this issue:");
+                error!("1. Make sure Python 3.10+ is installed (https://www.python.org/downloads/)");
+                error!("2. Run setup-backend.ps1 from the project root directory");
+                error!("3. Make sure the backend directory exists at: {:?}", backend_path);
+              }
+            }
+          } else {
+            error!("Backend directory not found. Backend server not started.");
+            error!("Searched in the following locations:");
+            for path in &possible_backend_paths {
+              error!("  - {:?}", path);
+            }
+            error!("");
+            error!("To fix this issue:");
+            error!("1. Make sure the backend directory exists");
+            error!("2. If this is a packaged app, the backend needs to be bundled with the application");
+            error!("3. For development, make sure you're running from the project root");
+          }
         }
       });
       
