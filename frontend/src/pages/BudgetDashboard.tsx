@@ -348,11 +348,34 @@ function BudgetDashboard() {
 
     try {
       const text = await file.text()
-      const data: BudgetSummaryData = JSON.parse(text)
+      let data: BudgetSummaryData
+      
+      try {
+        data = JSON.parse(text)
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError)
+        toast.error('Ungültige JSON-Datei. Bitte überprüfen Sie das Dateiformat.')
+        return
+      }
       
       // Validate the data structure
-      if (!data.budget || !data.categories) {
-        toast.error('Ungültige Budget-Datei')
+      if (!data.budget) {
+        toast.error('Ungültige Budget-Datei: "budget" Objekt fehlt')
+        return
+      }
+      
+      if (!data.categories || !Array.isArray(data.categories)) {
+        toast.error('Ungültige Budget-Datei: "categories" Array fehlt')
+        return
+      }
+      
+      if (!data.budget.name) {
+        toast.error('Ungültige Budget-Datei: Budget-Name fehlt')
+        return
+      }
+      
+      if (!data.budget.currency) {
+        toast.error('Ungültige Budget-Datei: Währung fehlt')
         return
       }
 
@@ -365,7 +388,40 @@ function BudgetDashboard() {
       navigate(`/budget/${newBudget.id}`)
     } catch (error: any) {
       console.error('Import error:', error)
-      toast.error(error.response?.data?.message || 'Fehler beim Importieren des Budgets')
+      
+      // Extract detailed error message
+      let errorMessage = 'Fehler beim Importieren des Budgets'
+      
+      if (error.response?.data) {
+        const errorData = error.response.data
+        
+        // Handle Django REST Framework error format
+        if (typeof errorData === 'object') {
+          // Check for non-field errors
+          if (errorData.non_field_errors) {
+            errorMessage = `Import-Fehler: ${Array.isArray(errorData.non_field_errors) ? errorData.non_field_errors.join(', ') : errorData.non_field_errors}`
+          }
+          // Check for field-specific errors
+          else if (errorData.message) {
+            errorMessage = `Import-Fehler: ${errorData.message}`
+          }
+          // Check for serializer validation errors
+          else {
+            const fieldErrors = Object.entries(errorData)
+              .map(([field, errors]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+              .join('; ')
+            if (fieldErrors) {
+              errorMessage = `Validierungsfehler: ${fieldErrors}`
+            }
+          }
+        } else if (typeof errorData === 'string') {
+          errorMessage = `Import-Fehler: ${errorData}`
+        }
+      } else if (error.message) {
+        errorMessage = `Import-Fehler: ${error.message}`
+      }
+      
+      toast.error(errorMessage)
     } finally {
       // Reset file input
       if (fileInputRef.current) {

@@ -2,7 +2,7 @@
 
 # Budget Planer - Build Script
 # This script builds the Tauri application binaries for the current platform
-# Usage: ./build.sh [--release] [--target TARGET]
+# Usage: ./build.sh [--release] [--target TARGET] [--backend] [--frontend]
 
 set -e  # Exit on error
 
@@ -17,6 +17,8 @@ NC='\033[0m' # No Color
 BUILD_MODE="debug"
 TARGET=""
 BUILD_TYPE="Debug"
+BUILD_BACKEND=false
+BUILD_FRONTEND=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -30,13 +32,28 @@ while [[ $# -gt 0 ]]; do
             TARGET="$2"
             shift 2
             ;;
+        --backend)
+            BUILD_BACKEND=true
+            shift
+            ;;
+        --frontend)
+            BUILD_FRONTEND=true
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Usage: $0 [--release] [--target TARGET]"
+            echo "Usage: $0 [--release] [--target TARGET] [--backend] [--frontend]"
+            echo "  If neither --backend nor --frontend is specified, both will be built"
             exit 1
             ;;
     esac
 done
+
+# If neither flag is specified, build both
+if [ "$BUILD_BACKEND" = false ] && [ "$BUILD_FRONTEND" = false ]; then
+    BUILD_BACKEND=true
+    BUILD_FRONTEND=true
+fi
 
 # Project directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -68,31 +85,35 @@ command_exists() {
 # Check for required tools
 print_info "Checking for required tools..."
 
-if ! command_exists bun; then
-    print_error "bun is not installed. Please install it first:"
-    echo "  curl -fsSL https://bun.sh/install | bash"
-    exit 1
-fi
-print_success "bun is installed"
+if [ "$BUILD_FRONTEND" = true ]; then
+    if ! command_exists bun; then
+        print_error "bun is not installed. Please install it first:"
+        echo "  curl -fsSL https://bun.sh/install | bash"
+        exit 1
+    fi
+    print_success "bun is installed"
 
-if ! command_exists cargo; then
-    print_error "cargo (Rust) is not installed. Please install it first:"
-    echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-    exit 1
+    if ! command_exists cargo; then
+        print_error "cargo (Rust) is not installed. Please install it first:"
+        echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        exit 1
+    fi
+    print_success "cargo is installed"
 fi
-print_success "cargo is installed"
 
-if ! command_exists python3; then
-    print_error "python3 is not installed. Please install Python 3.10+ first."
-    exit 1
-fi
-print_success "python3 is installed"
+if [ "$BUILD_BACKEND" = true ]; then
+    if ! command_exists python3; then
+        print_error "python3 is not installed. Please install Python 3.10+ first."
+        exit 1
+    fi
+    print_success "python3 is installed"
 
-# Check for uv (optional but recommended)
-if command_exists uv; then
-    print_success "uv is installed (recommended)"
-else
-    print_warning "uv is not installed (optional but recommended for faster Python package management)"
+    # Check for uv (optional but recommended)
+    if command_exists uv; then
+        print_success "uv is installed (recommended)"
+    else
+        print_warning "uv is not installed (optional but recommended for faster Python package management)"
+    fi
 fi
 
 # Detect platform
@@ -107,178 +128,194 @@ fi
 
 print_info "Detected platform: $PLATFORM"
 
-# Setup backend (needed for Tauri app)
-print_info "Setting up backend..."
-cd "$BACKEND_DIR"
+# Build backend if requested
+if [ "$BUILD_BACKEND" = true ]; then
+    # Setup backend (needed for Tauri app)
+    print_info "Setting up backend..."
+    cd "$BACKEND_DIR"
 
-# Check if virtual environment exists, create if not
-if [ ! -d ".venv" ]; then
-    print_info "Creating Python virtual environment..."
+    # Check if virtual environment exists, create if not
+    if [ ! -d ".venv" ]; then
+        print_info "Creating Python virtual environment..."
+        if command_exists uv; then
+            uv venv
+        else
+            python3 -m venv .venv
+        fi
+        print_success "Virtual environment created"
+    else
+        print_success "Virtual environment already exists"
+    fi
+
+    # Activate virtual environment
+    print_info "Activating virtual environment..."
+    if [ -f ".venv/bin/activate" ]; then
+        source .venv/bin/activate
+    elif [ -f ".venv/Scripts/activate" ]; then
+        source .venv/Scripts/activate
+    else
+        print_error "Could not find virtual environment activation script"
+        exit 1
+    fi
+
+    # Install Python dependencies
+    print_info "Installing Python dependencies..."
     if command_exists uv; then
-        uv venv
+        uv pip install --native-tls -r requirements.txt
     else
-        python3 -m venv .venv
+        pip install -r requirements.txt
     fi
-    print_success "Virtual environment created"
-else
-    print_success "Virtual environment already exists"
-fi
+    print_success "Python dependencies installed"
 
-# Activate virtual environment
-print_info "Activating virtual environment..."
-if [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-elif [ -f ".venv/Scripts/activate" ]; then
-    source .venv/Scripts/activate
-else
-    print_error "Could not find virtual environment activation script"
-    exit 1
-fi
+    # Run migrations to ensure database is ready
+    print_info "Running Django migrations..."
+    python manage.py migrate --noinput > /dev/null 2>&1 || print_warning "Migrations may have failed (this is OK if database doesn't exist yet)"
+    print_success "Backend setup completed"
 
-# Install Python dependencies
-print_info "Installing Python dependencies..."
-if command_exists uv; then
-    uv pip install --native-tls -r requirements.txt
-else
-    pip install -r requirements.txt
-fi
-print_success "Python dependencies installed"
-
-# Run migrations to ensure database is ready
-print_info "Running Django migrations..."
-python manage.py migrate --noinput > /dev/null 2>&1 || print_warning "Migrations may have failed (this is OK if database doesn't exist yet)"
-print_success "Backend setup completed"
-
-# Build backend executable with PyInstaller (optional, but recommended for standalone app)
-print_info "Building backend executable with PyInstaller..."
-if python -c "import PyInstaller" 2>/dev/null; then
-    print_success "PyInstaller is installed"
-else
-    print_info "Installing PyInstaller..."
-    pip install "pyinstaller>=6.0.0" > /dev/null 2>&1
-    print_success "PyInstaller installed"
-fi
-
-# Clean previous builds
-DIST_DIR="$BACKEND_DIR/dist"
-if [ -d "$DIST_DIR" ]; then
-    rm -rf "$DIST_DIR"
-fi
-
-# Build the executable
-print_info "Running PyInstaller..."
-if pyinstaller backend.spec --clean --noconfirm; then
-    # Check for executable (Windows uses .exe, Unix doesn't)
-    if [ "$PLATFORM" == "windows" ]; then
-        EXE_PATH="$DIST_DIR/backend-server.exe"
+    # Build backend executable with PyInstaller (optional, but recommended for standalone app)
+    print_info "Building backend executable with PyInstaller..."
+    if python -c "import PyInstaller" 2>/dev/null; then
+        print_success "PyInstaller is installed"
     else
-        EXE_PATH="$DIST_DIR/backend-server"
+        print_info "Installing PyInstaller..."
+        pip install "pyinstaller>=6.0.0" > /dev/null 2>&1
+        print_success "PyInstaller installed"
     fi
-    
-    if [ -f "$EXE_PATH" ]; then
-        print_success "Backend executable built successfully!"
-        if command_exists du; then
-            EXE_SIZE=$(du -h "$EXE_PATH" | cut -f1)
-            print_info "Executable: $EXE_PATH ($EXE_SIZE)"
+
+    # Clean previous builds
+    DIST_DIR="$BACKEND_DIR/dist"
+    if [ -d "$DIST_DIR" ]; then
+        rm -rf "$DIST_DIR"
+    fi
+
+    # Build the executable
+    print_info "Running PyInstaller..."
+    if pyinstaller backend.spec --clean --noconfirm; then
+        # Check for executable (Windows uses .exe, Unix doesn't)
+        if [ "$PLATFORM" == "windows" ]; then
+            EXE_PATH="$DIST_DIR/backend-server.exe"
         else
-            print_info "Executable: $EXE_PATH"
+            EXE_PATH="$DIST_DIR/backend-server"
+        fi
+        
+        if [ -f "$EXE_PATH" ]; then
+            print_success "Backend executable built successfully!"
+            if command_exists du; then
+                EXE_SIZE=$(du -h "$EXE_PATH" | cut -f1)
+                print_info "Executable: $EXE_PATH ($EXE_SIZE)"
+            else
+                print_info "Executable: $EXE_PATH"
+            fi
+        else
+            print_warning "Backend executable build completed but file not found at expected location: $EXE_PATH"
+            print_info "Checking dist directory contents..."
+            if [ -d "$DIST_DIR" ]; then
+                ls -la "$DIST_DIR" 2>/dev/null || print_warning "Could not list dist directory"
+            else
+                print_warning "Dist directory does not exist"
+            fi
         fi
     else
-        print_warning "Backend executable build completed but file not found at expected location: $EXE_PATH"
-        print_info "Checking dist directory contents..."
-        if [ -d "$DIST_DIR" ]; then
-            ls -la "$DIST_DIR" 2>/dev/null || print_warning "Could not list dist directory"
-        else
-            print_warning "Dist directory does not exist"
+        print_error "PyInstaller build failed. The app will fall back to using Python if available"
+        print_info "Check the output above for error details"
+    fi
+fi
+
+# Build frontend if requested
+if [ "$BUILD_FRONTEND" = true ]; then
+    # Setup frontend
+    print_info "Setting up frontend..."
+    cd "$FRONTEND_DIR"
+
+    # Install frontend dependencies
+    print_info "Installing frontend dependencies with bun..."
+    bun install
+    print_success "Frontend dependencies installed"
+
+    # Build frontend
+    print_info "Building frontend (TypeScript compilation and Vite build)..."
+    bun run build
+    print_success "Frontend build completed"
+
+    # Build Tauri application
+    print_info "Building Tauri application ($BUILD_TYPE mode)..."
+    cd "$FRONTEND_DIR"
+
+    # Prepare build command
+    BUILD_CMD="bun run tauri build"
+    if [ "$BUILD_MODE" == "release" ]; then
+        BUILD_CMD="$BUILD_CMD -- --release"
+    fi
+
+    if [ ! -z "$TARGET" ]; then
+        BUILD_CMD="$BUILD_CMD --target $TARGET"
+    fi
+
+    print_info "Running: $BUILD_CMD"
+    eval $BUILD_CMD
+
+    # Find the output directory
+    if [ "$BUILD_MODE" == "release" ]; then
+        OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/release"
+        if [ ! -z "$TARGET" ]; then
+            OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/$TARGET/release"
+        fi
+    else
+        OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/debug"
+        if [ ! -z "$TARGET" ]; then
+            OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/$TARGET/debug"
         fi
     fi
-else
-    print_error "PyInstaller build failed. The app will fall back to using Python if available"
-    print_info "Check the output above for error details"
-fi
 
-# Setup frontend
-print_info "Setting up frontend..."
-cd "$FRONTEND_DIR"
-
-# Install frontend dependencies
-print_info "Installing frontend dependencies with bun..."
-bun install
-print_success "Frontend dependencies installed"
-
-# Build frontend
-print_info "Building frontend (TypeScript compilation and Vite build)..."
-bun run build
-print_success "Frontend build completed"
-
-# Build Tauri application
-print_info "Building Tauri application ($BUILD_TYPE mode)..."
-cd "$FRONTEND_DIR"
-
-# Prepare build command
-BUILD_CMD="bun run tauri build"
-if [ "$BUILD_MODE" == "release" ]; then
-    BUILD_CMD="$BUILD_CMD -- --release"
-fi
-
-if [ ! -z "$TARGET" ]; then
-    BUILD_CMD="$BUILD_CMD --target $TARGET"
-fi
-
-print_info "Running: $BUILD_CMD"
-eval $BUILD_CMD
-
-# Find the output directory
-if [ "$BUILD_MODE" == "release" ]; then
-    OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/release"
-    if [ ! -z "$TARGET" ]; then
-        OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/$TARGET/release"
+    # Find bundle directory (Tauri creates bundles in target/release/bundle)
+    BUNDLE_DIR=""
+    if [ "$BUILD_MODE" == "release" ]; then
+        if [ -d "$FRONTEND_DIR/src-tauri/target/release/bundle" ]; then
+            BUNDLE_DIR="$FRONTEND_DIR/src-tauri/target/release/bundle"
+        elif [ ! -z "$TARGET" ] && [ -d "$FRONTEND_DIR/src-tauri/target/$TARGET/release/bundle" ]; then
+            BUNDLE_DIR="$FRONTEND_DIR/src-tauri/target/$TARGET/release/bundle"
+        fi
     fi
-else
-    OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/debug"
-    if [ ! -z "$TARGET" ]; then
-        OUTPUT_DIR="$FRONTEND_DIR/src-tauri/target/$TARGET/debug"
+
+    # Print frontend build output
+    if [ "$BUILD_MODE" == "release" ] && [ ! -z "$BUNDLE_DIR" ]; then
+        print_info "Binaries location:"
+        echo "  $BUNDLE_DIR"
+        echo ""
+        print_info "Available bundles:"
+        find "$BUNDLE_DIR" -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.dmg" -o -name "*.app" -o -name "*.AppImage" -o -name "*.appimage" \) 2>/dev/null | while read -r file; do
+            echo "  - $file"
+        done || echo "  (No installers found, check $OUTPUT_DIR for executables)"
+    else
+        print_info "Executable location:"
+        echo "  $OUTPUT_DIR"
+        echo ""
+        print_info "Executable files:"
+        find "$OUTPUT_DIR" -maxdepth 1 -type f -executable 2>/dev/null | while read -r file; do
+            echo "  - $file"
+        done || print_warning "Could not find executable files"
     fi
 fi
 
-# Find bundle directory (Tauri creates bundles in target/release/bundle)
-BUNDLE_DIR=""
-if [ "$BUILD_MODE" == "release" ]; then
-    if [ -d "$FRONTEND_DIR/src-tauri/target/release/bundle" ]; then
-        BUNDLE_DIR="$FRONTEND_DIR/src-tauri/target/release/bundle"
-    elif [ ! -z "$TARGET" ] && [ -d "$FRONTEND_DIR/src-tauri/target/$TARGET/release/bundle" ]; then
-        BUNDLE_DIR="$FRONTEND_DIR/src-tauri/target/$TARGET/release/bundle"
-    fi
-fi
-
-# Print success message
 echo ""
 print_success "=========================================="
-print_success "Build completed successfully!"
-print_success "=========================================="
-echo ""
-
-if [ "$BUILD_MODE" == "release" ] && [ ! -z "$BUNDLE_DIR" ]; then
-    print_info "Binaries location:"
-    echo "  $BUNDLE_DIR"
-    echo ""
-    print_info "Available bundles:"
-    find "$BUNDLE_DIR" -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.dmg" -o -name "*.app" -o -name "*.AppImage" -o -name "*.appimage" \) 2>/dev/null | while read -r file; do
-        echo "  - $file"
-    done || echo "  (No installers found, check $OUTPUT_DIR for executables)"
-else
-    print_info "Executable location:"
-    echo "  $OUTPUT_DIR"
-    echo ""
-    print_info "Executable files:"
-    find "$OUTPUT_DIR" -maxdepth 1 -type f -executable 2>/dev/null | while read -r file; do
-        echo "  - $file"
-    done || print_warning "Could not find executable files"
+if [ "$BUILD_BACKEND" = true ] && [ "$BUILD_FRONTEND" = true ]; then
+    print_success "Full build completed successfully!"
+elif [ "$BUILD_BACKEND" = true ]; then
+    print_success "Backend build completed successfully!"
+elif [ "$BUILD_FRONTEND" = true ]; then
+    print_success "Frontend build completed successfully!"
 fi
-
+print_success "=========================================="
 echo ""
 print_info "Build mode: $BUILD_TYPE"
 if [ ! -z "$TARGET" ]; then
     print_info "Target: $TARGET"
+fi
+if [ "$BUILD_BACKEND" = true ]; then
+    print_info "Backend: built"
+fi
+if [ "$BUILD_FRONTEND" = true ]; then
+    print_info "Frontend: built"
 fi
 echo ""

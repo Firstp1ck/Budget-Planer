@@ -1,10 +1,12 @@
 # Budget Planer - Build Script (PowerShell)
 # This script builds the Tauri application binaries for Windows
-# Usage: .\build.ps1 [-Release] [-Target TARGET]
+# Usage: .\build.ps1 [-Release] [-Target TARGET] [-Backend] [-Frontend]
 
 param(
     [switch]$Release,
-    [string]$Target = ""
+    [string]$Target = "",
+    [switch]$Backend,
+    [switch]$Frontend
 )
 
 # Error handling
@@ -35,6 +37,12 @@ function Write-Error {
 $BuildMode = if ($Release) { "release" } else { "debug" }
 $BuildType = if ($Release) { "Release" } else { "Debug" }
 
+# If neither flag is specified, build both
+if (-not $Backend -and -not $Frontend) {
+    $Backend = $true
+    $Frontend = $true
+}
+
 # Project directories
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $FrontendDir = Join-Path $ScriptDir "frontend"
@@ -50,40 +58,46 @@ function Test-Command {
 # Check for required tools
 Write-Info "Checking for required tools..."
 
-if (-not (Test-Command "bun")) {
-    Write-Error "bun is not installed. Please install it first:"
-    Write-Host "  powershell -c `"irm bun.sh/install.ps1 | iex`""
-    exit 1
-}
-Write-Success "bun is installed"
+if ($Frontend) {
+    if (-not (Test-Command "bun")) {
+        Write-Error "bun is not installed. Please install it first:"
+        Write-Host "  powershell -c `"irm bun.sh/install.ps1 | iex`""
+        exit 1
+    }
+    Write-Success "bun is installed"
 
-if (-not (Test-Command "cargo")) {
-    Write-Error "cargo (Rust) is not installed. Please install it first:"
-    Write-Host "  Visit: https://rustup.rs/"
-    exit 1
+    if (-not (Test-Command "cargo")) {
+        Write-Error "cargo (Rust) is not installed. Please install it first:"
+        Write-Host "  Visit: https://rustup.rs/"
+        exit 1
+    }
+    Write-Success "cargo is installed"
 }
-Write-Success "cargo is installed"
 
-if (-not (Test-Command "python")) {
-    Write-Error "python is not installed. Please install Python 3.10+ first."
-    exit 1
-}
-Write-Success "python is installed"
+if ($Backend) {
+    if (-not (Test-Command "python")) {
+        Write-Error "python is not installed. Please install Python 3.10+ first."
+        exit 1
+    }
+    Write-Success "python is installed"
 
-# Check for uv (optional but recommended)
-if (Test-Command "uv") {
-    Write-Success "uv is installed (recommended)"
-} else {
-    Write-Warning "uv is not installed (optional but recommended for faster Python package management)"
+    # Check for uv (optional but recommended)
+    if (Test-Command "uv") {
+        Write-Success "uv is installed (recommended)"
+    } else {
+        Write-Warning "uv is not installed (optional but recommended for faster Python package management)"
+    }
 }
 
 # Detect platform
 $Platform = "windows"
 Write-Info "Detected platform: $Platform"
 
-# Setup backend (needed for Tauri app)
-Write-Info "Setting up backend..."
-Push-Location $BackendDir
+# Build backend if requested
+if ($Backend) {
+    # Setup backend (needed for Tauri app)
+    Write-Info "Setting up backend..."
+    Push-Location $BackendDir
 
 # Check if virtual environment exists, create if not
 if (-not (Test-Path ".venv")) {
@@ -175,11 +189,14 @@ try {
     Write-Warning "The app will fall back to using Python if available"
 }
 
-Pop-Location
+    Pop-Location
+}
 
-# Setup frontend
-Write-Info "Setting up frontend..."
-Push-Location $FrontendDir
+# Build frontend if requested
+if ($Frontend) {
+    # Setup frontend
+    Write-Info "Setting up frontend..."
+    Push-Location $FrontendDir
 
 # Install frontend dependencies
 Write-Info "Installing frontend dependencies with bun..."
@@ -220,62 +237,75 @@ if ($Release) {
     }
 }
 
-# Find bundle directory (Tauri creates bundles in target/release/bundle)
-$BundleDir = $null
-if ($Release) {
-    $PossibleBundleDir = Join-Path $FrontendDir "src-tauri\target\release\bundle"
-    if ($Target) {
-        $PossibleBundleDir = Join-Path $FrontendDir "src-tauri\target\$Target\release\bundle"
+    # Find bundle directory (Tauri creates bundles in target/release/bundle)
+    $BundleDir = $null
+    if ($Release) {
+        $PossibleBundleDir = Join-Path $FrontendDir "src-tauri\target\release\bundle"
+        if ($Target) {
+            $PossibleBundleDir = Join-Path $FrontendDir "src-tauri\target\$Target\release\bundle"
+        }
+        if (Test-Path $PossibleBundleDir) {
+            $BundleDir = $PossibleBundleDir
+        }
     }
-    if (Test-Path $PossibleBundleDir) {
-        $BundleDir = $PossibleBundleDir
+
+    # Print frontend build output
+    if ($Release -and $BundleDir) {
+        Write-Info "Binaries location:"
+        Write-Host "  $BundleDir"
+        Write-Host ""
+        Write-Info "Available bundles:"
+        Get-ChildItem -Path $BundleDir -Recurse -File | Where-Object {
+            $_.Extension -in @(".exe", ".msi", ".appx", ".appxbundle") -or 
+            $_.Name -like "*.exe" -or 
+            $_.Name -like "*installer*"
+        } | ForEach-Object {
+            Write-Host "  - $($_.FullName)"
+        }
+        if (-not (Get-ChildItem -Path $BundleDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object { 
+            $_.Extension -in @(".exe", ".msi", ".appx", ".appxbundle") -or $_.Name -like "*.exe" -or $_.Name -like "*installer*" 
+        })) {
+            Write-Warning "No installers found, check $OutputDir for executables"
+        }
+    } else {
+        Write-Info "Executable location:"
+        Write-Host "  $OutputDir"
+        Write-Host ""
+        Write-Info "Executable files:"
+        Get-ChildItem -Path $OutputDir -File -ErrorAction SilentlyContinue | Where-Object {
+            $_.Extension -eq ".exe" -or $_.Name -like "budget-planer*"
+        } | ForEach-Object {
+            Write-Host "  - $($_.FullName)"
+        }
+        if (-not (Get-ChildItem -Path $OutputDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq ".exe" -or $_.Name -like "budget-planer*" })) {
+            Write-Warning "Could not find executable files"
+        }
     }
+}
+
+    Pop-Location
 }
 
 # Print success message
 Write-Host ""
 Write-Success "=========================================="
-Write-Success "Build completed successfully!"
-Write-Success "=========================================="
-Write-Host ""
-
-if ($Release -and $BundleDir) {
-    Write-Info "Binaries location:"
-    Write-Host "  $BundleDir"
-    Write-Host ""
-    Write-Info "Available bundles:"
-    Get-ChildItem -Path $BundleDir -Recurse -File | Where-Object {
-        $_.Extension -in @(".exe", ".msi", ".appx", ".appxbundle") -or 
-        $_.Name -like "*.exe" -or 
-        $_.Name -like "*installer*"
-    } | ForEach-Object {
-        Write-Host "  - $($_.FullName)"
-    }
-    if (-not (Get-ChildItem -Path $BundleDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object { 
-        $_.Extension -in @(".exe", ".msi", ".appx", ".appxbundle") -or $_.Name -like "*.exe" -or $_.Name -like "*installer*" 
-    })) {
-        Write-Warning "No installers found, check $OutputDir for executables"
-    }
-} else {
-    Write-Info "Executable location:"
-    Write-Host "  $OutputDir"
-    Write-Host ""
-    Write-Info "Executable files:"
-    Get-ChildItem -Path $OutputDir -File -ErrorAction SilentlyContinue | Where-Object {
-        $_.Extension -eq ".exe" -or $_.Name -like "budget-planer*"
-    } | ForEach-Object {
-        Write-Host "  - $($_.FullName)"
-    }
-    if (-not (Get-ChildItem -Path $OutputDir -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq ".exe" -or $_.Name -like "budget-planer*" })) {
-        Write-Warning "Could not find executable files"
-    }
+if ($Backend -and $Frontend) {
+    Write-Success "Full build completed successfully!"
+} elseif ($Backend) {
+    Write-Success "Backend build completed successfully!"
+} elseif ($Frontend) {
+    Write-Success "Frontend build completed successfully!"
 }
-
+Write-Success "=========================================="
 Write-Host ""
 Write-Info "Build mode: $BuildType"
 if ($Target) {
     Write-Info "Target: $Target"
 }
+if ($Backend) {
+    Write-Info "Backend: built"
+}
+if ($Frontend) {
+    Write-Info "Frontend: built"
+}
 Write-Host ""
-
-Pop-Location
