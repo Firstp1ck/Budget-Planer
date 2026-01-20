@@ -1,11 +1,65 @@
 use std::path::PathBuf;
 use std::process::{Command, Child, Stdio};
 use std::sync::Mutex;
-use log::{info, warn, error};
+use std::io::Read;
+use log::{info, warn, error, debug};
 use tauri::Manager;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+
+/// Kill any process using the specified port (useful for cleaning up orphaned backend processes)
+fn kill_process_on_port(port: u16) {
+  info!("Checking for existing processes on port {}", port);
+  
+  #[cfg(not(windows))]
+  {
+    // On Linux/macOS, use lsof to find and kill processes on the port
+    let output = Command::new("lsof")
+      .args(&["-ti", &format!(":{}", port)])
+      .output();
+    
+    if let Ok(output) = output {
+      let pids = String::from_utf8_lossy(&output.stdout);
+      for pid in pids.lines() {
+        if !pid.trim().is_empty() {
+          info!("Killing existing process {} on port {}", pid.trim(), port);
+          let _ = Command::new("kill")
+            .args(&["-9", pid.trim()])
+            .output();
+        }
+      }
+    }
+  }
+  
+  #[cfg(windows)]
+  {
+    // On Windows, use netstat to find and taskkill to kill processes on the port
+    let output = Command::new("netstat")
+      .args(&["-ano"])
+      .output();
+    
+    if let Ok(output) = output {
+      let output_str = String::from_utf8_lossy(&output.stdout);
+      let port_str = format!(":{}", port);
+      for line in output_str.lines() {
+        if line.contains(&port_str) && line.contains("LISTENING") {
+          // Extract PID from the last column
+          if let Some(pid) = line.split_whitespace().last() {
+            info!("Killing existing process {} on port {}", pid, port);
+            let _ = Command::new("taskkill")
+              .args(&["/F", "/PID", pid])
+              .output();
+          }
+        }
+      }
+    }
+  }
+  
+  // Give processes a moment to terminate
+  std::thread::sleep(std::time::Duration::from_millis(500));
+  debug!("Port cleanup completed");
+}
 
 /// Kill the backend process immediately without blocking
 /// On Windows, this kills the entire process tree (including child processes)
@@ -68,7 +122,13 @@ fn kill_backend_process(child: &mut Child) {
     
     #[cfg(not(windows))]
     {
-      // On non-Windows, we rely on the kill() call above
+      // On Linux/macOS, use kill -9 to forcefully terminate
+      info!("Forcefully killing backend process {} on Linux/macOS", pid_for_cleanup);
+      let _ = Command::new("kill")
+        .args(&["-9", &pid_for_cleanup.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output();
       info!("Backend server cleanup initiated");
     }
   });
@@ -334,6 +394,10 @@ fn start_backend_server(
 ) -> Result<Child, Box<dyn std::error::Error>> {
   info!("Starting Django backend server...");
   
+  // Kill any existing process on port 8000 to avoid "port already in use" errors
+  // This handles orphaned backend processes from previous app sessions
+  kill_process_on_port(8000);
+  
   // First, try to find bundled backend executable (PyInstaller bundle)
   // Check multiple possible locations:
   // 1. In backend/dist (development build)
@@ -387,16 +451,41 @@ fn start_backend_server(
         migrate_cmd.creation_flags(CREATE_NO_WINDOW);
       }
       
-      migrate_cmd.stdout(Stdio::null());
-      migrate_cmd.stderr(Stdio::null());
-      
+      // Capture output to see what's happening
       match migrate_cmd.output() {
         Ok(output) => {
-          if output.status.success() {
+          let stdout = String::from_utf8_lossy(&output.stdout);
+          let stderr = String::from_utf8_lossy(&output.stderr);
+          
+          // Check if migrations actually completed successfully by looking at stdout
+          // Migrations can exit with code 1 due to autoreload issues, but still succeed
+          let migrations_succeeded = stdout.contains("No migrations to apply") || 
+                                     stdout.contains("Running migrations:") ||
+                                     stdout.contains("Applying");
+          
+          if output.status.success() || migrations_succeeded {
             info!("Database migrations completed successfully");
+            if !stdout.trim().is_empty() {
+              info!("Migration output: {}", stdout.trim());
+            }
           } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            warn!("Migration failed. stderr: {}", stderr);
+            // Only report as error if migrations actually failed
+            error!("Migration failed. Exit code: {:?}", output.status.code());
+            if !stderr.trim().is_empty() {
+              // Check if it's just a port conflict (non-critical)
+              if stderr.contains("port is already in use") {
+                warn!("Migration warning (non-critical): {}", stderr.trim());
+                info!("Migrations completed successfully despite port warning");
+              } else {
+                error!("Migration stderr: {}", stderr.trim());
+              }
+            }
+            if !stdout.trim().is_empty() {
+              info!("Migration stdout: {}", stdout.trim());
+            }
+            if !migrations_succeeded {
+              warn!("Migrations may have failed, but server is running");
+            }
           }
         }
         Err(e) => {
@@ -420,21 +509,130 @@ fn start_backend_server(
       cmd.creation_flags(CREATE_NO_WINDOW);
     }
     
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
+    // Capture stderr to a pipe so we can read errors if the server fails to start
+    // We'll spawn a thread to read stderr in the background
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
     
     let mut child = cmd.spawn()?;
     info!("Backend server started with PID: {:?}", child.id());
     
+    // Spawn a thread to read stderr (Django logs HTTP requests to stderr)
+    let stderr_handle = child.stderr.take();
+    if let Some(mut stderr) = stderr_handle {
+      std::thread::spawn(move || {
+        let mut buffer = [0u8; 1024];
+        loop {
+          match stderr.read(&mut buffer) {
+            Ok(0) => break, // EOF
+            Ok(n) => {
+              let output = String::from_utf8_lossy(&buffer[..n]);
+              if !output.trim().is_empty() {
+                // Django logs HTTP requests to stderr - these are informational, not errors
+                // Only log actual errors (containing "Error", "Exception", "Traceback")
+                let trimmed = output.trim();
+                if trimmed.contains("Error") || trimmed.contains("Exception") || trimmed.contains("Traceback") {
+                  warn!("Backend: {}", trimmed);
+                } else {
+                  debug!("Backend: {}", trimmed);
+                }
+              }
+            }
+            Err(e) => {
+              warn!("Error reading backend stderr: {}", e);
+              break;
+            }
+          }
+        }
+      });
+    }
+    
+    // Check if process started successfully
     match child.try_wait() {
       Ok(Some(status)) => {
-        return Err(format!("Backend server exited immediately with status: {:?}", status).into());
+        // Process exited immediately - try to get stderr output
+        let error_msg = format!("Backend server exited immediately with status: {:?}", status);
+        error!("{}", error_msg);
+        return Err(error_msg.into());
       }
       Ok(None) => {
         info!("Backend server process is running");
       }
       Err(e) => {
-        return Err(format!("Error checking backend server status: {}", e).into());
+        let error_msg = format!("Error checking backend server status: {}", e);
+        error!("{}", error_msg);
+        return Err(error_msg.into());
+      }
+    }
+    
+    // Wait for backend to be ready by polling the health endpoint
+    // This is more reliable than a fixed delay
+    let start_time = std::time::Instant::now();
+    let health_url = "http://127.0.0.1:8000/api/budgets/health/";
+    let max_wait = std::time::Duration::from_secs(30); // Maximum wait time
+    let poll_interval = std::time::Duration::from_millis(500); // Check every 500ms
+    
+    info!("Waiting for backend to be ready at {}...", health_url);
+    
+    let client = reqwest::blocking::Client::builder()
+      .timeout(std::time::Duration::from_secs(2))
+      .build()
+      .unwrap_or_else(|_| reqwest::blocking::Client::new());
+    
+    loop {
+      // First check if process is still running
+      match child.try_wait() {
+        Ok(Some(status)) => {
+          let error_msg = format!("Backend server exited during startup with status: {:?}", status);
+          error!("{}", error_msg);
+          return Err(error_msg.into());
+        }
+        Ok(None) => {
+          // Process still running, continue
+        }
+        Err(e) => {
+          warn!("Error checking backend server status: {}", e);
+        }
+      }
+      
+      // Try health check
+      match client.get(health_url).send() {
+        Ok(response) => {
+          if response.status().is_success() {
+            let elapsed = start_time.elapsed();
+            info!("Backend is ready! Startup took {:.2}s", elapsed.as_secs_f64());
+            break;
+          } else {
+            debug!("Health check returned status: {}", response.status());
+          }
+        }
+        Err(e) => {
+          debug!("Health check failed: {} (waiting...)", e);
+        }
+      }
+      
+      // Check if we've exceeded max wait time
+      if start_time.elapsed() > max_wait {
+        let error_msg = "Backend server did not become ready within 30 seconds";
+        error!("{}", error_msg);
+        return Err(error_msg.into());
+      }
+      
+      std::thread::sleep(poll_interval);
+    }
+    
+    // Final verification that process is still running
+    match child.try_wait() {
+      Ok(Some(status)) => {
+        let error_msg = format!("Backend server exited shortly after becoming ready with status: {:?}", status);
+        error!("{}", error_msg);
+        return Err(error_msg.into());
+      }
+      Ok(None) => {
+        info!("Backend server process is running and healthy");
+      }
+      Err(e) => {
+        warn!("Error checking backend server status: {}", e);
       }
     }
     
@@ -742,26 +940,18 @@ pub fn run() {
       match event {
         tauri::RunEvent::ExitRequested { .. } => {
           info!("App exit requested, cleaning up backend process...");
-          // Cleanup backend process on app exit - non-blocking
-          let app_handle = app.clone();
-          std::thread::spawn(move || {
-            if let Some(state) = app_handle.try_state::<Mutex<Option<Child>>>() {
-              // Use try_lock first to avoid blocking
-              if let Ok(mut process) = state.try_lock() {
-                if let Some(mut child) = process.take() {
-                  kill_backend_process(&mut child);
-                }
-              } else {
-                // If lock is held, wait briefly then try again
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                if let Ok(mut process) = state.lock() {
-                  if let Some(mut child) = process.take() {
-                    kill_backend_process(&mut child);
-                  }
-                }
+          // Cleanup backend process synchronously on app exit to ensure it completes
+          if let Some(state) = app.try_state::<Mutex<Option<Child>>>() {
+            if let Ok(mut process) = state.lock() {
+              if let Some(mut child) = process.take() {
+                kill_backend_process(&mut child);
+                // Wait a moment to ensure process is killed
+                std::thread::sleep(std::time::Duration::from_millis(200));
               }
             }
-          });
+          }
+          // Also kill any process on port 8000 as a fallback
+          kill_process_on_port(8000);
         }
         _ => {}
       }

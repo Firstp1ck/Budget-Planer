@@ -11,6 +11,18 @@ from pathlib import Path
 # Set Django settings module
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
+# Import patches early to suppress BrokenPipeError
+# This must be done before importing Django
+try:
+    # Add backend directory to path first
+    backend_dir = Path(__file__).parent
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+    import core.patches  # noqa: F401
+except ImportError:
+    # Patches might not be available in all contexts
+    pass
+
 # Add the backend directory to Python path if running from bundle
 if getattr(sys, 'frozen', False):
     # Running as bundled executable
@@ -56,6 +68,11 @@ def main():
         'runserver',
         f'{args.host}:{args.port}',
     ]
+    # Disable autoreload when running as bundled executable (PyInstaller)
+    # Autoreload causes issues with PyInstaller as it tries to restart with arguments
+    # that PyInstaller interprets as script names
+    if getattr(sys, 'frozen', False):
+        server_args.append('--noreload')
     server_args.extend(unknown)
     
     execute_from_command_line(server_args)

@@ -17,6 +17,12 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-producti
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Import patches early to suppress BrokenPipeError
+try:
+    import core.patches  # noqa: F401
+except ImportError:
+    pass
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -41,6 +47,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.BrokenPipeHandlerMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -121,6 +128,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
     ],
+    'EXCEPTION_HANDLER': 'core.exception_handler.rest_framework_exception_handler',
 }
 
 # CORS settings
@@ -141,3 +149,36 @@ CORS_ALLOWED_ORIGINS = cors_origins
 CORS_ALLOW_ALL_ORIGINS = os.getenv('DEBUG', 'True') == 'True'
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Logging configuration to suppress BrokenPipeError
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'suppress_broken_pipe': {
+            '()': 'core.logging_filters.SuppressBrokenPipe',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'filters': ['suppress_broken_pipe'],
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

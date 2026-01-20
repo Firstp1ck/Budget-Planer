@@ -82,6 +82,13 @@ if (typeof window !== 'undefined') {
 api.interceptors.request.use(
   (config) => {
     console.log('API Request:', config.method?.toUpperCase(), config.url)
+    if (config.data) {
+      console.log('Request data type:', typeof config.data)
+      console.log('Request data keys:', typeof config.data === 'object' ? Object.keys(config.data) : 'N/A')
+      if (config.url?.includes('import')) {
+        console.log('IMPORT REQUEST - Full data:', JSON.stringify(config.data, null, 2).substring(0, 2000))
+      }
+    }
     return config
   },
   (error) => {
@@ -93,14 +100,10 @@ api.interceptors.request.use(
 // Add response interceptor for error handling
 api.interceptors.response.use(
   (response) => {
-    console.log('API Response:', response.status, response.config.url)
-    
     // Check if we got HTML instead of JSON (common when API URL is wrong)
     const contentType = response.headers['content-type'] || ''
     if (contentType.includes('text/html') && typeof response.data === 'string' && response.data.includes('<!doctype')) {
       console.error('Received HTML instead of JSON! This usually means the API URL is incorrect.')
-      console.error('Response URL:', response.config.url)
-      console.error('Base URL:', response.config.baseURL)
       throw new Error('API returned HTML instead of JSON. Backend server may not be running or API URL is incorrect.')
     }
     
@@ -143,7 +146,8 @@ export const budgetApi = {
   getYearlySummary: (id: number, year: number) =>
     api.get<YearlySummary>(`/budgets/${id}/yearly/`, { params: { year } }),
   export: (id: number) => api.get<BudgetSummaryData>(`/budgets/${id}/summary/`),
-  import: (data: BudgetSummaryData) => api.post<Budget>('/budgets/import/', data),
+  // Import has a longer timeout (60s) because large budgets can take time to process
+  import: (data: BudgetSummaryData) => api.post<Budget>('/budgets/import/', data, { timeout: 60000 }),
   health: () => api.get<{status: string, message: string}>('/budgets/health/'),
 }
 

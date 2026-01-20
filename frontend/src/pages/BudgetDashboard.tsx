@@ -40,10 +40,8 @@ function BudgetDashboard() {
         }
       }
     }
-    // Wait a bit before first check to give server time to start
-    setTimeout(() => {
-      testConnection()
-    }, 2000)
+    // Backend should already be ready from Tauri health check - verify immediately
+    testConnection()
   }, [])
 
   const { data: budgets, isLoading, error } = useQuery({
@@ -64,6 +62,8 @@ function BudgetDashboard() {
         throw error
       }
     },
+    retry: 3,
+    retryDelay: 1000,
   })
 
   const { data: templatesData } = useQuery({
@@ -359,6 +359,9 @@ function BudgetDashboard() {
     const file = event.target.files?.[0]
     if (!file) return
 
+    // Store the budget name for error recovery (available in catch block)
+    let importedBudgetName: string | null = null
+
     try {
       const text = await file.text()
       let data: BudgetSummaryData
@@ -392,26 +395,70 @@ function BudgetDashboard() {
         return
       }
 
-      // Debug: Log the data being sent
-      console.log('Sending import data:', {
-        hasBudget: !!data.budget,
-        budgetName: data.budget?.name,
-        categoriesCount: data.categories?.length,
-        entriesCount: data.entries?.length,
-        dataKeys: Object.keys(data)
-      })
+      // Store name for error recovery
+      importedBudgetName = data.budget.name
       
       // Import the budget
       const response = await budgetApi.import(data)
       const newBudget = response.data
       
+      if (!newBudget || !newBudget.id) {
+        throw new Error('Import succeeded but budget ID not found in response')
+      }
+      
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
+      
+      // Small delay to ensure database transaction is fully committed
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Refetch budgets to ensure UI is updated
+      await queryClient.refetchQueries({ queryKey: ['budgets'] })
+      
+      // Wait a bit more to ensure the query cache is updated
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       toast.success('Budget erfolgreich importiert!')
       navigate(`/budget/${newBudget.id}`)
     } catch (error: any) {
       console.error('Import error:', error)
       
-      // Extract detailed error message
+      // Check if we got an HTML error page (BrokenPipeError from Django)
+      const responseData = error.response?.data
+      const isHtmlError = typeof responseData === 'string' && 
+        (responseData.includes('<!DOCTYPE') || responseData.includes('BrokenPipeError'))
+      
+      if (isHtmlError && importedBudgetName) {
+        // Wait a moment for the database to settle
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Check if the budget was actually created by looking for it in the list
+        try {
+          const budgetsResponse = await budgetApi.getAll()
+          const existingBudgets = budgetsResponse.data.results || []
+          
+          // Look for a budget with the imported name (or with timestamp suffix)
+          const newBudget = existingBudgets.find((b: Budget) => 
+            b.name === importedBudgetName || 
+            b.name.startsWith(`${importedBudgetName} (Import `)
+          )
+          
+          if (newBudget) {
+            queryClient.invalidateQueries({ queryKey: ['budgets'] })
+            toast.success('Budget erfolgreich importiert!')
+            navigate(`/budget/${newBudget.id}`)
+            return
+          }
+        } catch (checkError) {
+          console.error('Error checking if import succeeded:', checkError)
+        }
+        
+        // If we couldn't find the budget, show a helpful message
+        toast.error('Import-Verbindung unterbrochen. Bitte prüfen Sie, ob das Budget importiert wurde, und versuchen Sie es ggf. erneut.')
+        queryClient.invalidateQueries({ queryKey: ['budgets'] })
+        return
+      }
+      
+      // Extract detailed error message for non-HTML errors
       let errorMessage = 'Fehler beim Importieren des Budgets'
       
       if (error.response?.data) {
@@ -436,7 +483,7 @@ function BudgetDashboard() {
               errorMessage = `Validierungsfehler: ${fieldErrors}`
             }
           }
-        } else if (typeof errorData === 'string') {
+        } else if (typeof errorData === 'string' && !isHtmlError) {
           errorMessage = `Import-Fehler: ${errorData}`
         }
       } else if (error.message) {

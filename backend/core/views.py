@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 import json
 import logging
 from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction, MonthlyActualBalance
@@ -171,40 +171,41 @@ class BudgetViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='import')
     def import_budget(self, request):
         """Import a budget from JSON data"""
-        
         logger = logging.getLogger(__name__)
         
-        # Try to get data from request.data (Django REST Framework parsed)
+        try:
+            return self._import_budget_internal(request)
+        except Exception as e:
+            logger.error(f"Unhandled exception in import_budget: {e}", exc_info=True)
+            return Response(
+                {'error': f'Import failed: {str(e)}', 'error_type': type(e).__name__},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _import_budget_internal(self, request):
+        """Internal implementation of import_budget"""
+        logger = logging.getLogger(__name__)
+        
+        # Get data from request
         data = request.data
         
-        # If request.data is empty or not a dict, try parsing request.body directly
+        # Handle different data types that DRF might return
+        if hasattr(data, 'dict'):
+            data = data.dict()
+        elif isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+            data = data[0]
+        elif not isinstance(data, dict):
+            data = {}
+        
+        # Validate data format
         if not data or not isinstance(data, dict):
-            try:
-                if hasattr(request, 'body') and request.body:
-                    logger.info("Parsing request.body directly")
-                    data = json.loads(request.body.decode('utf-8'))
-            except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                logger.error(f"Failed to parse JSON from request.body: {e}")
-                return Response(
-                    {'error': 'Invalid JSON format in request body.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        
-        # Debug logging
-        logger.info(f"Import request received. Data type: {type(data)}")
-        logger.info(f"Request content type: {request.content_type}")
-        logger.info(f"Data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
-        
-        # Validate that data is a dictionary
-        if not isinstance(data, dict):
-            logger.error(f"Invalid data type received: {type(data)}")
             return Response(
-                {'error': 'Invalid data format. Expected JSON object.', 'received_type': str(type(data))},
+                {'error': 'Invalid JSON format. Could not parse request data.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         # Extract nested data structures
-        budget_data = data.get('budget', {})
+        budget_data = data.get('budget')
         categories_data = data.get('categories', [])
         entries_data = data.get('entries', [])
         tax_entries_data = data.get('tax_entries', [])
@@ -212,22 +213,19 @@ class BudgetViewSet(viewsets.ModelViewSet):
         actual_balances_data = data.get('actual_balances', [])
         
         # Validate required fields
-        if not budget_data:
-            logger.error(f"Budget data missing. Available keys: {list(data.keys())}")
+        if 'budget' not in data:
             return Response(
                 {'budget': ['Dieses Feld ist zwingend erforderlich.']},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if not isinstance(budget_data, dict):
-            logger.error(f"Budget data is not a dict: {type(budget_data)}")
+        if budget_data is None or not isinstance(budget_data, dict):
             return Response(
                 {'budget': ['Budget data must be an object.']},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         if not budget_data.get('name'):
-            logger.error(f"Budget name missing. Budget data keys: {list(budget_data.keys())}")
             return Response(
                 {'budget': {'name': ['Dieses Feld ist zwingend erforderlich.']}},
                 status=status.HTTP_400_BAD_REQUEST
@@ -235,110 +233,124 @@ class BudgetViewSet(viewsets.ModelViewSet):
 
         # Create the budget - handle duplicate names by appending timestamp
         budget_name = budget_data.get('name', 'Imported Budget')
-        # Check if name already exists and append timestamp if needed
         if Budget.objects.filter(name=budget_name).exists():
             from datetime import datetime
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             budget_name = f"{budget_name} (Import {timestamp})"
         
-        budget_serializer = BudgetSerializer(data={
-            'name': budget_name,
-            'currency': budget_data.get('currency', 'CHF'),
-        })
-        if not budget_serializer.is_valid():
-            return Response(budget_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        budget = None
         
-        budget = budget_serializer.save()
+        try:
+            with transaction.atomic():
+                budget_serializer = BudgetSerializer(data={
+                    'name': budget_name,
+                    'currency': budget_data.get('currency', 'CHF'),
+                })
+                if not budget_serializer.is_valid():
+                    return Response(budget_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+                budget = budget_serializer.save()
 
-        # Create categories
-        category_id_mapping = {}  # Map old category IDs to new ones
-        for cat_data in categories_data:
-            old_id = cat_data.get('id')
-            category_serializer = BudgetCategorySerializer(data={
-                'name': cat_data.get('name'),
-                'category_type': cat_data.get('category_type'),
-                'order': cat_data.get('order', 0),
-                'is_active': cat_data.get('is_active', True),
-                'input_mode': cat_data.get('input_mode', 'MONTHLY'),
-                'custom_months': cat_data.get('custom_months'),
-                'custom_start_month': cat_data.get('custom_start_month'),
-                'yearly_amount': cat_data.get('yearly_amount'),
-            })
-            if category_serializer.is_valid():
-                category = category_serializer.save(budget=budget)
-                if old_id:
-                    category_id_mapping[old_id] = category.id
-            else:
-                budget.delete()  # Clean up on error
-                return Response(category_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                # Create categories
+                category_id_mapping = {}
+                for cat_data in categories_data:
+                    old_id = cat_data.get('id')
+                    category_serializer = BudgetCategorySerializer(data={
+                        'name': cat_data.get('name'),
+                        'category_type': cat_data.get('category_type'),
+                        'order': cat_data.get('order', 0),
+                        'is_active': cat_data.get('is_active', True),
+                        'input_mode': cat_data.get('input_mode', 'MONTHLY'),
+                        'custom_months': cat_data.get('custom_months'),
+                        'custom_start_month': cat_data.get('custom_start_month'),
+                        'yearly_amount': cat_data.get('yearly_amount'),
+                    })
+                    if category_serializer.is_valid():
+                        category = category_serializer.save(budget=budget)
+                        if old_id:
+                            category_id_mapping[old_id] = category.id
+                    else:
+                        raise ValueError(f"Category validation error: {category_serializer.errors}")
 
-        # Create entries
-        for entry_data in entries_data:
-            old_category_id = entry_data.get('category')
-            new_category_id = category_id_mapping.get(old_category_id)
-            if not new_category_id:
-                continue  # Skip if category mapping not found
-            
-            entry_serializer = BudgetEntrySerializer(data={
-                'category': new_category_id,
-                'month': entry_data.get('month'),
-                'year': entry_data.get('year'),
-                'planned_amount': entry_data.get('planned_amount'),
-                'actual_amount': entry_data.get('actual_amount'),
-                'notes': entry_data.get('notes', ''),
-            })
-            if entry_serializer.is_valid():
-                entry_serializer.save()
-            else:
-                budget.delete()  # Clean up on error
-                return Response(entry_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                # Create entries
+                for entry_data in entries_data:
+                    old_category_id = entry_data.get('category')
+                    new_category_id = category_id_mapping.get(old_category_id)
+                    if not new_category_id:
+                        continue
+                    
+                    entry_serializer = BudgetEntrySerializer(data={
+                        'category': new_category_id,
+                        'month': entry_data.get('month'),
+                        'year': entry_data.get('year'),
+                        'planned_amount': entry_data.get('planned_amount'),
+                        'actual_amount': entry_data.get('actual_amount'),
+                        'notes': entry_data.get('notes', ''),
+                    })
+                    if entry_serializer.is_valid():
+                        entry_serializer.save()
+                    else:
+                        raise ValueError(f"Entry validation error: {entry_serializer.errors}")
 
-        # Create tax entries
-        for tax_data in tax_entries_data:
-            tax_serializer = TaxEntrySerializer(data={
-                'name': tax_data.get('name'),
-                'percentage': tax_data.get('percentage'),
-                'order': tax_data.get('order', 0),
-                'is_active': tax_data.get('is_active', True),
-            })
-            if tax_serializer.is_valid():
-                tax_serializer.save(budget=budget)
-            else:
-                budget.delete()  # Clean up on error
-                return Response(tax_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                # Create tax entries
+                for tax_data in tax_entries_data:
+                    tax_serializer = TaxEntrySerializer(data={
+                        'name': tax_data.get('name'),
+                        'percentage': tax_data.get('percentage'),
+                        'order': tax_data.get('order', 0),
+                        'is_active': tax_data.get('is_active', True),
+                    })
+                    if tax_serializer.is_valid():
+                        tax_serializer.save(budget=budget)
+                    else:
+                        raise ValueError(f"Tax entry validation error: {tax_serializer.errors}")
 
-        # Create salary reductions
-        for reduction_data in salary_reductions_data:
-            reduction_serializer = SalaryReductionSerializer(data={
-                'name': reduction_data.get('name'),
-                'reduction_type': reduction_data.get('reduction_type'),
-                'value': reduction_data.get('value'),
-                'order': reduction_data.get('order', 0),
-                'is_active': reduction_data.get('is_active', True),
-            })
-            if reduction_serializer.is_valid():
-                reduction_serializer.save(budget=budget)
-            else:
-                budget.delete()  # Clean up on error
-                return Response(reduction_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                # Create salary reductions
+                for reduction_data in salary_reductions_data:
+                    reduction_serializer = SalaryReductionSerializer(data={
+                        'name': reduction_data.get('name'),
+                        'reduction_type': reduction_data.get('reduction_type'),
+                        'value': reduction_data.get('value'),
+                        'order': reduction_data.get('order', 0),
+                        'is_active': reduction_data.get('is_active', True),
+                    })
+                    if reduction_serializer.is_valid():
+                        reduction_serializer.save(budget=budget)
+                    else:
+                        raise ValueError(f"Salary reduction validation error: {reduction_serializer.errors}")
 
-        # Create actual balances
-        for balance_data in actual_balances_data:
-            balance_serializer = MonthlyActualBalanceSerializer(data={
-                'month': balance_data.get('month'),
-                'year': balance_data.get('year'),
-                'actual_income': balance_data.get('actual_income'),
-                'actual_expenses': balance_data.get('actual_expenses'),
-            })
-            if balance_serializer.is_valid():
-                balance_serializer.save(budget=budget)
-            else:
-                budget.delete()  # Clean up on error
-                return Response(balance_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        # Return the created budget
-        budget_serializer = BudgetSerializer(budget)
-        return Response(budget_serializer.data, status=status.HTTP_201_CREATED)
+                # Create actual balances
+                for balance_data in actual_balances_data:
+                    balance_serializer = MonthlyActualBalanceSerializer(data={
+                        'budget': budget.id,
+                        'month': balance_data.get('month'),
+                        'year': balance_data.get('year'),
+                        'actual_income': balance_data.get('actual_income'),
+                        'actual_expenses': balance_data.get('actual_expenses'),
+                    })
+                    if balance_serializer.is_valid():
+                        balance_serializer.save()
+                    else:
+                        raise ValueError(f"Actual balance validation error: {balance_serializer.errors}")
+        
+        except ValueError as e:
+            logger.error(f"Import validation error: {e}")
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Import error: {e}", exc_info=True)
+            return Response({'error': f'Import failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        if not budget:
+            return Response({'error': 'Budget creation failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        try:
+            budget_serializer = BudgetSerializer(budget)
+            return Response(budget_serializer.data, status=status.HTTP_201_CREATED)
+        except (BrokenPipeError, OSError) as e:
+            errno = getattr(e, 'errno', None)
+            if errno == 32 or 'Broken pipe' in str(e):
+                logger.warning(f"Client disconnected during response (import succeeded, budget ID: {budget.id}): {e}")
+            raise
 
 
 class BudgetCategoryViewSet(viewsets.ModelViewSet):

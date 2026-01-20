@@ -95,6 +95,10 @@ a = Analysis(
         'core.serializers',
         'core.urls',
         'core.utils',
+        'core.patches',
+        'core.logging_filters',
+        'core.middleware',
+        'core.exception_handler',
         # Python standard library modules that might be needed
         'sqlite3',
         'json',
