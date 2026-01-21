@@ -96,22 +96,118 @@ jobs:
         working-directory: backend
         run: |
           source .venv/bin/activate
+          echo "=== Building backend executable with PyInstaller ==="
           pyinstaller backend.spec --clean --noconfirm
+          echo "=== PyInstaller build completed ==="
+
+      - name: Verify backend executable
+        working-directory: backend
+        run: |
+          echo "=== Verifying backend executable ==="
+          
+          BACKEND_EXE="dist/backend-server"
+          
+          # Check if executable exists
+          if [ ! -f "$BACKEND_EXE" ]; then
+            echo "::error::Backend executable not found at $BACKEND_EXE"
+            echo "Contents of dist directory:"
+            ls -la dist/ 2>/dev/null || echo "dist directory does not exist"
+            exit 1
+          fi
+          
+          # Check file size (warn if too small - likely broken)
+          FILE_SIZE=$(stat -c%s "$BACKEND_EXE" 2>/dev/null || stat -f%z "$BACKEND_EXE")
+          echo "Backend executable size: $FILE_SIZE bytes ($(numfmt --to=iec $FILE_SIZE 2>/dev/null || echo "${FILE_SIZE}B"))"
+          
+          # Minimum expected size is ~10MB for Django app
+          MIN_SIZE=10000000
+          if [ "$FILE_SIZE" -lt "$MIN_SIZE" ]; then
+            echo "::warning::Backend executable seems too small ($FILE_SIZE bytes). Expected at least $MIN_SIZE bytes."
+            echo "This may indicate a broken build."
+          fi
+          
+          # Verify it's executable
+          if [ ! -x "$BACKEND_EXE" ]; then
+            echo "Setting executable permission..."
+            chmod +x "$BACKEND_EXE"
+          fi
+          
+          # Test executable with --help (catches import errors)
+          echo "Testing backend executable with --help..."
+          if timeout 30 "$BACKEND_EXE" --help > /dev/null 2>&1; then
+            echo "✓ Backend executable runs successfully"
+          else
+            EXIT_CODE=$?
+            echo "::warning::Backend executable --help test failed (exit code: $EXIT_CODE)"
+            echo "This may indicate missing dependencies or import errors."
+            # Don't fail the build, but warn - some executables may not support --help
+          fi
+          
+          echo "✓ Backend executable verification completed"
+          echo "  Path: $(pwd)/$BACKEND_EXE"
+          echo "  Size: $(numfmt --to=iec $FILE_SIZE 2>/dev/null || echo "${FILE_SIZE}B")"
+          echo "  Permissions: $(ls -l $BACKEND_EXE | awk '{print $1}')"
 
       - name: Copy backend executable for Tauri (Linux)
         run: |
+          echo "=== Copying backend executable to Tauri resources ==="
+          
           mkdir -p frontend/src-tauri/resources
-          # Remove placeholder files (we only need the Linux binary)
+          
+          # Remove any existing files
           rm -f frontend/src-tauri/resources/backend-server.exe
           rm -f frontend/src-tauri/resources/backend-server
-          if [ -f "backend/dist/backend-server" ]; then
-            cp backend/dist/backend-server frontend/src-tauri/resources/
-            chmod +x frontend/src-tauri/resources/backend-server
-            echo "✓ Backend executable copied successfully"
+          
+          SOURCE="backend/dist/backend-server"
+          DEST="frontend/src-tauri/resources/backend-server"
+          
+          if [ -f "$SOURCE" ]; then
+            cp "$SOURCE" "$DEST"
+            chmod +x "$DEST"
+            
+            # Verify copy
+            SOURCE_SIZE=$(stat -c%s "$SOURCE" 2>/dev/null || stat -f%z "$SOURCE")
+            DEST_SIZE=$(stat -c%s "$DEST" 2>/dev/null || stat -f%z "$DEST")
+            
+            if [ "$SOURCE_SIZE" -eq "$DEST_SIZE" ]; then
+              echo "✓ Backend executable copied successfully"
+              echo "  Source: $SOURCE ($SOURCE_SIZE bytes)"
+              echo "  Destination: $DEST ($DEST_SIZE bytes)"
+            else
+              echo "::error::File size mismatch after copy!"
+              echo "  Source: $SOURCE_SIZE bytes"
+              echo "  Destination: $DEST_SIZE bytes"
+              exit 1
+            fi
           else
-            echo "::error::Backend executable not found at backend/dist/backend-server"
+            echo "::error::Backend executable not found at $SOURCE"
+            echo "Contents of backend/dist:"
+            ls -la backend/dist/ 2>/dev/null || echo "backend/dist does not exist"
             exit 1
           fi
+
+      - name: Verify Tauri resources
+        run: |
+          echo "=== Verifying Tauri resources ==="
+          
+          RESOURCE_DIR="frontend/src-tauri/resources"
+          BACKEND_EXE="$RESOURCE_DIR/backend-server"
+          
+          if [ ! -f "$BACKEND_EXE" ]; then
+            echo "::error::Backend executable not found in Tauri resources"
+            exit 1
+          fi
+          
+          if [ ! -x "$BACKEND_EXE" ]; then
+            echo "::error::Backend executable is not executable"
+            exit 1
+          fi
+          
+          FILE_SIZE=$(stat -c%s "$BACKEND_EXE" 2>/dev/null || stat -f%z "$BACKEND_EXE")
+          echo "✓ Tauri resources verified"
+          echo "  Backend executable: $BACKEND_EXE"
+          echo "  Size: $(numfmt --to=iec $FILE_SIZE 2>/dev/null || echo "${FILE_SIZE}B")"
+          echo "  Permissions: $(ls -l $BACKEND_EXE | awk '{print $1}')"
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -124,18 +220,97 @@ jobs:
       - name: Build Tauri app
         working-directory: frontend
         run: |
-          # Build bundles (this also builds the standalone binary)
-          bunx tauri build --bundles deb,rpm,appimage
-          # Verify the standalone binary exists
+          echo "=== Building Tauri application ==="
+          
+          # Build essential bundle first (AppImage is most portable for Linux)
+          # Build deb and rpm as secondary options
+          echo "Building bundles: appimage, deb, rpm"
+          
+          # Try to build all bundles, but continue if some fail
+          bunx tauri build --bundles appimage || {
+            echo "::warning::AppImage build failed, trying other bundles..."
+          }
+          
+          # Build deb separately (may succeed even if AppImage fails)
+          bunx tauri build --bundles deb || {
+            echo "::warning::DEB build failed"
+          }
+          
+          # Build rpm separately
+          bunx tauri build --bundles rpm || {
+            echo "::warning::RPM build failed"
+          }
+          
+          # Verify at least the standalone binary exists
           if [ ! -f "src-tauri/target/release/budget-planer" ]; then
-            echo "::error::Standalone binary not found, building without bundles..."
+            echo "Building standalone binary..."
             bunx tauri build
           fi
-        # Optional: Set these secrets in GitHub Settings → Secrets for code signing
-        # If not set, Tauri will build without signing (linter warnings are expected)
+          
+          echo "=== Tauri build completed ==="
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Verify Tauri build artifacts
+        working-directory: frontend
+        run: |
+          echo "=== Verifying Tauri build artifacts ==="
+          
+          RELEASE_DIR="src-tauri/target/release"
+          BUNDLE_DIR="$RELEASE_DIR/bundle"
+          
+          # Check standalone binary
+          if [ -f "$RELEASE_DIR/budget-planer" ]; then
+            SIZE=$(stat -c%s "$RELEASE_DIR/budget-planer" 2>/dev/null || stat -f%z "$RELEASE_DIR/budget-planer")
+            echo "✓ Standalone binary: $RELEASE_DIR/budget-planer ($(numfmt --to=iec $SIZE 2>/dev/null || echo "${SIZE}B"))"
+          else
+            echo "::error::Standalone binary not found"
+            exit 1
+          fi
+          
+          # Check bundle artifacts (informational, don't fail if missing)
+          FOUND_BUNDLES=0
+          
+          echo ""
+          echo "Bundle artifacts:"
+          
+          # AppImage
+          APPIMAGE=$(find "$BUNDLE_DIR" -name "*.AppImage" 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
+            SIZE=$(stat -c%s "$APPIMAGE" 2>/dev/null || stat -f%z "$APPIMAGE")
+            echo "✓ AppImage: $APPIMAGE ($(numfmt --to=iec $SIZE 2>/dev/null || echo "${SIZE}B"))"
+            FOUND_BUNDLES=$((FOUND_BUNDLES + 1))
+          else
+            echo "⚠ AppImage: not found"
+          fi
+          
+          # DEB
+          DEB=$(find "$BUNDLE_DIR" -name "*.deb" 2>/dev/null | head -1)
+          if [ -n "$DEB" ] && [ -f "$DEB" ]; then
+            SIZE=$(stat -c%s "$DEB" 2>/dev/null || stat -f%z "$DEB")
+            echo "✓ DEB: $DEB ($(numfmt --to=iec $SIZE 2>/dev/null || echo "${SIZE}B"))"
+            FOUND_BUNDLES=$((FOUND_BUNDLES + 1))
+          else
+            echo "⚠ DEB: not found"
+          fi
+          
+          # RPM
+          RPM=$(find "$BUNDLE_DIR" -name "*.rpm" 2>/dev/null | head -1)
+          if [ -n "$RPM" ] && [ -f "$RPM" ]; then
+            SIZE=$(stat -c%s "$RPM" 2>/dev/null || stat -f%z "$RPM")
+            echo "✓ RPM: $RPM ($(numfmt --to=iec $SIZE 2>/dev/null || echo "${SIZE}B"))"
+            FOUND_BUNDLES=$((FOUND_BUNDLES + 1))
+          else
+            echo "⚠ RPM: not found"
+          fi
+          
+          echo ""
+          echo "Summary: Found $FOUND_BUNDLES bundle type(s)"
+          
+          if [ "$FOUND_BUNDLES" -eq 0 ]; then
+            echo "::warning::No bundle artifacts found. Only standalone binary will be uploaded."
+          fi
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -184,21 +359,105 @@ jobs:
       - name: Build backend executable
         working-directory: backend
         run: |
+          Write-Host "=== Building backend executable with PyInstaller ==="
           .venv\Scripts\python -m PyInstaller backend.spec --clean --noconfirm
+          Write-Host "=== PyInstaller build completed ==="
+
+      - name: Verify backend executable
+        working-directory: backend
+        run: |
+          Write-Host "=== Verifying backend executable ==="
+          
+          $BACKEND_EXE = "dist\backend-server.exe"
+          
+          # Check if executable exists
+          if (-not (Test-Path $BACKEND_EXE)) {
+            Write-Host "::error::Backend executable not found at $BACKEND_EXE"
+            Write-Host "Contents of dist directory:"
+            Get-ChildItem -Path dist -ErrorAction SilentlyContinue | Format-Table
+            exit 1
+          }
+          
+          # Check file size
+          $fileInfo = Get-Item $BACKEND_EXE
+          $fileSize = $fileInfo.Length
+          $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
+          Write-Host "Backend executable size: $fileSize bytes ($fileSizeMB MB)"
+          
+          # Minimum expected size is ~10MB for Django app
+          $MIN_SIZE = 10000000
+          if ($fileSize -lt $MIN_SIZE) {
+            Write-Host "::warning::Backend executable seems too small ($fileSize bytes). Expected at least $MIN_SIZE bytes."
+          }
+          
+          # Test executable with --help
+          Write-Host "Testing backend executable with --help..."
+          try {
+            $process = Start-Process -FilePath $BACKEND_EXE -ArgumentList "--help" -Wait -PassThru -NoNewWindow -ErrorAction Stop
+            if ($process.ExitCode -eq 0) {
+              Write-Host "✓ Backend executable runs successfully"
+            } else {
+              Write-Host "::warning::Backend executable --help test returned exit code: $($process.ExitCode)"
+            }
+          } catch {
+            Write-Host "::warning::Backend executable --help test failed: $_"
+          }
+          
+          Write-Host "✓ Backend executable verification completed"
+          Write-Host "  Path: $(Get-Location)\$BACKEND_EXE"
+          Write-Host "  Size: $fileSizeMB MB"
 
       - name: Copy backend executable for Tauri
         run: |
+          Write-Host "=== Copying backend executable to Tauri resources ==="
+          
           New-Item -ItemType Directory -Force -Path frontend\src-tauri\resources | Out-Null
-          # Remove placeholder files (we only need the Windows binary)
+          
+          # Remove any existing files
           Remove-Item -Force frontend\src-tauri\resources\backend-server -ErrorAction SilentlyContinue
           Remove-Item -Force frontend\src-tauri\resources\backend-server.exe -ErrorAction SilentlyContinue
-          if (Test-Path backend\dist\backend-server.exe) {
-            Copy-Item backend\dist\backend-server.exe frontend\src-tauri\resources\
-            Write-Host "✓ Backend executable copied successfully"
+          
+          $SOURCE = "backend\dist\backend-server.exe"
+          $DEST = "frontend\src-tauri\resources\backend-server.exe"
+          
+          if (Test-Path $SOURCE) {
+            Copy-Item $SOURCE $DEST
+            
+            # Verify copy
+            $sourceSize = (Get-Item $SOURCE).Length
+            $destSize = (Get-Item $DEST).Length
+            
+            if ($sourceSize -eq $destSize) {
+              Write-Host "✓ Backend executable copied successfully"
+              Write-Host "  Source: $SOURCE ($sourceSize bytes)"
+              Write-Host "  Destination: $DEST ($destSize bytes)"
+            } else {
+              Write-Host "::error::File size mismatch after copy!"
+              Write-Host "  Source: $sourceSize bytes"
+              Write-Host "  Destination: $destSize bytes"
+              exit 1
+            }
           } else {
-            Write-Error "Backend executable not found at backend\dist\backend-server.exe"
+            Write-Host "::error::Backend executable not found at $SOURCE"
+            Get-ChildItem -Path backend\dist -ErrorAction SilentlyContinue | Format-Table
             exit 1
           }
+
+      - name: Verify Tauri resources
+        run: |
+          Write-Host "=== Verifying Tauri resources ==="
+          
+          $BACKEND_EXE = "frontend\src-tauri\resources\backend-server.exe"
+          
+          if (-not (Test-Path $BACKEND_EXE)) {
+            Write-Host "::error::Backend executable not found in Tauri resources"
+            exit 1
+          }
+          
+          $fileInfo = Get-Item $BACKEND_EXE
+          Write-Host "✓ Tauri resources verified"
+          Write-Host "  Backend executable: $BACKEND_EXE"
+          Write-Host "  Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -210,12 +469,58 @@ jobs:
 
       - name: Build Tauri app
         working-directory: frontend
-        run: bunx tauri build
-        # Optional: Set these secrets in GitHub Settings → Secrets for code signing
-        # If not set, Tauri will build without signing (linter warnings are expected)
+        run: |
+          Write-Host "=== Building Tauri application ==="
+          
+          # Build MSI (primary Windows installer)
+          bunx tauri build --bundles msi
+          
+          # Build NSIS installer (alternative)
+          bunx tauri build --bundles nsis 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::NSIS build failed, continuing with MSI only"
+          }
+          
+          Write-Host "=== Tauri build completed ==="
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Verify Tauri build artifacts
+        working-directory: frontend
+        run: |
+          Write-Host "=== Verifying Tauri build artifacts ==="
+          
+          $RELEASE_DIR = "src-tauri\target\release"
+          $BUNDLE_DIR = "$RELEASE_DIR\bundle"
+          
+          # Check standalone binary
+          if (Test-Path "$RELEASE_DIR\budget-planer.exe") {
+            $size = (Get-Item "$RELEASE_DIR\budget-planer.exe").Length
+            Write-Host "✓ Standalone binary: $RELEASE_DIR\budget-planer.exe ($([math]::Round($size / 1MB, 2)) MB)"
+          } else {
+            Write-Host "::error::Standalone binary not found"
+            exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "Bundle artifacts:"
+          
+          # MSI
+          $msi = Get-ChildItem -Path $BUNDLE_DIR -Filter "*.msi" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($msi) {
+            Write-Host "✓ MSI: $($msi.FullName) ($([math]::Round($msi.Length / 1MB, 2)) MB)"
+          } else {
+            Write-Host "⚠ MSI: not found"
+          }
+          
+          # NSIS
+          $nsis = Get-ChildItem -Path $BUNDLE_DIR -Filter "*_x64-setup.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nsis) {
+            Write-Host "✓ NSIS: $($nsis.FullName) ($([math]::Round($nsis.Length / 1MB, 2)) MB)"
+          } else {
+            Write-Host "⚠ NSIS: not found"
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -264,22 +569,109 @@ jobs:
         working-directory: backend
         run: |
           source .venv/bin/activate
+          echo "=== Building backend executable with PyInstaller ==="
           pyinstaller backend.spec --clean --noconfirm
+          echo "=== PyInstaller build completed ==="
+
+      - name: Verify backend executable
+        working-directory: backend
+        run: |
+          echo "=== Verifying backend executable ==="
+          
+          BACKEND_EXE="dist/backend-server"
+          
+          # Check if executable exists
+          if [ ! -f "$BACKEND_EXE" ]; then
+            echo "::error::Backend executable not found at $BACKEND_EXE"
+            echo "Contents of dist directory:"
+            ls -la dist/ 2>/dev/null || echo "dist directory does not exist"
+            exit 1
+          fi
+          
+          # Check file size
+          FILE_SIZE=$(stat -f%z "$BACKEND_EXE")
+          FILE_SIZE_MB=$((FILE_SIZE / 1048576))
+          echo "Backend executable size: $FILE_SIZE bytes (${FILE_SIZE_MB} MB)"
+          
+          # Minimum expected size is ~10MB for Django app
+          MIN_SIZE=10000000
+          if [ "$FILE_SIZE" -lt "$MIN_SIZE" ]; then
+            echo "::warning::Backend executable seems too small ($FILE_SIZE bytes). Expected at least $MIN_SIZE bytes."
+          fi
+          
+          # Verify it's executable
+          if [ ! -x "$BACKEND_EXE" ]; then
+            echo "Setting executable permission..."
+            chmod +x "$BACKEND_EXE"
+          fi
+          
+          # Test executable with --help
+          echo "Testing backend executable with --help..."
+          if timeout 30 "$BACKEND_EXE" --help > /dev/null 2>&1; then
+            echo "✓ Backend executable runs successfully"
+          else
+            EXIT_CODE=$?
+            echo "::warning::Backend executable --help test failed (exit code: $EXIT_CODE)"
+          fi
+          
+          echo "✓ Backend executable verification completed"
+          echo "  Path: $(pwd)/$BACKEND_EXE"
+          echo "  Size: ${FILE_SIZE_MB} MB"
 
       - name: Copy backend executable for Tauri (macOS)
         run: |
+          echo "=== Copying backend executable to Tauri resources ==="
+          
           mkdir -p frontend/src-tauri/resources
-          # Remove placeholder files (we only need the macOS binary)
+          
+          # Remove any existing files
           rm -f frontend/src-tauri/resources/backend-server.exe
           rm -f frontend/src-tauri/resources/backend-server
-          if [ -f "backend/dist/backend-server" ]; then
-            cp backend/dist/backend-server frontend/src-tauri/resources/
-            chmod +x frontend/src-tauri/resources/backend-server
-            echo "✓ Backend executable copied successfully"
+          
+          SOURCE="backend/dist/backend-server"
+          DEST="frontend/src-tauri/resources/backend-server"
+          
+          if [ -f "$SOURCE" ]; then
+            cp "$SOURCE" "$DEST"
+            chmod +x "$DEST"
+            
+            # Verify copy
+            SOURCE_SIZE=$(stat -f%z "$SOURCE")
+            DEST_SIZE=$(stat -f%z "$DEST")
+            
+            if [ "$SOURCE_SIZE" -eq "$DEST_SIZE" ]; then
+              echo "✓ Backend executable copied successfully"
+              echo "  Source: $SOURCE ($SOURCE_SIZE bytes)"
+              echo "  Destination: $DEST ($DEST_SIZE bytes)"
+            else
+              echo "::error::File size mismatch after copy!"
+              exit 1
+            fi
           else
-            echo "::error::Backend executable not found at backend/dist/backend-server"
+            echo "::error::Backend executable not found at $SOURCE"
             exit 1
           fi
+
+      - name: Verify Tauri resources
+        run: |
+          echo "=== Verifying Tauri resources ==="
+          
+          BACKEND_EXE="frontend/src-tauri/resources/backend-server"
+          
+          if [ ! -f "$BACKEND_EXE" ]; then
+            echo "::error::Backend executable not found in Tauri resources"
+            exit 1
+          fi
+          
+          if [ ! -x "$BACKEND_EXE" ]; then
+            echo "::error::Backend executable is not executable"
+            exit 1
+          fi
+          
+          FILE_SIZE=$(stat -f%z "$BACKEND_EXE")
+          echo "✓ Tauri resources verified"
+          echo "  Backend executable: $BACKEND_EXE"
+          echo "  Size: $((FILE_SIZE / 1048576)) MB"
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -292,23 +684,67 @@ jobs:
       - name: Build Tauri app
         working-directory: frontend
         run: |
-          # Build the app - DMG may fail due to AppleScript permissions in CI, but app bundle should succeed
-          bunx tauri build || {
-            echo "Build completed with warnings/errors. Checking for app bundle..."
-            # Check if app bundle was created despite DMG failure
-            if [ -d "src-tauri/target/release/bundle/macos/Budget Planer.app" ]; then
-              echo "✓ App bundle created successfully (DMG may have failed)"
-              exit 0
-            else
-              echo "✗ App bundle not found - build failed"
-              exit 1
-            fi
+          echo "=== Building Tauri application ==="
+          
+          # Build app bundle first (most reliable on macOS)
+          bunx tauri build --bundles app || {
+            echo "::warning::App bundle build had issues"
           }
-        # Optional: Set these secrets in GitHub Settings → Secrets for code signing
-        # If not set, Tauri will build without signing (linter warnings are expected)
+          
+          # Try to build DMG (may fail due to AppleScript permissions in CI)
+          bunx tauri build --bundles dmg 2>&1 || {
+            echo "::warning::DMG build failed (common in CI due to AppleScript permissions)"
+          }
+          
+          # Check if app bundle was created
+          if [ -d "src-tauri/target/release/bundle/macos/Budget Planer.app" ]; then
+            echo "✓ App bundle created successfully"
+          else
+            echo "::error::App bundle not found - build failed"
+            exit 1
+          fi
+          
+          echo "=== Tauri build completed ==="
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Verify Tauri build artifacts
+        working-directory: frontend
+        run: |
+          echo "=== Verifying Tauri build artifacts ==="
+          
+          RELEASE_DIR="src-tauri/target/release"
+          BUNDLE_DIR="$RELEASE_DIR/bundle"
+          
+          # Check standalone binary
+          if [ -f "$RELEASE_DIR/budget-planer" ]; then
+            SIZE=$(stat -f%z "$RELEASE_DIR/budget-planer")
+            echo "✓ Standalone binary: $RELEASE_DIR/budget-planer ($((SIZE / 1048576)) MB)"
+          else
+            echo "::warning::Standalone binary not found (may be inside .app bundle)"
+          fi
+          
+          echo ""
+          echo "Bundle artifacts:"
+          
+          # App bundle
+          if [ -d "$BUNDLE_DIR/macos/Budget Planer.app" ]; then
+            SIZE=$(du -sm "$BUNDLE_DIR/macos/Budget Planer.app" | cut -f1)
+            echo "✓ App bundle: $BUNDLE_DIR/macos/Budget Planer.app (${SIZE} MB)"
+          else
+            echo "::error::App bundle not found"
+            exit 1
+          fi
+          
+          # DMG
+          DMG=$(find "$BUNDLE_DIR" -name "*.dmg" 2>/dev/null | head -1)
+          if [ -n "$DMG" ] && [ -f "$DMG" ]; then
+            SIZE=$(stat -f%z "$DMG")
+            echo "✓ DMG: $DMG ($((SIZE / 1048576)) MB)"
+          else
+            echo "⚠ DMG: not found (may have failed due to CI limitations)"
+          fi
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -346,145 +782,288 @@ jobs:
           name: budget-planer-macos
           path: artifacts/macos
 
+      - name: Validate downloaded artifacts
+        run: |
+          echo "=== Validating downloaded artifacts ==="
+          
+          ERRORS=0
+          WARNINGS=0
+          
+          # Function to check file exists and has reasonable size
+          check_file() {
+            local file="$1"
+            local min_size="$2"
+            local description="$3"
+            
+            if [ -f "$file" ]; then
+              local size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
+              if [ "$size" -lt "$min_size" ]; then
+                echo "::warning::$description is suspiciously small ($size bytes)"
+                WARNINGS=$((WARNINGS + 1))
+              else
+                echo "✓ $description: $(basename "$file") ($size bytes)"
+              fi
+              return 0
+            else
+              return 1
+            fi
+          }
+          
+          echo ""
+          echo "=== Linux Artifacts ==="
+          
+          # Linux binary
+          LINUX_BINARY=$(find artifacts/linux -name "budget-planer" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          if [ -n "$LINUX_BINARY" ]; then
+            check_file "$LINUX_BINARY" 1000000 "Linux binary"
+          else
+            echo "::error::Linux binary not found"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Linux backend
+          LINUX_BACKEND=$(find artifacts/linux -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          if [ -n "$LINUX_BACKEND" ]; then
+            check_file "$LINUX_BACKEND" 10000000 "Linux backend"
+          else
+            echo "::error::Linux backend not found"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Linux bundles (optional)
+          for ext in deb AppImage rpm; do
+            file=$(find artifacts/linux -name "*.$ext" 2>/dev/null | head -1)
+            if [ -n "$file" ]; then
+              check_file "$file" 1000000 "Linux $ext"
+            else
+              echo "⚠ Linux $ext not found (optional)"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+          done
+          
+          echo ""
+          echo "=== Windows Artifacts ==="
+          
+          # Windows binary
+          WINDOWS_BINARY=$(find artifacts/windows -name "budget-planer.exe" -type f 2>/dev/null | head -1)
+          if [ -n "$WINDOWS_BINARY" ]; then
+            check_file "$WINDOWS_BINARY" 1000000 "Windows binary"
+          else
+            echo "::error::Windows binary not found"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Windows backend
+          WINDOWS_BACKEND=$(find artifacts/windows -name "backend-server.exe" -type f 2>/dev/null | head -1)
+          if [ -n "$WINDOWS_BACKEND" ]; then
+            check_file "$WINDOWS_BACKEND" 10000000 "Windows backend"
+          else
+            echo "::error::Windows backend not found"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Windows MSI
+          WINDOWS_MSI=$(find artifacts/windows -name "*.msi" 2>/dev/null | head -1)
+          if [ -n "$WINDOWS_MSI" ]; then
+            check_file "$WINDOWS_MSI" 1000000 "Windows MSI"
+          else
+            echo "⚠ Windows MSI not found (optional)"
+            WARNINGS=$((WARNINGS + 1))
+          fi
+          
+          echo ""
+          echo "=== macOS Artifacts ==="
+          
+          # macOS binary (may be inside .app)
+          MACOS_BINARY=$(find artifacts/macos -name "budget-planer" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          if [ -n "$MACOS_BINARY" ]; then
+            check_file "$MACOS_BINARY" 1000000 "macOS binary"
+          else
+            echo "⚠ macOS standalone binary not found (may be inside .app bundle)"
+          fi
+          
+          # macOS backend
+          MACOS_BACKEND=$(find artifacts/macos -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          if [ -n "$MACOS_BACKEND" ]; then
+            check_file "$MACOS_BACKEND" 10000000 "macOS backend"
+          else
+            echo "::error::macOS backend not found"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # macOS app bundle
+          MACOS_APP=$(find artifacts/macos -name "*.app" -type d 2>/dev/null | head -1)
+          if [ -n "$MACOS_APP" ]; then
+            echo "✓ macOS app bundle: $(basename "$MACOS_APP")"
+          else
+            echo "::error::macOS app bundle not found"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # macOS DMG
+          MACOS_DMG=$(find artifacts/macos -name "*.dmg" 2>/dev/null | head -1)
+          if [ -n "$MACOS_DMG" ]; then
+            check_file "$MACOS_DMG" 1000000 "macOS DMG"
+          else
+            echo "⚠ macOS DMG not found (optional)"
+            WARNINGS=$((WARNINGS + 1))
+          fi
+          
+          echo ""
+          echo "=== Validation Summary ==="
+          echo "Errors: $ERRORS"
+          echo "Warnings: $WARNINGS"
+          
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "::error::Artifact validation failed with $ERRORS error(s)"
+            exit 1
+          fi
+          
+          if [ "$WARNINGS" -gt 0 ]; then
+            echo "::warning::Artifact validation completed with $WARNINGS warning(s)"
+          fi
+          
+          echo "✓ Artifact validation passed"
+
       - name: Filter and prepare release artifacts
         run: |
-          echo "=== Filtering release artifacts ==="
+          echo "=== Preparing release artifacts ==="
           
           # Create a clean release directory
           mkdir -p release_artifacts
           
-          # Linux: Find the binary (it may be in a nested directory structure)
-          LINUX_BINARY=$(find artifacts/linux -name "budget-planer" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          # Linux artifacts
+          echo ""
+          echo "Processing Linux artifacts..."
           
-          # Linux: Create portable ZIP with binary + backend-server
+          LINUX_BINARY=$(find artifacts/linux -name "budget-planer" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          LINUX_BACKEND=$(find artifacts/linux -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          
+          # Create portable ZIP
           if [ -n "$LINUX_BINARY" ] && [ -f "$LINUX_BINARY" ]; then
             mkdir -p portable-linux
             cp "$LINUX_BINARY" portable-linux/budget-planer
             chmod +x portable-linux/budget-planer
-            # Find and copy backend-server
-            BACKEND=$(find artifacts/linux -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
-            if [ -n "$BACKEND" ] && [ -f "$BACKEND" ]; then
-              cp "$BACKEND" portable-linux/
+            
+            if [ -n "$LINUX_BACKEND" ] && [ -f "$LINUX_BACKEND" ]; then
+              cp "$LINUX_BACKEND" portable-linux/
               chmod +x portable-linux/backend-server
-              echo "✓ Found backend-server for Linux portable"
             fi
-            # Create portable ZIP
+            
             (cd portable-linux && zip -r ../release_artifacts/budget-planer-linux-portable.zip .)
-            echo "✓ Added Linux portable ZIP (binary + backend-server)"
+            echo "✓ Created Linux portable ZIP"
             rm -rf portable-linux
-          fi
-          
-          # Linux: Add standalone binary
-          if [ -n "$LINUX_BINARY" ] && [ -f "$LINUX_BINARY" ]; then
+            
+            # Also add standalone binary
             cp "$LINUX_BINARY" release_artifacts/budget-planer-linux
             chmod +x release_artifacts/budget-planer-linux
-            echo "✓ Added Linux standalone binary"
           fi
           
-          # Linux: Add bundle types
+          # Copy Linux bundles
           find artifacts/linux -name "*.deb" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
-            echo "✓ Added Linux DEB package: $(basename "$file")"
+            echo "✓ Added $(basename "$file")"
           done
+          
           find artifacts/linux -name "*.AppImage" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
-            echo "✓ Added Linux AppImage: $(basename "$file")"
+            echo "✓ Added $(basename "$file")"
           done
+          
           find artifacts/linux -name "*.rpm" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
-            echo "✓ Added Linux RPM package: $(basename "$file")"
+            echo "✓ Added $(basename "$file")"
           done
           
-          # Windows: Find the binary (it may be in a nested directory structure)
-          WINDOWS_BINARY=$(find artifacts/windows -name "budget-planer.exe" -type f 2>/dev/null | head -1)
+          # Windows artifacts
+          echo ""
+          echo "Processing Windows artifacts..."
           
-          # Windows: Create portable ZIP with binary + backend-server
+          WINDOWS_BINARY=$(find artifacts/windows -name "budget-planer.exe" -type f 2>/dev/null | head -1)
+          WINDOWS_BACKEND=$(find artifacts/windows -name "backend-server.exe" -type f 2>/dev/null | head -1)
+          
+          # Create portable ZIP
           if [ -n "$WINDOWS_BINARY" ] && [ -f "$WINDOWS_BINARY" ]; then
             mkdir -p portable-windows
             cp "$WINDOWS_BINARY" portable-windows/budget-planer.exe
-            # Find and copy backend-server.exe
-            BACKEND=$(find artifacts/windows -name "backend-server.exe" -type f 2>/dev/null | head -1)
-            if [ -n "$BACKEND" ] && [ -f "$BACKEND" ]; then
-              cp "$BACKEND" portable-windows/
-              echo "✓ Found backend-server.exe for Windows portable"
+            
+            if [ -n "$WINDOWS_BACKEND" ] && [ -f "$WINDOWS_BACKEND" ]; then
+              cp "$WINDOWS_BACKEND" portable-windows/
             fi
-            # Create portable ZIP
+            
             (cd portable-windows && zip -r ../release_artifacts/budget-planer-windows-portable.zip .)
-            echo "✓ Added Windows portable ZIP (binary + backend-server)"
+            echo "✓ Created Windows portable ZIP"
             rm -rf portable-windows
+            
+            # Also add standalone binary
+            cp "$WINDOWS_BINARY" release_artifacts/budget-planer-windows.exe
           fi
           
-          # Windows: Add installers
+          # Copy Windows installers
           find artifacts/windows -name "*.msi" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
-            echo "✓ Added Windows MSI installer: $(basename "$file")"
-          done
-          find artifacts/windows -name "*.exe" -type f 2>/dev/null | while read -r file; do
-            # Only include NSIS installers (skip main binary and backend)
-            basename_file=$(basename "$file")
-            if [ "$basename_file" != "budget-planer.exe" ] && [ "$basename_file" != "backend-server.exe" ]; then
-              cp "$file" release_artifacts/
-              echo "✓ Added Windows installer: $basename_file"
-            fi
+            echo "✓ Added $(basename "$file")"
           done
           
-          # Windows: Add standalone binary
-          if [ -n "$WINDOWS_BINARY" ] && [ -f "$WINDOWS_BINARY" ]; then
-            cp "$WINDOWS_BINARY" release_artifacts/budget-planer-windows.exe
-            echo "✓ Added Windows standalone binary"
-          fi
+          find artifacts/windows -name "*_x64-setup.exe" -type f 2>/dev/null | while read -r file; do
+            cp "$file" release_artifacts/
+            echo "✓ Added $(basename "$file")"
+          done
           
-          # macOS: Find the binary (it may be in a nested directory structure)
+          # macOS artifacts
+          echo ""
+          echo "Processing macOS artifacts..."
+          
           MACOS_BINARY=$(find artifacts/macos -name "budget-planer" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          MACOS_BACKEND=$(find artifacts/macos -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
           
-          # macOS: Create portable ZIP with binary + backend-server
+          # Create portable ZIP
           if [ -n "$MACOS_BINARY" ] && [ -f "$MACOS_BINARY" ]; then
             mkdir -p portable-macos
             cp "$MACOS_BINARY" portable-macos/budget-planer
             chmod +x portable-macos/budget-planer
-            # Find and copy backend-server
-            BACKEND=$(find artifacts/macos -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
-            if [ -n "$BACKEND" ] && [ -f "$BACKEND" ]; then
-              cp "$BACKEND" portable-macos/
+            
+            if [ -n "$MACOS_BACKEND" ] && [ -f "$MACOS_BACKEND" ]; then
+              cp "$MACOS_BACKEND" portable-macos/
               chmod +x portable-macos/backend-server
-              echo "✓ Found backend-server for macOS portable"
             fi
-            # Create portable ZIP
+            
             (cd portable-macos && zip -r ../release_artifacts/budget-planer-macos-portable.zip .)
-            echo "✓ Added macOS portable ZIP (binary + backend-server)"
+            echo "✓ Created macOS portable ZIP"
             rm -rf portable-macos
-          fi
-          
-          # macOS: Add standalone binary
-          if [ -n "$MACOS_BINARY" ] && [ -f "$MACOS_BINARY" ]; then
+            
+            # Also add standalone binary
             cp "$MACOS_BINARY" release_artifacts/budget-planer-macos
             chmod +x release_artifacts/budget-planer-macos
-            echo "✓ Added macOS standalone binary"
           fi
           
-          # macOS: Add DMG and PKG
+          # Copy macOS DMG
           find artifacts/macos -name "*.dmg" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
-            echo "✓ Added macOS DMG: $(basename "$file")"
+            echo "✓ Added $(basename "$file")"
           done
-          find artifacts/macos -name "*.pkg" -type f 2>/dev/null | while read -r file; do
-            cp "$file" release_artifacts/
-            echo "✓ Added macOS PKG installer: $(basename "$file")"
-          done
-          # macOS: Look for app bundle (handle spaces in name, search recursively)
+          
+          # Create ZIP of macOS app bundle
           RELEASE_DIR="$PWD/release_artifacts"
           find artifacts/macos -name "*.app" -type d 2>/dev/null | while read -r app; do
             app_name=$(basename "$app" .app)
             app_dir=$(dirname "$app")
             app_basename=$(basename "$app")
-            # Create a zip of the app bundle for easier distribution
             (cd "$app_dir" && zip -r "$RELEASE_DIR/${app_name}-macos.zip" "$app_basename" > /dev/null 2>&1)
-            echo "✓ Added macOS app bundle: $app_basename (as zip)"
+            echo "✓ Created ${app_name}-macos.zip"
           done
           
           echo ""
           echo "=== Release artifacts ready ==="
           ls -lh release_artifacts/
+          
+          # Final validation
+          ARTIFACT_COUNT=$(ls -1 release_artifacts/ | wc -l)
+          if [ "$ARTIFACT_COUNT" -lt 3 ]; then
+            echo "::warning::Only $ARTIFACT_COUNT artifacts prepared. Expected at least 3."
+          else
+            echo "✓ Prepared $ARTIFACT_COUNT release artifacts"
+          fi
 
       - name: Create and publish release
         uses: softprops/action-gh-release@v2

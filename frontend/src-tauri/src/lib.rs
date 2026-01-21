@@ -1211,10 +1211,17 @@ pub fn run() {
         if let Some(exe_path) = bundled_exe {
           info!("Found bundled backend executable: {:?}", exe_path);
           
-          // Create a dummy backend_path for the function (it won't be used when executable is found)
-          let dummy_backend_path = exe_dir.join("backend");
+          // Extract the backend directory from the found executable path
+          // The executable is at backend/dist/backend-server, so we need to go up two levels
+          // to get the backend directory that start_backend_server expects
+          let backend_path = exe_path.parent()  // backend/dist/
+            .and_then(|p| p.parent())           // backend/
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| exe_dir.join("backend"));
           
-          match start_backend_server(&app_handle, &dummy_backend_path, &db_path_clone) {
+          info!("Using backend directory: {:?}", backend_path);
+          
+          match start_backend_server(&app_handle, &backend_path, &db_path_clone) {
             Ok(child) => {
               // Store process in app state
               if let Some(state) = app_handle.try_state::<Mutex<Option<Child>>>() {
