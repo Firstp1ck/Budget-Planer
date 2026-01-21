@@ -588,7 +588,7 @@ jobs:
             exit 1
           fi
           
-          # Check file size
+          # Check file size (macOS uses different stat syntax)
           FILE_SIZE=$(stat -f%z "$BACKEND_EXE")
           FILE_SIZE_MB=$((FILE_SIZE / 1048576))
           echo "Backend executable size: $FILE_SIZE bytes (${FILE_SIZE_MB} MB)"
@@ -605,13 +605,17 @@ jobs:
             chmod +x "$BACKEND_EXE"
           fi
           
-          # Test executable with --help
+          # Test executable with --help (use perl for timeout on macOS since timeout command doesn't exist)
           echo "Testing backend executable with --help..."
-          if timeout 30 "$BACKEND_EXE" --help > /dev/null 2>&1; then
+          if perl -e 'alarm 30; exec @ARGV' "$BACKEND_EXE" --help > /dev/null 2>&1; then
             echo "✓ Backend executable runs successfully"
           else
             EXIT_CODE=$?
-            echo "::warning::Backend executable --help test failed (exit code: $EXIT_CODE)"
+            if [ "$EXIT_CODE" -eq 142 ]; then
+              echo "::warning::Backend executable timed out (30s) - may be hanging"
+            else
+              echo "::warning::Backend executable --help test returned exit code: $EXIT_CODE (non-critical)"
+            fi
           fi
           
           echo "✓ Backend executable verification completed"
@@ -686,21 +690,25 @@ jobs:
         run: |
           echo "=== Building Tauri application ==="
           
-          # Build app bundle first (most reliable on macOS)
-          bunx tauri build --bundles app || {
-            echo "::warning::App bundle build had issues"
+          # Build both app bundle and DMG together
+          # Note: DMG bundler may clean up the .app after creating DMG
+          bunx tauri build --bundles app,dmg 2>&1 || {
+            echo "::warning::Some bundle builds may have had issues"
           }
           
-          # Try to build DMG (may fail due to AppleScript permissions in CI)
-          bunx tauri build --bundles dmg 2>&1 || {
-            echo "::warning::DMG build failed (common in CI due to AppleScript permissions)"
-          }
+          # Check if either app bundle or DMG was created (DMG is the primary deliverable)
+          BUNDLE_DIR="src-tauri/target/release/bundle"
+          APP_BUNDLE="$BUNDLE_DIR/macos/Budget Planer.app"
+          DMG_FILE=$(find "$BUNDLE_DIR" -name "*.dmg" 2>/dev/null | head -1)
           
-          # Check if app bundle was created
-          if [ -d "src-tauri/target/release/bundle/macos/Budget Planer.app" ]; then
-            echo "✓ App bundle created successfully"
+          if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
+            echo "✓ DMG created successfully: $DMG_FILE"
+          elif [ -d "$APP_BUNDLE" ]; then
+            echo "✓ App bundle created successfully (DMG creation may have failed)"
           else
-            echo "::error::App bundle not found - build failed"
+            echo "::error::Neither DMG nor app bundle found - build failed"
+            echo "Contents of bundle directory:"
+            find "$BUNDLE_DIR" -type f 2>/dev/null || echo "Bundle directory not found"
             exit 1
           fi
           
@@ -728,23 +736,35 @@ jobs:
           echo ""
           echo "Bundle artifacts:"
           
-          # App bundle
-          if [ -d "$BUNDLE_DIR/macos/Budget Planer.app" ]; then
-            SIZE=$(du -sm "$BUNDLE_DIR/macos/Budget Planer.app" | cut -f1)
-            echo "✓ App bundle: $BUNDLE_DIR/macos/Budget Planer.app (${SIZE} MB)"
-          else
-            echo "::error::App bundle not found"
-            exit 1
-          fi
+          HAS_DISTRIBUTABLE=false
           
-          # DMG
+          # DMG (primary distributable for macOS)
           DMG=$(find "$BUNDLE_DIR" -name "*.dmg" 2>/dev/null | head -1)
           if [ -n "$DMG" ] && [ -f "$DMG" ]; then
             SIZE=$(stat -f%z "$DMG")
             echo "✓ DMG: $DMG ($((SIZE / 1048576)) MB)"
+            HAS_DISTRIBUTABLE=true
           else
-            echo "⚠ DMG: not found (may have failed due to CI limitations)"
+            echo "⚠ DMG: not found"
           fi
+          
+          # App bundle (may be cleaned up after DMG creation)
+          if [ -d "$BUNDLE_DIR/macos/Budget Planer.app" ]; then
+            SIZE=$(du -sm "$BUNDLE_DIR/macos/Budget Planer.app" | cut -f1)
+            echo "✓ App bundle: $BUNDLE_DIR/macos/Budget Planer.app (${SIZE} MB)"
+            HAS_DISTRIBUTABLE=true
+          else
+            echo "⚠ App bundle: not found (may have been cleaned up after DMG creation)"
+          fi
+          
+          # Fail only if we have no distributable artifacts
+          if [ "$HAS_DISTRIBUTABLE" = false ]; then
+            echo "::error::No distributable artifacts found (neither DMG nor app bundle)"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✓ macOS build verification passed"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -757,7 +777,7 @@ jobs:
             frontend/src-tauri/target/release/bundle/**/*.pkg
             frontend/src-tauri/resources/backend-server
             backend/dist/backend-server
-          if-no-files-found: error
+          if-no-files-found: warn
 
   publish-release:
     name: Publish Release

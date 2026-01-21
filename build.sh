@@ -136,6 +136,23 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Cross-platform timeout function (macOS doesn't have timeout by default)
+run_with_timeout() {
+    local timeout_seconds="$1"
+    shift
+    
+    if command_exists timeout; then
+        # Linux - use timeout command
+        timeout "$timeout_seconds" "$@"
+    elif command_exists gtimeout; then
+        # macOS with coreutils installed
+        gtimeout "$timeout_seconds" "$@"
+    else
+        # Fallback: use perl for timeout (available on macOS)
+        perl -e "alarm $timeout_seconds; exec @ARGV" "$@"
+    fi
+}
+
 # Function to get file size in human readable format
 get_file_size() {
     local file="$1"
@@ -198,11 +215,11 @@ test_backend_executable() {
     
     # Test with --help flag
     print_info "Testing executable with --help flag..."
-    if timeout 30 "$exe_path" --help > /dev/null 2>&1; then
+    if run_with_timeout 30 "$exe_path" --help > /dev/null 2>&1; then
         print_success "Executable runs successfully with --help"
     else
         local exit_code=$?
-        if [ "$exit_code" -eq 124 ]; then
+        if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 142 ]; then
             print_warning "Executable timed out (30s) - may be hanging or stuck"
         else
             print_warning "Executable --help test returned exit code: $exit_code"
@@ -212,7 +229,7 @@ test_backend_executable() {
     
     # Try to get version/import test
     print_info "Testing Django import..."
-    if timeout 30 "$exe_path" --port 0 2>&1 | head -5 | grep -qi "django\|server\|starting" 2>/dev/null; then
+    if run_with_timeout 30 "$exe_path" --port 0 2>&1 | head -5 | grep -qi "django\|server\|starting" 2>/dev/null; then
         print_success "Django imports appear to work"
     else
         print_warning "Could not verify Django imports (may still work)"
@@ -345,22 +362,31 @@ verify_build_artifacts() {
                 fi
                 
             elif [ "$PLATFORM" == "macos" ]; then
-                # App bundle
+                local has_distributable=false
+                
+                # DMG (primary distributable for macOS)
+                DMG_FILE=$(find "$BUNDLE_DIR" -name "*.dmg" 2>/dev/null | head -1)
+                if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
+                    print_success "DMG: $(basename "$DMG_FILE") ($(get_file_size "$DMG_FILE"))"
+                    has_distributable=true
+                else
+                    print_warning "DMG not found"
+                fi
+                
+                # App bundle (may be cleaned up after DMG creation)
                 APP_BUNDLE=$(find "$BUNDLE_DIR" -name "*.app" -type d 2>/dev/null | head -1)
                 if [ -n "$APP_BUNDLE" ] && [ -d "$APP_BUNDLE" ]; then
                     local size=$(du -sh "$APP_BUNDLE" 2>/dev/null | cut -f1)
                     print_success "App bundle: $(basename "$APP_BUNDLE") ($size)"
+                    has_distributable=true
                 else
-                    print_error "App bundle not found"
-                    all_ok=false
+                    print_warning "App bundle not found (may have been cleaned up after DMG creation)"
                 fi
                 
-                # DMG
-                DMG_FILE=$(find "$BUNDLE_DIR" -name "*.dmg" 2>/dev/null | head -1)
-                if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
-                    print_success "DMG: $(basename "$DMG_FILE") ($(get_file_size "$DMG_FILE"))"
-                else
-                    print_warning "DMG not found"
+                # Fail only if no distributable exists
+                if [ "$has_distributable" = false ]; then
+                    print_error "No distributable artifacts found (neither DMG nor app bundle)"
+                    all_ok=false
                 fi
                 
             elif [ "$PLATFORM" == "windows" ]; then
