@@ -24,3 +24,17 @@ tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2.8.0"
 tokio = { version = "1.49.0", features = ["full"] }
 reqwest = { version = "0.13.1", features = ["blocking"] }
+
+# Build optimizations for release builds
+[profile.release]
+# Optimize for size while maintaining performance
+opt-level = "z"  # Optimize for size
+lto = true  # Link-time optimization
+codegen-units = 1  # Better optimization, slower compile
+strip = true  # Strip symbols to reduce binary size
+panic = "abort"  # Smaller binary size (no unwinding code)
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true  # Keep debug info for troubleshooting
+strip = false

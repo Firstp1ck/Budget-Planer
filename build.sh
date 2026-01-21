@@ -251,14 +251,40 @@ if [ "$BUILD_FRONTEND" = true ]; then
     print_info "Building Tauri application ($BUILD_TYPE mode)..."
     cd "$FRONTEND_DIR"
 
+    # Determine which bundles to build based on platform and available tools
+    BUNDLE_TARGETS=""
+    if [ "$PLATFORM" == "linux" ]; then
+        # Check if linuxdeploy is available for AppImage builds
+        if command_exists linuxdeploy || [ -f "/usr/local/bin/linuxdeploy" ]; then
+            print_success "linuxdeploy found - AppImage will be built"
+            BUNDLE_TARGETS="deb,rpm,appimage"
+        else
+            print_warning "linuxdeploy not found - skipping AppImage (install with: sudo wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O /usr/local/bin/linuxdeploy && sudo chmod +x /usr/local/bin/linuxdeploy)"
+            BUNDLE_TARGETS="deb,rpm"
+        fi
+    elif [ "$PLATFORM" == "macos" ]; then
+        BUNDLE_TARGETS="dmg,app"
+    elif [ "$PLATFORM" == "windows" ]; then
+        BUNDLE_TARGETS="msi,nsis"
+    fi
+
     # Prepare build command
+    # Note: Tauri build is release mode by default, --bundles must come before --
     BUILD_CMD="bun run tauri build"
-    if [ "$BUILD_MODE" == "release" ]; then
-        BUILD_CMD="$BUILD_CMD -- --release"
+
+    # Add bundle targets if determined (must come before --)
+    if [ ! -z "$BUNDLE_TARGETS" ]; then
+        BUILD_CMD="$BUILD_CMD --bundles $BUNDLE_TARGETS"
+        print_info "Building bundles: $BUNDLE_TARGETS"
     fi
 
     if [ ! -z "$TARGET" ]; then
         BUILD_CMD="$BUILD_CMD --target $TARGET"
+    fi
+
+    # Debug mode requires explicit --debug flag
+    if [ "$BUILD_MODE" != "release" ]; then
+        BUILD_CMD="$BUILD_CMD --debug"
     fi
 
     print_info "Running: $BUILD_CMD"
@@ -293,7 +319,7 @@ if [ "$BUILD_FRONTEND" = true ]; then
         echo "  $BUNDLE_DIR"
         echo ""
         print_info "Available bundles:"
-        find "$BUNDLE_DIR" -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.dmg" -o -name "*.app" -o -name "*.AppImage" -o -name "*.appimage" \) 2>/dev/null | while read -r file; do
+        find "$BUNDLE_DIR" -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.rpm" -o -name "*.dmg" -o -name "*.app" -o -name "*.AppImage" -o -name "*.appimage" \) 2>/dev/null | while read -r file; do
             echo "  - $file"
         done || echo "  (No installers found, check $OUTPUT_DIR for executables)"
     else

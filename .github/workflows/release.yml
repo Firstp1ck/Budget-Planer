@@ -14,6 +14,11 @@ on:
 permissions:
   contents: write
 
+# Prevent concurrent releases
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   get-version:
     name: Get Version
@@ -48,7 +53,8 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          # Rust 1.85+ required for edition 2024
+          toolchain: 1.85.0
 
       - name: Install system dependencies
         run: |
@@ -62,7 +68,17 @@ jobs:
             libssl-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            rpm \
+            libfuse2
+
+      - name: Install linuxdeploy for AppImage
+        run: |
+          # Download linuxdeploy for AppImage bundling
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O /usr/local/bin/linuxdeploy
+          chmod +x /usr/local/bin/linuxdeploy
+          # Verify installation
+          linuxdeploy --version || echo "linuxdeploy installed (version check may fail in CI)"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -88,6 +104,10 @@ jobs:
           if [ -f "backend/dist/backend-server" ]; then
             cp backend/dist/backend-server frontend/src-tauri/resources/
             chmod +x frontend/src-tauri/resources/backend-server
+            echo "✓ Backend executable copied successfully"
+          else
+            echo "::error::Backend executable not found at backend/dist/backend-server"
+            exit 1
           fi
 
       - name: Install frontend dependencies
@@ -116,7 +136,9 @@ jobs:
             frontend/src-tauri/target/release/bundle/**/*.deb
             frontend/src-tauri/target/release/bundle/**/*.AppImage
             frontend/src-tauri/target/release/bundle/**/*.rpm
-          if-no-files-found: warn
+            frontend/src-tauri/resources/backend-server
+            backend/dist/backend-server
+          if-no-files-found: error
 
   build-windows:
     name: Build Windows
@@ -134,7 +156,8 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          # Rust 1.85+ required for edition 2024
+          toolchain: 1.85.0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -145,19 +168,24 @@ jobs:
         working-directory: backend
         run: |
           python -m venv .venv
-          .venv\Scripts\activate
-          pip install -r requirements.txt
+          .venv\Scripts\python -m pip install --upgrade pip
+          .venv\Scripts\python -m pip install -r requirements.txt
 
       - name: Build backend executable
         working-directory: backend
         run: |
-          .venv\Scripts\activate
-          pyinstaller backend.spec --clean --noconfirm
+          .venv\Scripts\python -m PyInstaller backend.spec --clean --noconfirm
 
       - name: Copy backend executable for Tauri
         run: |
           New-Item -ItemType Directory -Force -Path frontend\src-tauri\resources | Out-Null
-          Copy-Item backend\dist\backend-server.exe frontend\src-tauri\resources\ -ErrorAction SilentlyContinue
+          if (Test-Path backend\dist\backend-server.exe) {
+            Copy-Item backend\dist\backend-server.exe frontend\src-tauri\resources\
+            Write-Host "✓ Backend executable copied successfully"
+          } else {
+            Write-Error "Backend executable not found at backend\dist\backend-server.exe"
+            exit 1
+          }
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -184,7 +212,9 @@ jobs:
             frontend/src-tauri/target/release/budget-planer.exe
             frontend/src-tauri/target/release/bundle/**/*.msi
             frontend/src-tauri/target/release/bundle/**/*.exe
-          if-no-files-found: warn
+            frontend/src-tauri/resources/backend-server.exe
+            backend/dist/backend-server.exe
+          if-no-files-found: error
 
   build-macos:
     name: Build macOS
@@ -202,7 +232,8 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          # Rust 1.85+ required for edition 2024
+          toolchain: 1.85.0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -228,6 +259,10 @@ jobs:
           if [ -f "backend/dist/backend-server" ]; then
             cp backend/dist/backend-server frontend/src-tauri/resources/
             chmod +x frontend/src-tauri/resources/backend-server
+            echo "✓ Backend executable copied successfully"
+          else
+            echo "::error::Backend executable not found at backend/dist/backend-server"
+            exit 1
           fi
 
       - name: Install frontend dependencies
@@ -268,7 +303,9 @@ jobs:
             frontend/src-tauri/target/release/bundle/**/*.dmg
             frontend/src-tauri/target/release/bundle/**/*.app
             frontend/src-tauri/target/release/bundle/**/*.pkg
-          if-no-files-found: warn
+            frontend/src-tauri/resources/backend-server
+            backend/dist/backend-server
+          if-no-files-found: error
 
   publish-release:
     name: Publish Release
@@ -300,11 +337,25 @@ jobs:
           # Create a clean release directory
           mkdir -p release_artifacts
           
-          # Linux: Copy binary and all bundle types (search recursively)
+          # Linux: Create portable ZIP with binary + backend-server
           if [ -f "artifacts/linux/budget-planer" ]; then
-            cp artifacts/linux/budget-planer release_artifacts/budget-planer-linux
-            echo "✓ Added Linux binary"
+            mkdir -p portable-linux
+            cp artifacts/linux/budget-planer portable-linux/
+            chmod +x portable-linux/budget-planer
+            # Find and copy backend-server
+            BACKEND=$(find artifacts/linux -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
+            if [ -n "$BACKEND" ] && [ -f "$BACKEND" ]; then
+              cp "$BACKEND" portable-linux/
+              chmod +x portable-linux/backend-server
+              echo "✓ Found backend-server for Linux portable"
+            fi
+            # Create portable ZIP
+            (cd portable-linux && zip -r ../release_artifacts/budget-planer-linux-portable.zip .)
+            echo "✓ Added Linux portable ZIP (binary + backend-server)"
+            rm -rf portable-linux
           fi
+          
+          # Linux: Add bundle types
           find artifacts/linux -name "*.deb" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
             echo "✓ Added Linux DEB package: $(basename "$file")"
@@ -318,28 +369,55 @@ jobs:
             echo "✓ Added Linux RPM package: $(basename "$file")"
           done
           
-          # Windows: Copy binary and installers (search recursively)
+          # Windows: Create portable ZIP with binary + backend-server
           if [ -f "artifacts/windows/budget-planer.exe" ]; then
-            cp artifacts/windows/budget-planer.exe release_artifacts/budget-planer-windows.exe
-            echo "✓ Added Windows binary"
+            mkdir -p portable-windows
+            cp artifacts/windows/budget-planer.exe portable-windows/
+            # Find and copy backend-server.exe
+            BACKEND=$(find artifacts/windows -name "backend-server.exe" -type f 2>/dev/null | head -1)
+            if [ -n "$BACKEND" ] && [ -f "$BACKEND" ]; then
+              cp "$BACKEND" portable-windows/
+              echo "✓ Found backend-server.exe for Windows portable"
+            fi
+            # Create portable ZIP
+            (cd portable-windows && zip -r ../release_artifacts/budget-planer-windows-portable.zip .)
+            echo "✓ Added Windows portable ZIP (binary + backend-server)"
+            rm -rf portable-windows
           fi
+          
+          # Windows: Add installers
           find artifacts/windows -name "*.msi" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
             echo "✓ Added Windows MSI installer: $(basename "$file")"
           done
           find artifacts/windows -name "*.exe" -type f 2>/dev/null | while read -r file; do
-            # Exclude the main binary (already copied as budget-planer-windows.exe)
-            if [ "$(basename "$file")" != "budget-planer.exe" ]; then
+            # Only include NSIS installers (skip main binary and backend)
+            basename_file=$(basename "$file")
+            if [ "$basename_file" != "budget-planer.exe" ] && [ "$basename_file" != "backend-server.exe" ]; then
               cp "$file" release_artifacts/
-              echo "✓ Added Windows installer: $(basename "$file")"
+              echo "✓ Added Windows installer: $basename_file"
             fi
           done
           
-          # macOS: Copy binary, DMG, app bundle, and PKG (search recursively)
+          # macOS: Create portable ZIP with binary + backend-server
           if [ -f "artifacts/macos/budget-planer" ]; then
-            cp artifacts/macos/budget-planer release_artifacts/budget-planer-macos
-            echo "✓ Added macOS binary"
+            mkdir -p portable-macos
+            cp artifacts/macos/budget-planer portable-macos/
+            chmod +x portable-macos/budget-planer
+            # Find and copy backend-server
+            BACKEND=$(find artifacts/macos -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
+            if [ -n "$BACKEND" ] && [ -f "$BACKEND" ]; then
+              cp "$BACKEND" portable-macos/
+              chmod +x portable-macos/backend-server
+              echo "✓ Found backend-server for macOS portable"
+            fi
+            # Create portable ZIP
+            (cd portable-macos && zip -r ../release_artifacts/budget-planer-macos-portable.zip .)
+            echo "✓ Added macOS portable ZIP (binary + backend-server)"
+            rm -rf portable-macos
           fi
+          
+          # macOS: Add DMG and PKG
           find artifacts/macos -name "*.dmg" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
             echo "✓ Added macOS DMG: $(basename "$file")"

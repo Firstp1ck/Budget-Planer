@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Child, Stdio};
 use std::sync::Mutex;
 use std::io::Read;
@@ -1044,6 +1044,40 @@ pub fn run() {
             possible_exe_paths.push(PathBuf::from("/usr/share/budget-planer/backend-server"));
             possible_exe_paths.push(PathBuf::from("/usr/lib/com.budgetplaner/backend-server"));
             possible_exe_paths.push(PathBuf::from("/usr/share/com.budgetplaner/backend-server"));
+            // Also check with space in name (from productName)
+            possible_exe_paths.push(PathBuf::from("/usr/lib/Budget Planer/backend-server"));
+            possible_exe_paths.push(PathBuf::from("/usr/share/Budget Planer/backend-server"));
+          }
+          
+          // For standalone binaries, check common project locations
+          // This is useful when running the binary from the project directory or Downloads
+          let home_dir = std::env::var("HOME").ok().map(PathBuf::from);
+          if let Some(home) = home_dir {
+            // Check common project locations in home directory
+            let project_locations = vec![
+              home.join("Dokumente").join("GitHub").join("Budget-Planer").join("backend").join("dist"),
+              home.join("Documents").join("GitHub").join("Budget-Planer").join("backend").join("dist"),
+              home.join("projects").join("Budget-Planer").join("backend").join("dist"),
+              home.join("Projects").join("Budget-Planer").join("backend").join("dist"),
+              home.join("dev").join("Budget-Planer").join("backend").join("dist"),
+              home.join("Dev").join("Budget-Planer").join("backend").join("dist"),
+            ];
+            
+            for project_path in project_locations {
+              if project_path.exists() {
+                info!("Found potential project directory: {:?}", project_path);
+                possible_exe_paths.push(project_path.join("backend-server"));
+              }
+            }
+          }
+          
+          // Also check if BACKEND_SERVER_PATH environment variable is set
+          if let Ok(backend_path) = std::env::var("BACKEND_SERVER_PATH") {
+            let backend_path_buf = PathBuf::from(&backend_path);
+            if backend_path_buf.exists() {
+              info!("Using backend server from BACKEND_SERVER_PATH: {:?}", backend_path_buf);
+              possible_exe_paths.push(backend_path_buf);
+            }
           }
         }
         
@@ -1186,18 +1220,123 @@ pub fn run() {
             }
           }
           
+          // Check common project locations (useful when binary is run from Downloads or elsewhere)
+          #[cfg(target_os = "linux")]
+          {
+            if let Ok(home) = std::env::var("HOME") {
+              let home_path = PathBuf::from(&home);
+              let common_project_locations = vec![
+                home_path.join("Dokumente").join("GitHub").join("Budget-Planer").join("backend"),
+                home_path.join("Documents").join("GitHub").join("Budget-Planer").join("backend"),
+                home_path.join("projects").join("Budget-Planer").join("backend"),
+                home_path.join("Projects").join("Budget-Planer").join("backend"),
+                home_path.join("dev").join("Budget-Planer").join("backend"),
+                home_path.join("Dev").join("Budget-Planer").join("backend"),
+                PathBuf::from("/home").join("firstpick").join("Dokumente").join("GitHub").join("Budget-Planer").join("backend"),
+              ];
+              
+              for project_path in common_project_locations {
+                if project_path.exists() {
+                  info!("Found potential project directory: {:?}", project_path);
+                  possible_backend_paths.push(project_path.clone());
+                  // Also check the dist subdirectory
+                  let dist_path = project_path.join("dist");
+                  if dist_path.exists() {
+                    possible_backend_paths.push(dist_path);
+                  }
+                }
+              }
+            }
+            
+            // Check BACKEND_PATH environment variable
+            if let Ok(backend_path) = std::env::var("BACKEND_PATH") {
+              let backend_path_buf = PathBuf::from(&backend_path);
+              if backend_path_buf.exists() {
+                info!("Using backend from BACKEND_PATH: {:?}", backend_path_buf);
+                possible_backend_paths.push(backend_path_buf);
+              }
+            }
+          }
+          
           let mut backend_path: Option<PathBuf> = None;
+          let mut backend_exe_path: Option<PathBuf> = None;
+          
           for path in &possible_backend_paths {
+            // First check if this path itself is the executable
+            if path.file_name().and_then(|n| n.to_str()).map(|s| s == "backend-server").unwrap_or(false) {
+              if path.exists() {
+                if let Ok(metadata) = std::fs::metadata(path) {
+                  if metadata.len() >= 1024 {
+                    backend_exe_path = Some(path.clone());
+                    info!("Found backend executable directly: {:?}", backend_exe_path);
+                    break;
+                  }
+                }
+              }
+            }
+            
+            // Check if this is already a dist directory with the executable
+            let exe_in_dist = path.join("backend-server");
+            if exe_in_dist.exists() {
+              if let Ok(metadata) = std::fs::metadata(&exe_in_dist) {
+                if metadata.len() >= 1024 {
+                  backend_exe_path = Some(exe_in_dist);
+                  info!("Found backend executable in dist directory: {:?}", backend_exe_path);
+                  break;
+                }
+              }
+            }
+            
+            // Check if this is a backend directory (has manage.py)
             let manage_py = path.join("manage.py");
             if manage_py.exists() {
               backend_path = Some(path.clone());
               info!("Found backend directory at: {:?}", path);
-              break;
+              
+              // Also check if there's a dist subdirectory with the executable
+              let dist_exe = path.join("dist").join("backend-server");
+              if dist_exe.exists() {
+                if let Ok(metadata) = std::fs::metadata(&dist_exe) {
+                  if metadata.len() >= 1024 {
+                    backend_exe_path = Some(dist_exe);
+                    info!("Found backend executable in backend/dist: {:?}", backend_exe_path);
+                    break;
+                  }
+                }
+              }
             }
           }
           
+          // If we found the executable directly, use it
+          if let Some(exe_path) = backend_exe_path {
+            info!("Using backend executable: {:?}", exe_path);
+            // Get the backend directory (parent of dist, or parent of executable)
+            let backend_dir = if exe_path.parent().and_then(|p| p.file_name()).map(|n| n == "dist").unwrap_or(false) {
+              exe_path.parent().and_then(|p| p.parent()).map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+            } else {
+              exe_path.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+            };
+            
+            match start_backend_server(&app_handle, &backend_dir, &db_path_clone) {
+              Ok(child) => {
+                // Store process in app state
+                if let Some(state) = app_handle.try_state::<Mutex<Option<Child>>>() {
+                  if let Ok(mut process) = state.lock() {
+                    *process = Some(child);
+                    info!("Backend server started successfully using found executable");
+                  } else {
+                    warn!("Could not store backend process in app state");
+                  }
+                }
+              }
+              Err(e) => {
+                error!("Failed to start backend server with found executable: {}", e);
+                error!("Backend server not started. API calls will fail.");
+              }
+            }
+          }
           // Start backend server if found - don't fail if this doesn't work
-          if let Some(backend_path) = backend_path {
+          else if let Some(backend_path) = backend_path {
             match start_backend_server(&app_handle, &backend_path, &db_path_clone) {
               Ok(child) => {
                 // Store process in app state

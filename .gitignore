@@ -66,3 +66,11 @@ logs/
 
 # data
 backend/db.sqlite3
+
+# Tauri resources (built during CI/local build)
+# These are platform-specific and should not be committed
+frontend/src-tauri/resources/backend-server
+frontend/src-tauri/resources/backend-server.exe
+
+# Tauri build artifacts
+frontend/src-tauri/target/
