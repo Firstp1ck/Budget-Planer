@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
-use std::process::{Command, Child, Stdio};
-use std::sync::Mutex;
+use log::{debug, error, info, warn};
 use std::io::Read;
-use log::{info, warn, error, debug};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use tauri::Manager;
 
 #[cfg(windows)]
@@ -10,913 +10,1006 @@ use std::os::windows::process::CommandExt;
 
 /// Kill any process using the specified port (useful for cleaning up orphaned backend processes)
 fn kill_process_on_port(port: u16) {
-  info!("Checking for existing processes on port {}", port);
-  
-  #[cfg(not(windows))]
-  {
-    // On Linux/macOS, use lsof to find and kill processes on the port
-    let output = Command::new("lsof")
-      .args(&["-ti", &format!(":{}", port)])
-      .output();
-    
-    if let Ok(output) = output {
-      let pids = String::from_utf8_lossy(&output.stdout);
-      for pid in pids.lines() {
-        if !pid.trim().is_empty() {
-          info!("Killing existing process {} on port {}", pid.trim(), port);
-          let _ = Command::new("kill")
-            .args(&["-9", pid.trim()])
+    info!("Checking for existing processes on port {}", port);
+
+    #[cfg(not(windows))]
+    {
+        // On Linux/macOS, use lsof to find and kill processes on the port
+        let output = Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
             .output();
+
+        if let Ok(output) = output {
+            let pids = String::from_utf8_lossy(&output.stdout);
+            for pid in pids.lines() {
+                if !pid.trim().is_empty() {
+                    info!("Killing existing process {} on port {}", pid.trim(), port);
+                    let _ = Command::new("kill").args(["-9", pid.trim()]).output();
+                }
+            }
         }
-      }
     }
-  }
-  
-  #[cfg(windows)]
-  {
-    // On Windows, use netstat to find and taskkill to kill processes on the port
-    let output = Command::new("netstat")
-      .args(&["-ano"])
-      .output();
-    
-    if let Ok(output) = output {
-      let output_str = String::from_utf8_lossy(&output.stdout);
-      let port_str = format!(":{}", port);
-      for line in output_str.lines() {
-        if line.contains(&port_str) && line.contains("LISTENING") {
-          // Extract PID from the last column
-          if let Some(pid) = line.split_whitespace().last() {
-            info!("Killing existing process {} on port {}", pid, port);
-            let _ = Command::new("taskkill")
-              .args(&["/F", "/PID", pid])
-              .output();
-          }
+
+    #[cfg(windows)]
+    {
+        // On Windows, use netstat to find and taskkill to kill processes on the port
+        let output = Command::new("netstat").args(&["-ano"]).output();
+
+        if let Ok(output) = output {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let port_str = format!(":{}", port);
+            for line in output_str.lines() {
+                if line.contains(&port_str) && line.contains("LISTENING") {
+                    // Extract PID from the last column
+                    if let Some(pid) = line.split_whitespace().last() {
+                        info!("Killing existing process {} on port {}", pid, port);
+                        let _ = Command::new("taskkill").args(&["/F", "/PID", pid]).output();
+                    }
+                }
+            }
         }
-      }
     }
-  }
-  
-  // Give processes a moment to terminate
-  std::thread::sleep(std::time::Duration::from_millis(500));
-  debug!("Port cleanup completed");
+
+    // Give processes a moment to terminate
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    debug!("Port cleanup completed");
 }
 
 /// Kill the backend process immediately without blocking
 /// On Windows, this kills the entire process tree (including child processes)
 /// This function returns immediately after initiating the kill, cleanup happens in background
 fn kill_backend_process(child: &mut Child) {
-  let pid = child.id();
-  info!("Stopping backend server (PID: {:?})...", pid);
-  
-  // On Windows, use taskkill to kill the entire process tree immediately
-  // This is more reliable than just killing the parent process
-  #[cfg(windows)]
-  {
-    info!("Killing process tree on Windows using taskkill");
-    // Spawn taskkill without waiting - let it run in background
-    let _ = Command::new("taskkill")
-      .args(&["/F", "/T", "/PID", &pid.to_string()])
-      .stdout(std::process::Stdio::null())
-      .stderr(std::process::Stdio::null())
-      .spawn();
-    // Don't wait for taskkill to complete - return immediately
-  }
-  
-  // Try to kill the process directly (fallback or non-Windows)
-  // This is non-blocking
-  if let Err(e) = child.kill() {
-    warn!("Failed to kill backend process: {}", e);
-  }
-  
-  // Spawn cleanup in background thread to avoid blocking
-  let pid_for_cleanup = pid;
-  std::thread::spawn(move || {
-    // Give processes a moment to terminate
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    
-    // Check if process is still running (non-blocking check)
+    let pid = child.id();
+    info!("Stopping backend server (PID: {:?})...", pid);
+
+    // On Windows, use taskkill to kill the entire process tree immediately
+    // This is more reliable than just killing the parent process
     #[cfg(windows)]
     {
-      // On Windows, check if process still exists using tasklist
-      let output = Command::new("tasklist")
-        .args(&["/FI", &format!("PID eq {}", pid_for_cleanup)])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output();
-      
-      if let Ok(output) = output {
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        if output_str.contains(&pid_for_cleanup.to_string()) {
-          warn!("Process {} still running, attempting forceful kill", pid_for_cleanup);
-          // Try one more time with taskkill
-          let _ = Command::new("taskkill")
-            .args(&["/F", "/T", "/PID", &pid_for_cleanup.to_string()])
+        info!("Killing process tree on Windows using taskkill");
+        // Spawn taskkill without waiting - let it run in background
+        let _ = Command::new("taskkill")
+            .args(&["/F", "/T", "/PID", &pid.to_string()])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .output();
-        } else {
-          info!("Backend server process {} terminated successfully", pid_for_cleanup);
+            .spawn();
+        // Don't wait for taskkill to complete - return immediately
+    }
+
+    // Try to kill the process directly (fallback or non-Windows)
+    // This is non-blocking
+    if let Err(e) = child.kill() {
+        warn!("Failed to kill backend process: {}", e);
+    }
+
+    // Spawn cleanup in background thread to avoid blocking
+    let pid_for_cleanup = pid;
+    std::thread::spawn(move || {
+        // Give processes a moment to terminate
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Check if process is still running (non-blocking check)
+        #[cfg(windows)]
+        {
+            // On Windows, check if process still exists using tasklist
+            let output = Command::new("tasklist")
+                .args(&["/FI", &format!("PID eq {}", pid_for_cleanup)])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output();
+
+            if let Ok(output) = output {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                if output_str.contains(&pid_for_cleanup.to_string()) {
+                    warn!(
+                        "Process {} still running, attempting forceful kill",
+                        pid_for_cleanup
+                    );
+                    // Try one more time with taskkill
+                    let _ = Command::new("taskkill")
+                        .args(&["/F", "/T", "/PID", &pid_for_cleanup.to_string()])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .output();
+                } else {
+                    info!(
+                        "Backend server process {} terminated successfully",
+                        pid_for_cleanup
+                    );
+                }
+            }
         }
-      }
-    }
-    
-    #[cfg(not(windows))]
-    {
-      // On Linux/macOS, use kill -9 to forcefully terminate
-      info!("Forcefully killing backend process {} on Linux/macOS", pid_for_cleanup);
-      let _ = Command::new("kill")
-        .args(&["-9", &pid_for_cleanup.to_string()])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output();
-      info!("Backend server cleanup initiated");
-    }
-  });
-  
-  info!("Backend server kill initiated (cleanup in background)");
+
+        #[cfg(not(windows))]
+        {
+            // On Linux/macOS, use kill -9 to forcefully terminate
+            info!(
+                "Forcefully killing backend process {} on Linux/macOS",
+                pid_for_cleanup
+            );
+            let _ = Command::new("kill")
+                .args(["-9", &pid_for_cleanup.to_string()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .output();
+            info!("Backend server cleanup initiated");
+        }
+    });
+
+    info!("Backend server kill initiated (cleanup in background)");
 }
 
 /// Initialize the database by checking if it exists and running migrations if needed
 fn initialize_database(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-  // Get the app data directory
-  let app_data_dir = app.path().app_data_dir()?;
-  std::fs::create_dir_all(&app_data_dir)?;
-  
-  // Database path in app data directory
-  let db_path = app_data_dir.join("db.sqlite3");
-  let db_exists = db_path.exists();
-  
-  info!("Database path: {:?}", db_path);
-  info!("Database exists: {}", db_exists);
-  
-  if db_exists {
-    info!("Database already exists, skipping initialization");
-    return Ok(());
-  }
-  
-  info!("Database not found, initializing...");
-  
-  // Try to find backend directory
-  let exe_path = std::env::current_exe()?;
-  let exe_dir = exe_path.parent().ok_or("Could not get executable directory")?;
-  
-  // Try multiple possible backend locations
-  let mut possible_backend_paths: Vec<PathBuf> = vec![
-    // Relative to executable (for bundled app)
-    exe_dir.join("backend"),
-    // Development path (relative to project root)
-    exe_dir.join("../../backend"),
-  ];
-  
-  // Add parent directory paths if available
-  if let Some(parent) = exe_dir.parent() {
-    possible_backend_paths.push(parent.join("backend"));
-    if let Some(grandparent) = parent.parent() {
-      possible_backend_paths.push(grandparent.join("backend"));
+    // Get the app data directory
+    let app_data_dir = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&app_data_dir)?;
+
+    // Database path in app data directory
+    let db_path = app_data_dir.join("db.sqlite3");
+    let db_exists = db_path.exists();
+
+    info!("Database path: {:?}", db_path);
+    info!("Database exists: {}", db_exists);
+
+    if db_exists {
+        info!("Database already exists, skipping initialization");
+        return Ok(());
     }
-  }
-  
-  let mut backend_path: Option<PathBuf> = None;
-  for path in &possible_backend_paths {
-    let manage_py = path.join("manage.py");
-    if manage_py.exists() {
-      backend_path = Some(path.clone());
-      info!("Found backend at: {:?}", path);
-      break;
+
+    info!("Database not found, initializing...");
+
+    // Try to find backend directory
+    let exe_path = std::env::current_exe()?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or("Could not get executable directory")?;
+
+    // Try multiple possible backend locations
+    let mut possible_backend_paths: Vec<PathBuf> = vec![
+        // Relative to executable (for bundled app)
+        exe_dir.join("backend"),
+        // Development path (relative to project root)
+        exe_dir.join("../../backend"),
+    ];
+
+    // Add parent directory paths if available
+    if let Some(parent) = exe_dir.parent() {
+        possible_backend_paths.push(parent.join("backend"));
+        if let Some(grandparent) = parent.parent() {
+            possible_backend_paths.push(grandparent.join("backend"));
+        }
     }
-  }
-  
-  if let Some(backend_path) = backend_path {
-    info!("Initializing database at: {:?}", db_path);
-    
-    // Ensure database directory exists
-    if let Some(parent) = db_path.parent() {
-      std::fs::create_dir_all(parent)?;
+
+    let mut backend_path: Option<PathBuf> = None;
+    for path in &possible_backend_paths {
+        let manage_py = path.join("manage.py");
+        if manage_py.exists() {
+            backend_path = Some(path.clone());
+            info!("Found backend at: {:?}", path);
+            break;
+        }
     }
-    
-    // Try to find Python in virtual environment first, then system Python
-    let python_cmd = {
-      // Check Windows path first (Scripts/python.exe)
-      let venv_python_windows = backend_path.join(".venv").join("Scripts").join("python.exe");
-      // Check Unix path (bin/python)
-      let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
-      
-      if venv_python_windows.exists() {
-        info!("Using virtual environment Python (Windows): {:?}", venv_python_windows);
-        venv_python_windows
-      } else if venv_python_unix.exists() {
-        info!("Using virtual environment Python (Unix): {:?}", venv_python_unix);
-        venv_python_unix
-      } else {
-        // Try python3, then python - use fast check to avoid hanging
-        let check_python = |cmd: &str| -> bool {
-          Command::new(cmd)
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .is_ok()
+
+    if let Some(backend_path) = backend_path {
+        info!("Initializing database at: {:?}", db_path);
+
+        // Ensure database directory exists
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Try to find Python in virtual environment first, then system Python
+        let python_cmd = {
+            // Check Windows path first (Scripts/python.exe)
+            let venv_python_windows = backend_path
+                .join(".venv")
+                .join("Scripts")
+                .join("python.exe");
+            // Check Unix path (bin/python)
+            let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
+
+            if venv_python_windows.exists() {
+                info!(
+                    "Using virtual environment Python (Windows): {:?}",
+                    venv_python_windows
+                );
+                venv_python_windows
+            } else if venv_python_unix.exists() {
+                info!(
+                    "Using virtual environment Python (Unix): {:?}",
+                    venv_python_unix
+                );
+                venv_python_unix
+            } else {
+                // Try python3, then python - use fast check to avoid hanging
+                let check_python = |cmd: &str| -> bool {
+                    Command::new(cmd)
+                        .arg("--version")
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .output()
+                        .is_ok()
+                };
+
+                if check_python("python3") {
+                    PathBuf::from("python3")
+                } else if check_python("python") {
+                    PathBuf::from("python")
+                } else {
+                    warn!("Python not found, cannot run migrations");
+                    return Ok(()); // Don't fail, database will be created on first use
+                }
+            }
         };
-        
-        if check_python("python3") {
-          PathBuf::from("python3")
-        } else if check_python("python") {
-          PathBuf::from("python")
-        } else {
-          warn!("Python not found, cannot run migrations");
-          return Ok(()); // Don't fail, database will be created on first use
+
+        let mut cmd = Command::new(&python_cmd);
+        cmd.current_dir(&backend_path);
+        cmd.arg("manage.py");
+        cmd.arg("migrate");
+        cmd.arg("--noinput");
+        cmd.env("DATABASE_PATH", db_path.to_string_lossy().to_string());
+        cmd.env("DJANGO_SETTINGS_MODULE", "config.settings");
+
+        // Hide console window on Windows (but keep output capture for .output())
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
         }
-      }
-    };
-    
-    let mut cmd = Command::new(&python_cmd);
-    cmd.current_dir(&backend_path);
-    cmd.arg("manage.py");
-    cmd.arg("migrate");
-    cmd.arg("--noinput");
-    cmd.env("DATABASE_PATH", db_path.to_string_lossy().to_string());
-    cmd.env("DJANGO_SETTINGS_MODULE", "config.settings");
-    
-    // Hide console window on Windows (but keep output capture for .output())
-    #[cfg(windows)]
-    {
-      const CREATE_NO_WINDOW: u32 = 0x08000000;
-      cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    
-    info!("Running migrations with command: {:?}", cmd);
-    
-    let output = cmd.output();
-    
-    match output {
-      Ok(output) => {
-        if output.status.success() {
-          info!("Database migrations completed successfully");
-          let stdout = String::from_utf8_lossy(&output.stdout);
-          if !stdout.is_empty() {
-            info!("Migration output: {}", stdout);
-          }
-        } else {
-          let stderr = String::from_utf8_lossy(&output.stderr);
-          let stdout = String::from_utf8_lossy(&output.stdout);
-          error!("Migration failed. stderr: {}", stderr);
-          if !stdout.is_empty() {
-            error!("stdout: {}", stdout);
-          }
-          warn!("Database will be created on first use");
+
+        info!("Running migrations with command: {:?}", cmd);
+
+        let output = cmd.output();
+
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Database migrations completed successfully");
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if !stdout.is_empty() {
+                        info!("Migration output: {}", stdout);
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    error!("Migration failed. stderr: {}", stderr);
+                    if !stdout.is_empty() {
+                        error!("stdout: {}", stdout);
+                    }
+                    warn!("Database will be created on first use");
+                }
+            }
+            Err(e) => {
+                warn!(
+                    "Could not run migrations: {}. Database will be created on first use.",
+                    e
+                );
+            }
         }
-      }
-      Err(e) => {
-        warn!("Could not run migrations: {}. Database will be created on first use.", e);
-      }
-    }
-  } else {
-    warn!("Backend directory not found in any of these locations: {:?}", possible_backend_paths);
-    warn!("Database will be created on first use when backend is available.");
-    
-    // For packaged apps, create an empty database file so the directory structure is correct
-    // The backend executable will handle migrations when it starts
-    if let Some(parent) = db_path.parent() {
-      if let Err(e) = std::fs::create_dir_all(parent) {
-        warn!("Failed to create database directory: {}", e);
-      } else {
-        // Create an empty database file - SQLite will initialize it properly when first accessed
-        if !db_path.exists() {
-          if let Err(e) = std::fs::File::create(&db_path) {
-            warn!("Failed to create database file: {}", e);
-          } else {
-            info!("Created empty database file at: {:?}", db_path);
-          }
+    } else {
+        warn!(
+            "Backend directory not found in any of these locations: {:?}",
+            possible_backend_paths
+        );
+        warn!("Database will be created on first use when backend is available.");
+
+        // For packaged apps, create an empty database file so the directory structure is correct
+        // The backend executable will handle migrations when it starts
+        if let Some(parent) = db_path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                warn!("Failed to create database directory: {}", e);
+            } else {
+                // Create an empty database file - SQLite will initialize it properly when first accessed
+                if !db_path.exists() {
+                    if let Err(e) = std::fs::File::create(&db_path) {
+                        warn!("Failed to create database file: {}", e);
+                    } else {
+                        info!("Created empty database file at: {:?}", db_path);
+                    }
+                }
+            }
         }
-      }
     }
-  }
-  
-  Ok(())
+
+    Ok(())
 }
 
 /// Check if Python dependencies are installed in virtual environment
 /// Returns true if Django can be imported
 fn check_backend_dependencies(python_cmd: &PathBuf) -> bool {
-  let mut check_cmd = Command::new(python_cmd);
-  check_cmd.arg("-c");
-  check_cmd.arg("import django; print(django.__version__)");
-  check_cmd.stdout(Stdio::null());
-  check_cmd.stderr(Stdio::null());
-  
-  #[cfg(windows)]
-  {
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    check_cmd.creation_flags(CREATE_NO_WINDOW);
-  }
-  
-  check_cmd.output().map(|o| o.status.success()).unwrap_or(false)
+    let mut check_cmd = Command::new(python_cmd);
+    check_cmd.arg("-c");
+    check_cmd.arg("import django; print(django.__version__)");
+    check_cmd.stdout(Stdio::null());
+    check_cmd.stderr(Stdio::null());
+
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        check_cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    check_cmd
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 /// Setup backend virtual environment and install dependencies
 /// Returns true if setup was successful
-fn setup_backend_dependencies(backend_path: &PathBuf, python_cmd: &PathBuf) -> bool {
-  info!("Setting up backend dependencies...");
-  
-  // Check if virtual environment exists
-  let venv_python_windows = backend_path.join(".venv").join("Scripts").join("python.exe");
-  let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
-  
-  let venv_exists = venv_python_windows.exists() || venv_python_unix.exists();
-  
-  if !venv_exists {
-    info!("Creating virtual environment...");
-    let mut venv_cmd = Command::new(python_cmd);
-    venv_cmd.arg("-m");
-    venv_cmd.arg("venv");
-    venv_cmd.arg(".venv");
-    venv_cmd.current_dir(backend_path);
-    venv_cmd.stdout(Stdio::null());
-    venv_cmd.stderr(Stdio::null());
-    
+fn setup_backend_dependencies(backend_path: &Path, python_cmd: &Path) -> bool {
+    info!("Setting up backend dependencies...");
+
+    // Check if virtual environment exists
+    let venv_python_windows = backend_path
+        .join(".venv")
+        .join("Scripts")
+        .join("python.exe");
+    let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
+
+    let venv_exists = venv_python_windows.exists() || venv_python_unix.exists();
+
+    if !venv_exists {
+        info!("Creating virtual environment...");
+        let mut venv_cmd = Command::new(python_cmd);
+        venv_cmd.arg("-m");
+        venv_cmd.arg("venv");
+        venv_cmd.arg(".venv");
+        venv_cmd.current_dir(backend_path);
+        venv_cmd.stdout(Stdio::null());
+        venv_cmd.stderr(Stdio::null());
+
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            venv_cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        if venv_cmd.output().is_err() {
+            warn!("Failed to create virtual environment");
+            return false;
+        }
+    }
+
+    // Use venv Python for pip install
+    let venv_python = if venv_python_windows.exists() {
+        venv_python_windows
+    } else if venv_python_unix.exists() {
+        venv_python_unix
+    } else {
+        warn!("Virtual environment Python not found after creation");
+        return false;
+    };
+
+    // Install dependencies
+    info!("Installing Python dependencies...");
+    let requirements_file = backend_path.join("requirements.txt");
+    if !requirements_file.exists() {
+        warn!("requirements.txt not found at {:?}", requirements_file);
+        return false;
+    }
+
+    let mut pip_cmd = Command::new(&venv_python);
+    pip_cmd.arg("-m");
+    pip_cmd.arg("pip");
+    pip_cmd.arg("install");
+    pip_cmd.arg("-r");
+    pip_cmd.arg("requirements.txt");
+    pip_cmd.current_dir(backend_path);
+    pip_cmd.stdout(Stdio::null());
+    pip_cmd.stderr(Stdio::null());
+
     #[cfg(windows)]
     {
-      const CREATE_NO_WINDOW: u32 = 0x08000000;
-      venv_cmd.creation_flags(CREATE_NO_WINDOW);
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        pip_cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    
-    if venv_cmd.output().is_err() {
-      warn!("Failed to create virtual environment");
-      return false;
+
+    match pip_cmd.output() {
+        Ok(output) => {
+            if output.status.success() {
+                info!("Dependencies installed successfully");
+                true
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                warn!("Failed to install dependencies: {}", stderr);
+                false
+            }
+        }
+        Err(e) => {
+            warn!("Error installing dependencies: {}", e);
+            false
+        }
     }
-  }
-  
-  // Use venv Python for pip install
-  let venv_python = if venv_python_windows.exists() {
-    venv_python_windows
-  } else if venv_python_unix.exists() {
-    venv_python_unix
-  } else {
-    warn!("Virtual environment Python not found after creation");
-    return false;
-  };
-  
-  // Install dependencies
-  info!("Installing Python dependencies...");
-  let requirements_file = backend_path.join("requirements.txt");
-  if !requirements_file.exists() {
-    warn!("requirements.txt not found at {:?}", requirements_file);
-    return false;
-  }
-  
-  let mut pip_cmd = Command::new(&venv_python);
-  pip_cmd.arg("-m");
-  pip_cmd.arg("pip");
-  pip_cmd.arg("install");
-  pip_cmd.arg("-r");
-  pip_cmd.arg("requirements.txt");
-  pip_cmd.current_dir(backend_path);
-  pip_cmd.stdout(Stdio::null());
-  pip_cmd.stderr(Stdio::null());
-  
-  #[cfg(windows)]
-  {
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    pip_cmd.creation_flags(CREATE_NO_WINDOW);
-  }
-  
-  match pip_cmd.output() {
-    Ok(output) => {
-      if output.status.success() {
-        info!("Dependencies installed successfully");
-        true
-      } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        warn!("Failed to install dependencies: {}", stderr);
-        false
-      }
-    }
-    Err(e) => {
-      warn!("Error installing dependencies: {}", e);
-      false
-    }
-  }
 }
 
 /// Start the Django backend server
 /// Returns immediately after spawning the process without blocking on server readiness
 /// The frontend will handle retries if the server isn't ready immediately
-/// 
+///
 /// This function first tries to use a bundled backend executable (from PyInstaller),
 /// and falls back to Python if the executable is not found.
 fn start_backend_server(
-  app: &tauri::AppHandle,
-  backend_path: &PathBuf,
-  db_path: &PathBuf,
+    app: &tauri::AppHandle,
+    backend_path: &Path,
+    db_path: &Path,
 ) -> Result<Child, Box<dyn std::error::Error>> {
-  info!("Starting Django backend server...");
-  
-  // Kill any existing process on port 8000 to avoid "port already in use" errors
-  // This handles orphaned backend processes from previous app sessions
-  kill_process_on_port(8000);
-  
-  // First, try to find bundled backend executable (PyInstaller bundle)
-  // Check multiple possible locations:
-  // 1. In backend/dist (development build)
-  // 2. Using Tauri's resource resolution (bundled resources)
-  // 3. Next to the executable (fallback)
-  let exe_path = std::env::current_exe().ok();
-  let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
-  
-  // Build list of possible executable paths, prioritizing platform-specific executables
-  let mut possible_exe_paths: Vec<PathBuf> = vec![];
-  
-  // Platform-specific executable names (check platform-specific first)
-  #[cfg(windows)]
-  {
-    possible_exe_paths.push(backend_path.join("dist").join("backend-server.exe"));
-    possible_exe_paths.push(backend_path.join("dist").join("backend-server"));
-  }
-  
-  #[cfg(not(windows))]
-  {
-    possible_exe_paths.push(backend_path.join("dist").join("backend-server"));
-    possible_exe_paths.push(backend_path.join("dist").join("backend-server.exe"));
-  }
-  
-  // Try Tauri resource resolution (for bundled resources)
-  if let Ok(resource_dir) = app.path().resource_dir() {
-    // Resources may be in a 'resources' subdirectory (AppImage structure)
+    info!("Starting Django backend server...");
+
+    // Kill any existing process on port 8000 to avoid "port already in use" errors
+    // This handles orphaned backend processes from previous app sessions
+    kill_process_on_port(8000);
+
+    // First, try to find bundled backend executable (PyInstaller bundle)
+    // Check multiple possible locations:
+    // 1. In app data directory (installed location - highest priority)
+    // 2. In backend_path (passed from caller, could be app data dir)
+    // 3. In backend/dist (development build)
+    // 4. Using Tauri's resource resolution (bundled resources)
+    // 5. Next to the executable (fallback)
+    let exe_path = std::env::current_exe().ok();
+    let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
+
+    // Build list of possible executable paths, prioritizing platform-specific executables
+    let mut possible_exe_paths: Vec<PathBuf> = vec![];
+
+    // Platform-specific executable name
+    #[cfg(windows)]
+    let backend_exe_name = "backend-server.exe";
+    #[cfg(not(windows))]
+    let backend_exe_name = "backend-server";
+
+    // First priority: Check app data directory (where we install the backend)
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        let installed_backend = app_data_dir.join(backend_exe_name);
+        info!(
+            "Checking app data directory for backend: {:?}",
+            installed_backend
+        );
+        possible_exe_paths.push(installed_backend);
+    }
+
+    // Second priority: Check the backend_path passed to this function
+    // This allows the caller to specify a custom location
+    possible_exe_paths.push(backend_path.join(backend_exe_name));
+
+    // Third priority: Check backend/dist for development builds
     #[cfg(windows)]
     {
-      possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
-      possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
-      possible_exe_paths.push(resource_dir.join("backend-server.exe"));
-      possible_exe_paths.push(resource_dir.join("backend-server"));
+        possible_exe_paths.push(backend_path.join("dist").join("backend-server.exe"));
+        possible_exe_paths.push(backend_path.join("dist").join("backend-server"));
     }
+
     #[cfg(not(windows))]
     {
-      possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
-      possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
-      possible_exe_paths.push(resource_dir.join("backend-server"));
-      possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+        possible_exe_paths.push(backend_path.join("dist").join("backend-server"));
+        possible_exe_paths.push(backend_path.join("dist").join("backend-server.exe"));
     }
-  }
-  
-  // Add paths relative to executable (fallback)
-  if let Some(exe_dir) = exe_dir {
-    #[cfg(windows)]
-    {
-      possible_exe_paths.push(exe_dir.join("backend-server.exe"));
-      possible_exe_paths.push(exe_dir.join("backend-server"));
-      possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
-      possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
-    }
-    #[cfg(not(windows))]
-    {
-      possible_exe_paths.push(exe_dir.join("backend-server"));
-      possible_exe_paths.push(exe_dir.join("backend-server.exe"));
-      possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
-      possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
-    }
-    
-    // Also check parent directories (for nested bundle structures)
-    if let Some(parent) = exe_dir.parent() {
-      #[cfg(windows)]
-      {
-        possible_exe_paths.push(parent.join("backend-server.exe"));
-        possible_exe_paths.push(parent.join("backend-server"));
-      }
-      #[cfg(not(windows))]
-      {
-        possible_exe_paths.push(parent.join("backend-server"));
-        possible_exe_paths.push(parent.join("backend-server.exe"));
-      }
-    }
-  }
-  
-  // Find the first existing executable, filtering out placeholders (very small files)
-  let backend_exe = possible_exe_paths.iter().find(|p| {
-    if !p.exists() {
-      return false;
-    }
-    
-    // On non-Windows, skip .exe files (they're Windows executables)
-    #[cfg(not(windows))]
-    {
-      if p.file_name().and_then(|n| n.to_str()).map(|s| s.ends_with(".exe")).unwrap_or(false) {
-        return false;
-      }
-    }
-    
-    // Filter out placeholder files (very small files < 1KB are likely placeholders)
-    if let Ok(metadata) = std::fs::metadata(p) {
-      let size = metadata.len();
-      if size < 1024 {
-        warn!("Skipping potential placeholder file: {:?} (size: {} bytes)", p, size);
-        return false;
-      }
-    }
-    
-    true
-  }).cloned();
-  
-  if let Some(exe_path) = backend_exe {
-    info!("Found bundled backend executable: {:?}", exe_path);
-    
-    // On Unix systems, ensure the executable has execute permissions
-    #[cfg(not(windows))]
-    {
-      use std::os::unix::fs::PermissionsExt;
-      if let Ok(metadata) = std::fs::metadata(&exe_path) {
-        let mut perms = metadata.permissions();
-        let mode = perms.mode();
-        // Check if execute bit is set for owner, group, or others
-        if mode & 0o111 == 0 {
-          warn!("Backend executable does not have execute permissions, attempting to fix...");
-          perms.set_mode(mode | 0o111); // Add execute permissions for all
-          if let Err(e) = std::fs::set_permissions(&exe_path, perms) {
-            error!("Failed to set execute permissions on backend executable: {}", e);
-            return Err(format!("Backend executable at {:?} does not have execute permissions and could not be fixed: {}", exe_path, e).into());
-          } else {
-            info!("Successfully set execute permissions on backend executable");
-          }
+
+    // Try Tauri resource resolution (for bundled resources)
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        // Resources may be in a 'resources' subdirectory (AppImage structure)
+        #[cfg(windows)]
+        {
+            possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
+            possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
+            possible_exe_paths.push(resource_dir.join("backend-server.exe"));
+            possible_exe_paths.push(resource_dir.join("backend-server"));
         }
-      }
-    }
-    
-    // Run migrations in background
-    let exe_path_clone = exe_path.clone();
-    let db_path_clone = db_path.clone();
-    std::thread::spawn(move || {
-      info!("Running database migrations in background...");
-      let mut migrate_cmd = Command::new(&exe_path_clone);
-      migrate_cmd.arg("--migrate");
-      migrate_cmd.arg("--database-path");
-      migrate_cmd.arg(db_path_clone.to_string_lossy().to_string());
-      
-      #[cfg(windows)]
-      {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        migrate_cmd.creation_flags(CREATE_NO_WINDOW);
-      }
-      
-      // Capture output to see what's happening
-      match migrate_cmd.output() {
-        Ok(output) => {
-          let stdout = String::from_utf8_lossy(&output.stdout);
-          let stderr = String::from_utf8_lossy(&output.stderr);
-          
-          // Check if migrations actually completed successfully by looking at stdout
-          // Migrations can exit with code 1 due to autoreload issues, but still succeed
-          let migrations_succeeded = stdout.contains("No migrations to apply") || 
-                                     stdout.contains("Running migrations:") ||
-                                     stdout.contains("Applying");
-          
-          if output.status.success() || migrations_succeeded {
-            info!("Database migrations completed successfully");
-            if !stdout.trim().is_empty() {
-              info!("Migration output: {}", stdout.trim());
-            }
-          } else {
-            // Only report as error if migrations actually failed
-            error!("Migration failed. Exit code: {:?}", output.status.code());
-            if !stderr.trim().is_empty() {
-              // Check if it's just a port conflict (non-critical)
-              if stderr.contains("port is already in use") {
-                warn!("Migration warning (non-critical): {}", stderr.trim());
-                info!("Migrations completed successfully despite port warning");
-              } else {
-                error!("Migration stderr: {}", stderr.trim());
-              }
-            }
-            if !stdout.trim().is_empty() {
-              info!("Migration stdout: {}", stdout.trim());
-            }
-            if !migrations_succeeded {
-              warn!("Migrations may have failed, but server is running");
-            }
-          }
+        #[cfg(not(windows))]
+        {
+            possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
+            possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
+            possible_exe_paths.push(resource_dir.join("backend-server"));
+            possible_exe_paths.push(resource_dir.join("backend-server.exe"));
         }
-        Err(e) => {
-          warn!("Could not run migrations: {}. Server is running anyway.", e);
-        }
-      }
-    });
-    
-    // Start the server
-    let mut cmd = Command::new(&exe_path);
-    cmd.arg("--host");
-    cmd.arg("127.0.0.1");
-    cmd.arg("--port");
-    cmd.arg("8000");
-    cmd.arg("--database-path");
-    cmd.arg(db_path.to_string_lossy().to_string());
-    
-    #[cfg(windows)]
-    {
-      const CREATE_NO_WINDOW: u32 = 0x08000000;
-      cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    
-    // Capture stderr to a pipe so we can read errors if the server fails to start
-    // We'll spawn a thread to read stderr in the background
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
-    
-    let mut child = cmd.spawn()?;
-    info!("Backend server started with PID: {:?}", child.id());
-    
-    // Spawn a thread to read stderr (Django logs HTTP requests to stderr)
-    let stderr_handle = child.stderr.take();
-    if let Some(mut stderr) = stderr_handle {
-      std::thread::spawn(move || {
-        let mut buffer = [0u8; 1024];
-        loop {
-          match stderr.read(&mut buffer) {
-            Ok(0) => break, // EOF
-            Ok(n) => {
-              let output = String::from_utf8_lossy(&buffer[..n]);
-              if !output.trim().is_empty() {
-                // Django logs HTTP requests to stderr - these are informational, not errors
-                // Only log actual errors (containing "Error", "Exception", "Traceback")
-                let trimmed = output.trim();
-                if trimmed.contains("Error") || trimmed.contains("Exception") || trimmed.contains("Traceback") {
-                  warn!("Backend: {}", trimmed);
-                } else {
-                  debug!("Backend: {}", trimmed);
+
+    // Add paths relative to executable (fallback)
+    if let Some(exe_dir) = exe_dir {
+        #[cfg(windows)]
+        {
+            possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+            possible_exe_paths.push(exe_dir.join("backend-server"));
+            possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+            possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+        }
+        #[cfg(not(windows))]
+        {
+            possible_exe_paths.push(exe_dir.join("backend-server"));
+            possible_exe_paths.push(exe_dir.join("backend-server.exe"));
+            possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
+            possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
+        }
+
+        // Also check parent directories (for nested bundle structures)
+        if let Some(parent) = exe_dir.parent() {
+            #[cfg(windows)]
+            {
+                possible_exe_paths.push(parent.join("backend-server.exe"));
+                possible_exe_paths.push(parent.join("backend-server"));
+            }
+            #[cfg(not(windows))]
+            {
+                possible_exe_paths.push(parent.join("backend-server"));
+                possible_exe_paths.push(parent.join("backend-server.exe"));
+            }
+        }
+    }
+
+    // Find the first existing executable, filtering out placeholders (very small files)
+    let backend_exe = possible_exe_paths
+        .iter()
+        .find(|p| {
+            if !p.exists() {
+                return false;
+            }
+
+            // On non-Windows, skip .exe files (they're Windows executables)
+            #[cfg(not(windows))]
+            {
+                if p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.ends_with(".exe"))
+                    .unwrap_or(false)
+                {
+                    return false;
                 }
-              }
+            }
+
+            // Filter out placeholder files (very small files < 1KB are likely placeholders)
+            if let Ok(metadata) = std::fs::metadata(p) {
+                let size = metadata.len();
+                if size < 1024 {
+                    warn!(
+                        "Skipping potential placeholder file: {:?} (size: {} bytes)",
+                        p, size
+                    );
+                    return false;
+                }
+            }
+
+            true
+        })
+        .cloned();
+
+    if let Some(exe_path) = backend_exe {
+        info!("Found bundled backend executable: {:?}", exe_path);
+
+        // On Unix systems, ensure the executable has execute permissions
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = std::fs::metadata(&exe_path) {
+                let mut perms = metadata.permissions();
+                let mode = perms.mode();
+                // Check if execute bit is set for owner, group, or others
+                if mode & 0o111 == 0 {
+                    warn!(
+                        "Backend executable does not have execute permissions, attempting to fix..."
+                    );
+                    perms.set_mode(mode | 0o111); // Add execute permissions for all
+                    if let Err(e) = std::fs::set_permissions(&exe_path, perms) {
+                        error!(
+                            "Failed to set execute permissions on backend executable: {}",
+                            e
+                        );
+                        return Err(format!("Backend executable at {:?} does not have execute permissions and could not be fixed: {}", exe_path, e).into());
+                    } else {
+                        info!("Successfully set execute permissions on backend executable");
+                    }
+                }
+            }
+        }
+
+        // Run migrations in background
+        let exe_path_clone = exe_path.clone();
+        let db_path_clone = db_path.to_path_buf();
+        std::thread::spawn(move || {
+            info!("Running database migrations in background...");
+            let mut migrate_cmd = Command::new(&exe_path_clone);
+            migrate_cmd.arg("--migrate");
+            migrate_cmd.arg("--database-path");
+            migrate_cmd.arg(db_path_clone.to_string_lossy().to_string());
+
+            #[cfg(windows)]
+            {
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                migrate_cmd.creation_flags(CREATE_NO_WINDOW);
+            }
+
+            // Capture output to see what's happening
+            match migrate_cmd.output() {
+                Ok(output) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+
+                    // Check if migrations actually completed successfully by looking at stdout
+                    // Migrations can exit with code 1 due to autoreload issues, but still succeed
+                    let migrations_succeeded = stdout.contains("No migrations to apply")
+                        || stdout.contains("Running migrations:")
+                        || stdout.contains("Applying");
+
+                    if output.status.success() || migrations_succeeded {
+                        info!("Database migrations completed successfully");
+                        if !stdout.trim().is_empty() {
+                            info!("Migration output: {}", stdout.trim());
+                        }
+                    } else {
+                        // Only report as error if migrations actually failed
+                        error!("Migration failed. Exit code: {:?}", output.status.code());
+                        if !stderr.trim().is_empty() {
+                            // Check if it's just a port conflict (non-critical)
+                            if stderr.contains("port is already in use") {
+                                warn!("Migration warning (non-critical): {}", stderr.trim());
+                                info!("Migrations completed successfully despite port warning");
+                            } else {
+                                error!("Migration stderr: {}", stderr.trim());
+                            }
+                        }
+                        if !stdout.trim().is_empty() {
+                            info!("Migration stdout: {}", stdout.trim());
+                        }
+                        if !migrations_succeeded {
+                            warn!("Migrations may have failed, but server is running");
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Could not run migrations: {}. Server is running anyway.", e);
+                }
+            }
+        });
+
+        // Start the server
+        let mut cmd = Command::new(&exe_path);
+        cmd.arg("--host");
+        cmd.arg("127.0.0.1");
+        cmd.arg("--port");
+        cmd.arg("8000");
+        cmd.arg("--database-path");
+        cmd.arg(db_path.to_string_lossy().to_string());
+
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        // Capture stderr to a pipe so we can read errors if the server fails to start
+        // We'll spawn a thread to read stderr in the background
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let mut child = cmd.spawn()?;
+        info!("Backend server started with PID: {:?}", child.id());
+
+        // Spawn a thread to read stderr (Django logs HTTP requests to stderr)
+        let stderr_handle = child.stderr.take();
+        if let Some(mut stderr) = stderr_handle {
+            std::thread::spawn(move || {
+                let mut buffer = [0u8; 1024];
+                loop {
+                    match stderr.read(&mut buffer) {
+                        Ok(0) => break, // EOF
+                        Ok(n) => {
+                            let output = String::from_utf8_lossy(&buffer[..n]);
+                            if !output.trim().is_empty() {
+                                // Django logs HTTP requests to stderr - these are informational, not errors
+                                // Only log actual errors (containing "Error", "Exception", "Traceback")
+                                let trimmed = output.trim();
+                                if trimmed.contains("Error")
+                                    || trimmed.contains("Exception")
+                                    || trimmed.contains("Traceback")
+                                {
+                                    warn!("Backend: {}", trimmed);
+                                } else {
+                                    debug!("Backend: {}", trimmed);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Error reading backend stderr: {}", e);
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Check if process started successfully
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // Process exited immediately - try to get stderr output
+                let error_msg = format!(
+                    "Backend server exited immediately with status: {:?}",
+                    status
+                );
+                error!("{}", error_msg);
+                return Err(error_msg.into());
+            }
+            Ok(None) => {
+                info!("Backend server process is running");
             }
             Err(e) => {
-              warn!("Error reading backend stderr: {}", e);
-              break;
+                let error_msg = format!("Error checking backend server status: {}", e);
+                error!("{}", error_msg);
+                return Err(error_msg.into());
             }
-          }
         }
-      });
+
+        // Wait for backend to be ready by polling the health endpoint
+        // This is more reliable than a fixed delay
+        let start_time = std::time::Instant::now();
+        let health_url = "http://127.0.0.1:8000/api/budgets/health/";
+        let max_wait = std::time::Duration::from_secs(30); // Maximum wait time
+        let poll_interval = std::time::Duration::from_millis(500); // Check every 500ms
+
+        info!("Waiting for backend to be ready at {}...", health_url);
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new());
+
+        loop {
+            // First check if process is still running
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let error_msg = format!(
+                        "Backend server exited during startup with status: {:?}",
+                        status
+                    );
+                    error!("{}", error_msg);
+                    return Err(error_msg.into());
+                }
+                Ok(None) => {
+                    // Process still running, continue
+                }
+                Err(e) => {
+                    warn!("Error checking backend server status: {}", e);
+                }
+            }
+
+            // Try health check
+            match client.get(health_url).send() {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        let elapsed = start_time.elapsed();
+                        info!(
+                            "Backend is ready! Startup took {:.2}s",
+                            elapsed.as_secs_f64()
+                        );
+                        break;
+                    } else {
+                        debug!("Health check returned status: {}", response.status());
+                    }
+                }
+                Err(e) => {
+                    debug!("Health check failed: {} (waiting...)", e);
+                }
+            }
+
+            // Check if we've exceeded max wait time
+            if start_time.elapsed() > max_wait {
+                let error_msg = "Backend server did not become ready within 30 seconds";
+                error!("{}", error_msg);
+                return Err(error_msg.into());
+            }
+
+            std::thread::sleep(poll_interval);
+        }
+
+        // Final verification that process is still running
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let error_msg = format!(
+                    "Backend server exited shortly after becoming ready with status: {:?}",
+                    status
+                );
+                error!("{}", error_msg);
+                return Err(error_msg.into());
+            }
+            Ok(None) => {
+                info!("Backend server process is running and healthy");
+            }
+            Err(e) => {
+                warn!("Error checking backend server status: {}", e);
+            }
+        }
+
+        return Ok(child);
     }
-    
-    // Check if process started successfully
-    match child.try_wait() {
-      Ok(Some(status)) => {
-        // Process exited immediately - try to get stderr output
-        let error_msg = format!("Backend server exited immediately with status: {:?}", status);
-        error!("{}", error_msg);
-        return Err(error_msg.into());
-      }
-      Ok(None) => {
-        info!("Backend server process is running");
-      }
-      Err(e) => {
-        let error_msg = format!("Error checking backend server status: {}", e);
-        error!("{}", error_msg);
-        return Err(error_msg.into());
-      }
-    }
-    
-    // Wait for backend to be ready by polling the health endpoint
-    // This is more reliable than a fixed delay
-    let start_time = std::time::Instant::now();
-    let health_url = "http://127.0.0.1:8000/api/budgets/health/";
-    let max_wait = std::time::Duration::from_secs(30); // Maximum wait time
-    let poll_interval = std::time::Duration::from_millis(500); // Check every 500ms
-    
-    info!("Waiting for backend to be ready at {}...", health_url);
-    
-    let client = reqwest::blocking::Client::builder()
-      .timeout(std::time::Duration::from_secs(2))
-      .build()
-      .unwrap_or_else(|_| reqwest::blocking::Client::new());
-    
-    loop {
-      // First check if process is still running
-      match child.try_wait() {
-        Ok(Some(status)) => {
-          let error_msg = format!("Backend server exited during startup with status: {:?}", status);
-          error!("{}", error_msg);
-          return Err(error_msg.into());
+
+    // Fallback to Python if executable not found
+    warn!("Bundled backend executable not found, falling back to Python...");
+    info!(
+        "To use bundled backend, run: .\\build.ps1 (Windows) or ./build.sh (Linux/macOS) from the project root"
+    );
+
+    // Try to find Python in virtual environment first, then system Python
+    let python_cmd = {
+        // Check Windows path first (Scripts/python.exe)
+        let venv_python_windows = backend_path
+            .join(".venv")
+            .join("Scripts")
+            .join("python.exe");
+        // Check Unix path (bin/python)
+        let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
+
+        if venv_python_windows.exists() {
+            info!(
+                "Using virtual environment Python (Windows): {:?}",
+                venv_python_windows
+            );
+            venv_python_windows
+        } else if venv_python_unix.exists() {
+            info!(
+                "Using virtual environment Python (Unix): {:?}",
+                venv_python_unix
+            );
+            venv_python_unix
+        } else {
+            // Try python3, then python - use a timeout to avoid hanging
+            let check_python = |cmd: &str| -> bool {
+                Command::new(cmd)
+                    .arg("--version")
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .output()
+                    .is_ok()
+            };
+
+            if check_python("python3") {
+                PathBuf::from("python3")
+            } else if check_python("python") {
+                PathBuf::from("python")
+            } else {
+                return Err("Python not found. Please install Python 3.10+ from https://www.python.org/downloads/ and run setup-backend.ps1, or build the app with build.ps1 to create a bundled backend executable".into());
+            }
         }
-        Ok(None) => {
-          // Process still running, continue
-        }
-        Err(e) => {
-          warn!("Error checking backend server status: {}", e);
-        }
-      }
-      
-      // Try health check
-      match client.get(health_url).send() {
-        Ok(response) => {
-          if response.status().is_success() {
-            let elapsed = start_time.elapsed();
-            info!("Backend is ready! Startup took {:.2}s", elapsed.as_secs_f64());
-            break;
-          } else {
-            debug!("Health check returned status: {}", response.status());
-          }
-        }
-        Err(e) => {
-          debug!("Health check failed: {} (waiting...)", e);
-        }
-      }
-      
-      // Check if we've exceeded max wait time
-      if start_time.elapsed() > max_wait {
-        let error_msg = "Backend server did not become ready within 30 seconds";
-        error!("{}", error_msg);
-        return Err(error_msg.into());
-      }
-      
-      std::thread::sleep(poll_interval);
-    }
-    
-    // Final verification that process is still running
-    match child.try_wait() {
-      Ok(Some(status)) => {
-        let error_msg = format!("Backend server exited shortly after becoming ready with status: {:?}", status);
-        error!("{}", error_msg);
-        return Err(error_msg.into());
-      }
-      Ok(None) => {
-        info!("Backend server process is running and healthy");
-      }
-      Err(e) => {
-        warn!("Error checking backend server status: {}", e);
-      }
-    }
-    
-    return Ok(child);
-  }
-  
-  // Fallback to Python if executable not found
-  warn!("Bundled backend executable not found, falling back to Python...");
-  info!("To use bundled backend, run: .\\build.ps1 (Windows) or ./build.sh (Linux/macOS) from the project root");
-  
-  // Try to find Python in virtual environment first, then system Python
-  let python_cmd = {
-    // Check Windows path first (Scripts/python.exe)
-    let venv_python_windows = backend_path.join(".venv").join("Scripts").join("python.exe");
-    // Check Unix path (bin/python)
-    let venv_python_unix = backend_path.join(".venv").join("bin").join("python");
-    
-    if venv_python_windows.exists() {
-      info!("Using virtual environment Python (Windows): {:?}", venv_python_windows);
-      venv_python_windows
-    } else if venv_python_unix.exists() {
-      info!("Using virtual environment Python (Unix): {:?}", venv_python_unix);
-      venv_python_unix
-    } else {
-      // Try python3, then python - use a timeout to avoid hanging
-      let check_python = |cmd: &str| -> bool {
-        Command::new(cmd)
-          .arg("--version")
-          .stdout(std::process::Stdio::null())
-          .stderr(std::process::Stdio::null())
-          .output()
-          .is_ok()
-      };
-      
-      if check_python("python3") {
-        PathBuf::from("python3")
-      } else if check_python("python") {
-        PathBuf::from("python")
-      } else {
-        return Err("Python not found. Please install Python 3.10+ from https://www.python.org/downloads/ and run setup-backend.ps1, or build the app with build.ps1 to create a bundled backend executable".into());
-      }
-    }
-  };
-  
-  // Check if dependencies are installed
-  if !check_backend_dependencies(&python_cmd) {
-    warn!("Backend dependencies not found. Attempting to set up automatically...");
-    if !setup_backend_dependencies(backend_path, &python_cmd) {
-      return Err(format!(
+    };
+
+    // Check if dependencies are installed
+    if !check_backend_dependencies(&python_cmd) {
+        warn!("Backend dependencies not found. Attempting to set up automatically...");
+        if !setup_backend_dependencies(backend_path, &python_cmd) {
+            return Err(format!(
         "Backend dependencies are not installed. Please run setup-backend.ps1 from the project root directory, or build the app with build.ps1 to create a bundled backend executable.\n\
         Backend path: {:?}\n\
         Python command: {:?}",
         backend_path, python_cmd
       ).into());
+        }
     }
-  }
-  
-  // Run migrations in background - don't block server startup
-  // Migrations will run concurrently with server startup
-  let backend_path_clone = backend_path.clone();
-  let db_path_clone = db_path.clone();
-  let python_cmd_clone = python_cmd.clone();
-  std::thread::spawn(move || {
-    info!("Running database migrations in background...");
-    let mut migrate_cmd = Command::new(&python_cmd_clone);
-    migrate_cmd.current_dir(&backend_path_clone);
-    migrate_cmd.arg("manage.py");
-    migrate_cmd.arg("migrate");
-    migrate_cmd.arg("--noinput");
-    migrate_cmd.env("DATABASE_PATH", db_path_clone.to_string_lossy().to_string());
-    migrate_cmd.env("DJANGO_SETTINGS_MODULE", "config.settings");
-    
-    // Hide console window on Windows (but keep output capture for .output())
+
+    // Run migrations in background - don't block server startup
+    // Migrations will run concurrently with server startup
+    let backend_path_clone = backend_path.to_path_buf();
+    let db_path_clone = db_path.to_path_buf();
+    let python_cmd_clone = python_cmd.clone();
+    std::thread::spawn(move || {
+        info!("Running database migrations in background...");
+        let mut migrate_cmd = Command::new(&python_cmd_clone);
+        migrate_cmd.current_dir(&backend_path_clone);
+        migrate_cmd.arg("manage.py");
+        migrate_cmd.arg("migrate");
+        migrate_cmd.arg("--noinput");
+        migrate_cmd.env("DATABASE_PATH", db_path_clone.to_string_lossy().to_string());
+        migrate_cmd.env("DJANGO_SETTINGS_MODULE", "config.settings");
+
+        // Hide console window on Windows (but keep output capture for .output())
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            migrate_cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        match migrate_cmd.output() {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Database migrations completed successfully");
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if !stdout.is_empty() {
+                        info!("Migration output: {}", stdout);
+                    }
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    error!("Migration failed. stderr: {}", stderr);
+                    if !stdout.is_empty() {
+                        error!("stdout: {}", stdout);
+                    }
+                    warn!("Migrations failed but server is running");
+                }
+            }
+            Err(e) => {
+                warn!("Could not run migrations: {}. Server is running anyway.", e);
+            }
+        }
+    });
+
+    // Start the server immediately without waiting for migrations
+    let mut cmd = Command::new(&python_cmd);
+    cmd.current_dir(backend_path);
+    cmd.arg("manage.py");
+    cmd.arg("runserver");
+    cmd.arg("127.0.0.1:8000");
+    cmd.env("DATABASE_PATH", db_path.to_string_lossy().to_string());
+    cmd.env("DJANGO_SETTINGS_MODULE", "config.settings");
+
+    // Hide console window on Windows and suppress output
     #[cfg(windows)]
     {
-      const CREATE_NO_WINDOW: u32 = 0x08000000;
-      migrate_cmd.creation_flags(CREATE_NO_WINDOW);
+        // CREATE_NO_WINDOW flag prevents console window from appearing
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    
-    match migrate_cmd.output() {
-      Ok(output) => {
-        if output.status.success() {
-          info!("Database migrations completed successfully");
-          let stdout = String::from_utf8_lossy(&output.stdout);
-          if !stdout.is_empty() {
-            info!("Migration output: {}", stdout);
-          }
-        } else {
-          let stderr = String::from_utf8_lossy(&output.stderr);
-          let stdout = String::from_utf8_lossy(&output.stdout);
-          error!("Migration failed. stderr: {}", stderr);
-          if !stdout.is_empty() {
-            error!("stdout: {}", stdout);
-          }
-          warn!("Migrations failed but server is running");
+
+    // Suppress stdout and stderr to keep backend completely hidden
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+
+    let mut child = cmd.spawn()?;
+    info!("Backend server started with PID: {:?}", child.id());
+
+    // Quick non-blocking check if process started successfully
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            return Err(format!(
+                "Backend server exited immediately with status: {:?}",
+                status
+            )
+            .into());
         }
-      }
-      Err(e) => {
-        warn!("Could not run migrations: {}. Server is running anyway.", e);
-      }
+        Ok(None) => {
+            info!("Backend server process is running");
+        }
+        Err(e) => {
+            return Err(format!("Error checking backend server status: {}", e).into());
+        }
     }
-  });
-  
-  // Start the server immediately without waiting for migrations
-  let mut cmd = Command::new(&python_cmd);
-  cmd.current_dir(backend_path);
-  cmd.arg("manage.py");
-  cmd.arg("runserver");
-  cmd.arg("127.0.0.1:8000");
-  cmd.env("DATABASE_PATH", db_path.to_string_lossy().to_string());
-  cmd.env("DJANGO_SETTINGS_MODULE", "config.settings");
-  
-  // Hide console window on Windows and suppress output
-  #[cfg(windows)]
-  {
-    // CREATE_NO_WINDOW flag prevents console window from appearing
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    cmd.creation_flags(CREATE_NO_WINDOW);
-  }
-  
-  // Suppress stdout and stderr to keep backend completely hidden
-  cmd.stdout(Stdio::null());
-  cmd.stderr(Stdio::null());
-  
-  let mut child = cmd.spawn()?;
-  info!("Backend server started with PID: {:?}", child.id());
-  
-  // Quick non-blocking check if process started successfully
-  match child.try_wait() {
-    Ok(Some(status)) => {
-      return Err(format!("Backend server exited immediately with status: {:?}", status).into());
-    }
-    Ok(None) => {
-      info!("Backend server process is running");
-    }
-    Err(e) => {
-      return Err(format!("Error checking backend server status: {}", e).into());
-    }
-  }
-  
-  // Don't wait for server readiness - return immediately
-  // The frontend will handle connection retries if needed
-  info!("Backend server process started, returning immediately (server may not be ready yet)");
-  
-  Ok(child)
+
+    // Don't wait for server readiness - return immediately
+    // The frontend will handle connection retries if needed
+    info!("Backend server process started, returning immediately (server may not be ready yet)");
+
+    Ok(child)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  // Fix grey window issue on Linux by setting WebKit environment variables
-  // This disables problematic rendering features that cause EGL errors
-  #[cfg(target_os = "linux")]
-  {
-    use std::env;
-    // Disable DMABUF renderer to fix EGL_BAD_PARAMETER errors
-    // Safety: Setting environment variables is safe in single-threaded context before Tauri starts
-    if env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
-      unsafe {
-        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-      }
+    // Fix grey window issue on Linux by setting WebKit environment variables
+    // This disables problematic rendering features that cause EGL errors
+    #[cfg(target_os = "linux")]
+    {
+        use std::env;
+        // Disable DMABUF renderer to fix EGL_BAD_PARAMETER errors
+        // Safety: Setting environment variables is safe in single-threaded context before Tauri starts
+        if env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            unsafe {
+                env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
+        }
+        // Disable compositing mode to avoid rendering issues
+        if env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
+            unsafe {
+                env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+            }
+        }
+        // Force X11 backend if on Wayland (more stable for WebKit)
+        if env::var("GDK_BACKEND").is_err() && env::var("WAYLAND_DISPLAY").is_ok() {
+            unsafe {
+                env::set_var("GDK_BACKEND", "x11");
+            }
+        }
     }
-    // Disable compositing mode to avoid rendering issues
-    if env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
-      unsafe {
-        env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-      }
-    }
-    // Force X11 backend if on Wayland (more stable for WebKit)
-    if env::var("GDK_BACKEND").is_err() && env::var("WAYLAND_DISPLAY").is_ok() {
-      unsafe {
-        env::set_var("GDK_BACKEND", "x11");
-      }
-    }
-  }
-  
-  // Store backend process handle in app state
-  let backend_process: Mutex<Option<Child>> = Mutex::new(None);
-  
-  tauri::Builder::default()
+
+    // Store backend process handle in app state
+    let backend_process: Mutex<Option<Child>> = Mutex::new(None);
+
+    tauri::Builder::default()
     .manage(backend_process)
     .setup(move |app| {
       // Enable logging in both debug and release modes for troubleshooting
@@ -926,7 +1019,7 @@ pub fn run() {
           .level(log::LevelFilter::Info)
           .build(),
       );
-      
+
       // Get app data directory for database - don't fail if this doesn't work
       let db_path = match app.path().app_data_dir() {
         Ok(dir) => {
@@ -941,7 +1034,7 @@ pub fn run() {
             .join("db.sqlite3")
         }
       };
-      
+
       // Move all blocking operations to a background thread to prevent UI hang
       let app_handle = app.handle().clone();
       let db_path_clone = db_path.clone();
@@ -951,17 +1044,39 @@ pub fn run() {
           eprintln!("Database initialization warning: {}", e);
           // Don't fail startup if database init fails - it will be created on first use
         }
-        
+
+        // Get app data directory for storing backend executable
+        let app_data_dir = match app_handle.path().app_data_dir() {
+          Ok(dir) => {
+            let _ = std::fs::create_dir_all(&dir);
+            dir
+          }
+          Err(e) => {
+            error!("Failed to get app data directory: {}", e);
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+          }
+        };
+
+        info!("App data directory: {:?}", app_data_dir);
+
+        // Path where backend-server should be stored in app data directory
+        #[cfg(windows)]
+        let backend_exe_name = "backend-server.exe";
+        #[cfg(not(windows))]
+        let backend_exe_name = "backend-server";
+
+        let installed_backend_path = app_data_dir.join(backend_exe_name);
+
         // First, try to find bundled backend executable (for release builds)
         let exe_path = std::env::current_exe().unwrap_or_default();
         let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
-        
+
         info!("Looking for bundled backend executable...");
         info!("Executable path: {:?}", exe_path);
         info!("Executable directory: {:?}", exe_dir);
-        
+
         let mut possible_exe_paths: Vec<PathBuf> = vec![];
-        
+
         // First, check backend/dist directory (development build location)
         // Try to find the project root by going up from executable directory
         let mut check_backend_dist = |base_dir: &std::path::Path| {
@@ -973,7 +1088,7 @@ pub fn run() {
             base_dir.join("../../..").join("backend").join("dist"),
             base_dir.join("../../../..").join("backend").join("dist"),
           ];
-          
+
           for backend_dist in candidates {
             let backend_dist = backend_dist.canonicalize().unwrap_or(backend_dist);
             #[cfg(windows)]
@@ -988,15 +1103,15 @@ pub fn run() {
             }
           }
         };
-        
+
         // Check from executable directory
         check_backend_dist(exe_dir);
-        
+
         // Also check from current working directory (for development)
         if let Ok(current_dir) = std::env::current_dir() {
           check_backend_dist(&current_dir);
         }
-        
+
         // Try Tauri resource resolution (for bundled resources)
         match app_handle.path().resource_dir() {
           Ok(resource_dir) => {
@@ -1033,7 +1148,7 @@ pub fn run() {
             warn!("Could not resolve resource directory: {}", e);
           }
         }
-        
+
         // Also try resolving the resource directly using Tauri's resolve method
         // This might work better in some bundle configurations
         // Note: In Tauri v2, resolve might work differently, so we try both approaches
@@ -1056,7 +1171,7 @@ pub fn run() {
             possible_exe_paths.push(resource_path);
           }
         }
-        
+
         // For Linux AppImages, resources might be in a different location
         // AppImages extract to a temporary directory, and resources are in usr/lib or usr/share
         #[cfg(target_os = "linux")]
@@ -1077,7 +1192,7 @@ pub fn run() {
               possible_exe_paths.push(appdir_path.join("resources").join("backend-server"));
             }
           }
-          
+
           // For DEB packages, resources are typically in /usr/lib or /usr/share
           // Check if we're in a system installation
           if exe_dir.starts_with("/usr") {
@@ -1089,7 +1204,7 @@ pub fn run() {
             possible_exe_paths.push(PathBuf::from("/usr/lib/Budget Planer/backend-server"));
             possible_exe_paths.push(PathBuf::from("/usr/share/Budget Planer/backend-server"));
           }
-          
+
           // For standalone binaries, check common project locations
           // This is useful when running the binary from the project directory or Downloads
           let home_dir = std::env::var("HOME").ok().map(PathBuf::from);
@@ -1103,7 +1218,7 @@ pub fn run() {
               home.join("dev").join("Budget-Planer").join("backend").join("dist"),
               home.join("Dev").join("Budget-Planer").join("backend").join("dist"),
             ];
-            
+
             for project_path in project_locations {
               if project_path.exists() {
                 info!("Found potential project directory: {:?}", project_path);
@@ -1111,7 +1226,7 @@ pub fn run() {
               }
             }
           }
-          
+
           // Also check if BACKEND_SERVER_PATH environment variable is set
           if let Ok(backend_path) = std::env::var("BACKEND_SERVER_PATH") {
             let backend_path_buf = PathBuf::from(&backend_path);
@@ -1121,7 +1236,7 @@ pub fn run() {
             }
           }
         }
-        
+
         // Add paths relative to executable (fallback)
         // For standalone binaries, resources might be next to the executable
         // Prioritize platform-specific executables
@@ -1139,7 +1254,7 @@ pub fn run() {
           possible_exe_paths.push(exe_dir.join("resources").join("backend-server"));
           possible_exe_paths.push(exe_dir.join("resources").join("backend-server.exe"));
         }
-        
+
         // For Linux, also check lib and share directories relative to executable
         // This is common for Linux applications and standalone binaries
         #[cfg(target_os = "linux")]
@@ -1149,7 +1264,7 @@ pub fn run() {
           possible_exe_paths.push(exe_dir.join("usr").join("lib").join("backend-server"));
           possible_exe_paths.push(exe_dir.join("usr").join("share").join("backend-server"));
         }
-        
+
         // Also check parent directories (for nested bundle structures)
         if let Some(parent) = exe_dir.parent() {
           #[cfg(windows)]
@@ -1166,27 +1281,40 @@ pub fn run() {
             possible_exe_paths.push(parent.join("resources").join("backend-server"));
             possible_exe_paths.push(parent.join("resources").join("backend-server.exe"));
           }
-          
+
           #[cfg(target_os = "linux")]
           {
             possible_exe_paths.push(parent.join("lib").join("backend-server"));
             possible_exe_paths.push(parent.join("share").join("backend-server"));
           }
         }
-        
+
         // Log all paths being checked
         info!("Checking the following paths for backend executable:");
         for path in &possible_exe_paths {
           let exists = path.exists();
           info!("  {:?} - {}", path, if exists { "EXISTS" } else { "not found" });
         }
-        
-        // Find the first existing executable, filtering out placeholders and platform-incompatible files
+
+        // Check if backend is already installed in app data directory
+        let backend_installed = installed_backend_path.exists() && {
+          if let Ok(metadata) = std::fs::metadata(&installed_backend_path) {
+            metadata.len() >= 1024 // Not a placeholder
+          } else {
+            false
+          }
+        };
+
+        if backend_installed {
+          info!("Backend already installed at: {:?}", installed_backend_path);
+        }
+
+        // Find the first existing executable from bundled/source locations
         let bundled_exe = possible_exe_paths.iter().find(|p| {
           if !p.exists() {
             return false;
           }
-          
+
           // On non-Windows, skip .exe files (they're Windows executables)
           #[cfg(not(windows))]
           {
@@ -1194,7 +1322,7 @@ pub fn run() {
               return false;
             }
           }
-          
+
           // Filter out placeholder files (very small files < 1KB are likely placeholders)
           if let Ok(metadata) = std::fs::metadata(p) {
             let size = metadata.len();
@@ -1203,52 +1331,114 @@ pub fn run() {
               return false;
             }
           }
-          
+
           true
         }).cloned();
-        
-        // If bundled executable found, use it directly
-        if let Some(exe_path) = bundled_exe {
-          info!("Found bundled backend executable: {:?}", exe_path);
-          
-          // Extract the backend directory from the found executable path
-          // The executable is at backend/dist/backend-server, so we need to go up two levels
-          // to get the backend directory that start_backend_server expects
-          let backend_path = exe_path.parent()  // backend/dist/
-            .and_then(|p| p.parent())           // backend/
+
+        // Determine which backend executable to use
+        // Priority: 1. Installed in app data dir (if up to date), 2. Bundled/source
+        let backend_to_use: Option<PathBuf> = if backend_installed {
+          // Check if bundled version is newer (compare file sizes as simple heuristic,
+          // or always prefer installed version for consistency)
+          if let Some(ref bundled) = bundled_exe {
+            let bundled_size = std::fs::metadata(bundled).map(|m| m.len()).unwrap_or(0);
+            let installed_size = std::fs::metadata(&installed_backend_path).map(|m| m.len()).unwrap_or(0);
+
+            // If bundled is significantly different (more than 1KB difference), update installed version
+            if bundled_size.abs_diff(installed_size) > 1024 {
+              info!("Bundled backend differs from installed version, updating...");
+              match std::fs::copy(bundled, &installed_backend_path) {
+                Ok(_) => {
+                  info!("Updated backend at: {:?}", installed_backend_path);
+                  // Make executable on Unix
+                  #[cfg(unix)]
+                  {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(metadata) = std::fs::metadata(&installed_backend_path) {
+                      let mut perms = metadata.permissions();
+                      perms.set_mode(0o755);
+                      let _ = std::fs::set_permissions(&installed_backend_path, perms);
+                    }
+                  }
+                }
+                Err(e) => {
+                  warn!("Failed to update backend: {}, using existing installation", e);
+                }
+              }
+            }
+          }
+          Some(installed_backend_path.clone())
+        } else if let Some(ref bundled) = bundled_exe {
+          // Install bundled backend to app data directory
+          info!("Installing backend to app data directory: {:?}", installed_backend_path);
+          match std::fs::copy(bundled, &installed_backend_path) {
+            Ok(bytes) => {
+              info!("Copied {} bytes to {:?}", bytes, installed_backend_path);
+              // Make executable on Unix
+              #[cfg(unix)]
+              {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = std::fs::metadata(&installed_backend_path) {
+                  let mut perms = metadata.permissions();
+                  perms.set_mode(0o755);
+                  if let Err(e) = std::fs::set_permissions(&installed_backend_path, perms) {
+                    warn!("Failed to set executable permissions: {}", e);
+                  } else {
+                    info!("Set executable permissions on backend");
+                  }
+                }
+              }
+              Some(installed_backend_path.clone())
+            }
+            Err(e) => {
+              error!("Failed to install backend to app data directory: {}", e);
+              // Fall back to using bundled directly
+              Some(bundled.clone())
+            }
+          }
+        } else {
+          None
+        };
+
+        // If we have a backend executable to use, start it
+        if let Some(exe_path) = backend_to_use {
+          info!("Using backend executable: {:?}", exe_path);
+
+          // For backend in app data directory, use app data dir as working directory
+          let backend_working_dir = exe_path.parent()
             .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| exe_dir.join("backend"));
-          
-          info!("Using backend directory: {:?}", backend_path);
-          
-          match start_backend_server(&app_handle, &backend_path, &db_path_clone) {
+            .unwrap_or_else(|| app_data_dir.clone());
+
+          info!("Backend working directory: {:?}", backend_working_dir);
+
+          match start_backend_server(&app_handle, &backend_working_dir, &db_path_clone) {
             Ok(child) => {
               // Store process in app state
               if let Some(state) = app_handle.try_state::<Mutex<Option<Child>>>() {
                 if let Ok(mut process) = state.lock() {
                   *process = Some(child);
-                  info!("Backend server started successfully using bundled executable");
+                  info!("Backend server started successfully from: {:?}", exe_path);
                 } else {
                   warn!("Could not store backend process in app state");
                 }
               }
             }
             Err(e) => {
-              error!("Failed to start bundled backend server: {}", e);
+              error!("Failed to start backend server: {}", e);
               error!("Backend server not started. API calls will fail.");
             }
           }
         } else {
           // Fallback: Find backend directory (for development)
           info!("Bundled backend executable not found, looking for backend directory...");
-          
+
           let mut possible_backend_paths: Vec<PathBuf> = vec![
             exe_dir.join("backend"),
             exe_dir.join("../../backend"),
             exe_dir.join("../../../backend"),  // From target/release/
             exe_dir.join("../../../../backend"), // From target/release/ if deeper
           ];
-          
+
           // Add parent directory paths
           if let Some(parent) = exe_dir.parent() {
             possible_backend_paths.push(parent.join("backend"));
@@ -1259,7 +1449,7 @@ pub fn run() {
               }
             }
           }
-          
+
           // Also try absolute path from project root (if we're in development)
           if let Ok(current_dir) = std::env::current_dir() {
             possible_backend_paths.push(current_dir.join("backend"));
@@ -1267,7 +1457,7 @@ pub fn run() {
               possible_backend_paths.push(parent.join("backend"));
             }
           }
-          
+
           // Check common project locations (useful when binary is run from Downloads or elsewhere)
           #[cfg(target_os = "linux")]
           {
@@ -1282,7 +1472,7 @@ pub fn run() {
                 home_path.join("Dev").join("Budget-Planer").join("backend"),
                 PathBuf::from("/home").join("firstpick").join("Dokumente").join("GitHub").join("Budget-Planer").join("backend"),
               ];
-              
+
               for project_path in common_project_locations {
                 if project_path.exists() {
                   info!("Found potential project directory: {:?}", project_path);
@@ -1295,7 +1485,7 @@ pub fn run() {
                 }
               }
             }
-            
+
             // Check BACKEND_PATH environment variable
             if let Ok(backend_path) = std::env::var("BACKEND_PATH") {
               let backend_path_buf = PathBuf::from(&backend_path);
@@ -1305,56 +1495,50 @@ pub fn run() {
               }
             }
           }
-          
+
           let mut backend_path: Option<PathBuf> = None;
           let mut backend_exe_path: Option<PathBuf> = None;
-          
+
           for path in &possible_backend_paths {
             // First check if this path itself is the executable
-            if path.file_name().and_then(|n| n.to_str()).map(|s| s == "backend-server").unwrap_or(false) {
-              if path.exists() {
-                if let Ok(metadata) = std::fs::metadata(path) {
-                  if metadata.len() >= 1024 {
-                    backend_exe_path = Some(path.clone());
-                    info!("Found backend executable directly: {:?}", backend_exe_path);
-                    break;
-                  }
-                }
-              }
+            let is_backend_server = path.file_name().and_then(|n| n.to_str()).map(|s| s == "backend-server").unwrap_or(false);
+            if is_backend_server
+              && path.exists()
+              && std::fs::metadata(path).map(|m| m.len() >= 1024).unwrap_or(false)
+            {
+              backend_exe_path = Some(path.clone());
+              info!("Found backend executable directly: {:?}", backend_exe_path);
+              break;
             }
-            
+
             // Check if this is already a dist directory with the executable
             let exe_in_dist = path.join("backend-server");
-            if exe_in_dist.exists() {
-              if let Ok(metadata) = std::fs::metadata(&exe_in_dist) {
-                if metadata.len() >= 1024 {
-                  backend_exe_path = Some(exe_in_dist);
-                  info!("Found backend executable in dist directory: {:?}", backend_exe_path);
-                  break;
-                }
-              }
+            if exe_in_dist.exists()
+              && std::fs::metadata(&exe_in_dist).map(|m| m.len() >= 1024).unwrap_or(false)
+            {
+              backend_exe_path = Some(exe_in_dist);
+              info!("Found backend executable in dist directory: {:?}", backend_exe_path);
+              break;
             }
-            
+
             // Check if this is a backend directory (has manage.py)
             let manage_py = path.join("manage.py");
             if manage_py.exists() {
               backend_path = Some(path.clone());
               info!("Found backend directory at: {:?}", path);
-              
+
               // Also check if there's a dist subdirectory with the executable
               let dist_exe = path.join("dist").join("backend-server");
-              if dist_exe.exists() {
-                if let Ok(metadata) = std::fs::metadata(&dist_exe) {
-                  if metadata.len() >= 1024 {
-                    backend_exe_path = Some(dist_exe);
-                    info!("Found backend executable in backend/dist: {:?}", backend_exe_path);
-                    break;
-                  }
-                }
+              if dist_exe.exists()
+                && std::fs::metadata(&dist_exe).map(|m| m.len() >= 1024).unwrap_or(false)
+              {
+                backend_exe_path = Some(dist_exe);
+                info!("Found backend executable in backend/dist: {:?}", backend_exe_path);
+                break;
               }
             }
           }
-          
+
           // If we found the executable directly, use it
           if let Some(exe_path) = backend_exe_path {
             info!("Using backend executable: {:?}", exe_path);
@@ -1364,7 +1548,7 @@ pub fn run() {
             } else {
               exe_path.parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf)
             };
-            
+
             match start_backend_server(&app_handle, &backend_dir, &db_path_clone) {
               Ok(child) => {
                 // Store process in app state
@@ -1421,7 +1605,7 @@ pub fn run() {
           }
         }
       });
-      
+
       eprintln!("Tauri app setup completed successfully (backend starting in background)");
       Ok(())
     })
@@ -1429,7 +1613,7 @@ pub fn run() {
       // Cleanup backend process when window closes - non-blocking
       if let tauri::WindowEvent::CloseRequested { .. } = event {
         info!("Window close requested, initiating backend cleanup...");
-        
+
         // Get the process and kill it in background to avoid blocking window close
         let app_handle = app.app_handle().clone();
         std::thread::spawn(move || {
@@ -1442,10 +1626,10 @@ pub fn run() {
             } else {
               // If lock is held, wait briefly then try again
               std::thread::sleep(std::time::Duration::from_millis(50));
-              if let Ok(mut process) = state.lock() {
-                if let Some(mut child) = process.take() {
-                  kill_backend_process(&mut child);
-                }
+              if let Ok(mut process) = state.lock()
+                && let Some(mut child) = process.take()
+              {
+                kill_backend_process(&mut child);
               }
             }
           }
@@ -1459,23 +1643,19 @@ pub fn run() {
       std::process::exit(1);
     })
     .run(|app, event| {
-      match event {
-        tauri::RunEvent::ExitRequested { .. } => {
-          info!("App exit requested, cleaning up backend process...");
-          // Cleanup backend process synchronously on app exit to ensure it completes
-          if let Some(state) = app.try_state::<Mutex<Option<Child>>>() {
-            if let Ok(mut process) = state.lock() {
-              if let Some(mut child) = process.take() {
-                kill_backend_process(&mut child);
-                // Wait a moment to ensure process is killed
-                std::thread::sleep(std::time::Duration::from_millis(200));
-              }
-            }
-          }
-          // Also kill any process on port 8000 as a fallback
-          kill_process_on_port(8000);
+      if let tauri::RunEvent::ExitRequested { .. } = event {
+        info!("App exit requested, cleaning up backend process...");
+        // Cleanup backend process synchronously on app exit to ensure it completes
+        if let Some(state) = app.try_state::<Mutex<Option<Child>>>()
+          && let Ok(mut process) = state.lock()
+          && let Some(mut child) = process.take()
+        {
+          kill_backend_process(&mut child);
+          // Wait a moment to ensure process is killed
+          std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        _ => {}
+        // Also kill any process on port 8000 as a fallback
+        kill_process_on_port(8000);
       }
     });
 }
