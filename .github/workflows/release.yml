@@ -353,10 +353,13 @@ jobs:
           # Create a clean release directory
           mkdir -p release_artifacts
           
+          # Linux: Find the binary (it may be in a nested directory structure)
+          LINUX_BINARY=$(find artifacts/linux -name "budget-planer" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          
           # Linux: Create portable ZIP with binary + backend-server
-          if [ -f "artifacts/linux/budget-planer" ]; then
+          if [ -n "$LINUX_BINARY" ] && [ -f "$LINUX_BINARY" ]; then
             mkdir -p portable-linux
-            cp artifacts/linux/budget-planer portable-linux/
+            cp "$LINUX_BINARY" portable-linux/budget-planer
             chmod +x portable-linux/budget-planer
             # Find and copy backend-server
             BACKEND=$(find artifacts/linux -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
@@ -372,8 +375,8 @@ jobs:
           fi
           
           # Linux: Add standalone binary
-          if [ -f "artifacts/linux/budget-planer" ]; then
-            cp artifacts/linux/budget-planer release_artifacts/budget-planer-linux
+          if [ -n "$LINUX_BINARY" ] && [ -f "$LINUX_BINARY" ]; then
+            cp "$LINUX_BINARY" release_artifacts/budget-planer-linux
             chmod +x release_artifacts/budget-planer-linux
             echo "✓ Added Linux standalone binary"
           fi
@@ -392,10 +395,13 @@ jobs:
             echo "✓ Added Linux RPM package: $(basename "$file")"
           done
           
+          # Windows: Find the binary (it may be in a nested directory structure)
+          WINDOWS_BINARY=$(find artifacts/windows -name "budget-planer.exe" -type f 2>/dev/null | head -1)
+          
           # Windows: Create portable ZIP with binary + backend-server
-          if [ -f "artifacts/windows/budget-planer.exe" ]; then
+          if [ -n "$WINDOWS_BINARY" ] && [ -f "$WINDOWS_BINARY" ]; then
             mkdir -p portable-windows
-            cp artifacts/windows/budget-planer.exe portable-windows/
+            cp "$WINDOWS_BINARY" portable-windows/budget-planer.exe
             # Find and copy backend-server.exe
             BACKEND=$(find artifacts/windows -name "backend-server.exe" -type f 2>/dev/null | head -1)
             if [ -n "$BACKEND" ] && [ -f "$BACKEND" ]; then
@@ -423,15 +429,18 @@ jobs:
           done
           
           # Windows: Add standalone binary
-          if [ -f "artifacts/windows/budget-planer.exe" ]; then
-            cp artifacts/windows/budget-planer.exe release_artifacts/budget-planer-windows.exe
+          if [ -n "$WINDOWS_BINARY" ] && [ -f "$WINDOWS_BINARY" ]; then
+            cp "$WINDOWS_BINARY" release_artifacts/budget-planer-windows.exe
             echo "✓ Added Windows standalone binary"
           fi
           
+          # macOS: Find the binary (it may be in a nested directory structure)
+          MACOS_BINARY=$(find artifacts/macos -name "budget-planer" -type f ! -name "*.exe" 2>/dev/null | head -1)
+          
           # macOS: Create portable ZIP with binary + backend-server
-          if [ -f "artifacts/macos/budget-planer" ]; then
+          if [ -n "$MACOS_BINARY" ] && [ -f "$MACOS_BINARY" ]; then
             mkdir -p portable-macos
-            cp artifacts/macos/budget-planer portable-macos/
+            cp "$MACOS_BINARY" portable-macos/budget-planer
             chmod +x portable-macos/budget-planer
             # Find and copy backend-server
             BACKEND=$(find artifacts/macos -name "backend-server" -type f ! -name "*.exe" 2>/dev/null | head -1)
@@ -447,8 +456,8 @@ jobs:
           fi
           
           # macOS: Add standalone binary
-          if [ -f "artifacts/macos/budget-planer" ]; then
-            cp artifacts/macos/budget-planer release_artifacts/budget-planer-macos
+          if [ -n "$MACOS_BINARY" ] && [ -f "$MACOS_BINARY" ]; then
+            cp "$MACOS_BINARY" release_artifacts/budget-planer-macos
             chmod +x release_artifacts/budget-planer-macos
             echo "✓ Added macOS standalone binary"
           fi
