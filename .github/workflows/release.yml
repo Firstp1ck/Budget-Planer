@@ -123,7 +123,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: frontend
-        run: bunx tauri build
+        run: bunx tauri build --bundles deb,rpm,appimage
         # Optional: Set these secrets in GitHub Settings → Secrets for code signing
         # If not set, Tauri will build without signing (linter warnings are expected)
         env:
@@ -364,6 +364,13 @@ jobs:
             rm -rf portable-linux
           fi
           
+          # Linux: Add standalone binary
+          if [ -f "artifacts/linux/budget-planer" ]; then
+            cp artifacts/linux/budget-planer release_artifacts/budget-planer-linux
+            chmod +x release_artifacts/budget-planer-linux
+            echo "✓ Added Linux standalone binary"
+          fi
+          
           # Linux: Add bundle types
           find artifacts/linux -name "*.deb" -type f 2>/dev/null | while read -r file; do
             cp "$file" release_artifacts/
@@ -408,6 +415,12 @@ jobs:
             fi
           done
           
+          # Windows: Add standalone binary
+          if [ -f "artifacts/windows/budget-planer.exe" ]; then
+            cp artifacts/windows/budget-planer.exe release_artifacts/budget-planer-windows.exe
+            echo "✓ Added Windows standalone binary"
+          fi
+          
           # macOS: Create portable ZIP with binary + backend-server
           if [ -f "artifacts/macos/budget-planer" ]; then
             mkdir -p portable-macos
@@ -424,6 +437,13 @@ jobs:
             (cd portable-macos && zip -r ../release_artifacts/budget-planer-macos-portable.zip .)
             echo "✓ Added macOS portable ZIP (binary + backend-server)"
             rm -rf portable-macos
+          fi
+          
+          # macOS: Add standalone binary
+          if [ -f "artifacts/macos/budget-planer" ]; then
+            cp artifacts/macos/budget-planer release_artifacts/budget-planer-macos
+            chmod +x release_artifacts/budget-planer-macos
+            echo "✓ Added macOS standalone binary"
           fi
           
           # macOS: Add DMG and PKG

@@ -251,17 +251,12 @@ if [ "$BUILD_FRONTEND" = true ]; then
     print_info "Building Tauri application ($BUILD_TYPE mode)..."
     cd "$FRONTEND_DIR"
 
-    # Determine which bundles to build based on platform and available tools
+    # Determine which bundles to build based on platform
+    # Note: AppImage is excluded from local builds (requires linuxdeploy)
+    # CI builds AppImage separately with linuxdeploy installed
     BUNDLE_TARGETS=""
     if [ "$PLATFORM" == "linux" ]; then
-        # Check if linuxdeploy is available for AppImage builds
-        if command_exists linuxdeploy || [ -f "/usr/local/bin/linuxdeploy" ]; then
-            print_success "linuxdeploy found - AppImage will be built"
-            BUNDLE_TARGETS="deb,rpm,appimage"
-        else
-            print_warning "linuxdeploy not found - skipping AppImage (install with: sudo wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O /usr/local/bin/linuxdeploy && sudo chmod +x /usr/local/bin/linuxdeploy)"
-            BUNDLE_TARGETS="deb,rpm"
-        fi
+        BUNDLE_TARGETS="deb,rpm"
     elif [ "$PLATFORM" == "macos" ]; then
         BUNDLE_TARGETS="dmg,app"
     elif [ "$PLATFORM" == "windows" ]; then
