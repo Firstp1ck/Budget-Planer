@@ -887,6 +887,32 @@ fn start_backend_server(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // Fix grey window issue on Linux by setting WebKit environment variables
+  // This disables problematic rendering features that cause EGL errors
+  #[cfg(target_os = "linux")]
+  {
+    use std::env;
+    // Disable DMABUF renderer to fix EGL_BAD_PARAMETER errors
+    // Safety: Setting environment variables is safe in single-threaded context before Tauri starts
+    if env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+      unsafe {
+        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+      }
+    }
+    // Disable compositing mode to avoid rendering issues
+    if env::var("WEBKIT_DISABLE_COMPOSITING_MODE").is_err() {
+      unsafe {
+        env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+      }
+    }
+    // Force X11 backend if on Wayland (more stable for WebKit)
+    if env::var("GDK_BACKEND").is_err() && env::var("WAYLAND_DISPLAY").is_ok() {
+      unsafe {
+        env::set_var("GDK_BACKEND", "x11");
+      }
+    }
+  }
+  
   // Store backend process handle in app state
   let backend_process: Mutex<Option<Child>> = Mutex::new(None);
   

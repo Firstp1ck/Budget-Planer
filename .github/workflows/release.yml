@@ -123,7 +123,14 @@ jobs:
 
       - name: Build Tauri app
         working-directory: frontend
-        run: bunx tauri build --bundles deb,rpm,appimage
+        run: |
+          # Build bundles (this also builds the standalone binary)
+          bunx tauri build --bundles deb,rpm,appimage
+          # Verify the standalone binary exists
+          if [ ! -f "src-tauri/target/release/budget-planer" ]; then
+            echo "::error::Standalone binary not found, building without bundles..."
+            bunx tauri build
+          fi
         # Optional: Set these secrets in GitHub Settings → Secrets for code signing
         # If not set, Tauri will build without signing (linter warnings are expected)
         env:
