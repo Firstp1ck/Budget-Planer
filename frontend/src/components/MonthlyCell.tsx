@@ -334,7 +334,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
               </div>
             )}
           </div>
-          {(!plannedAmount || plannedAmount === '0' || plannedAmount === '0.00') && (
+          {(!plannedAmount || plannedAmount === '0' || plannedAmount === '0.00') && category.category_type !== 'FIXED_EXPENSE' && category.category_type !== 'VARIABLE_EXPENSE' && (
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Ist
