@@ -1626,10 +1626,10 @@ pub fn run() {
             } else {
               // If lock is held, wait briefly then try again
               std::thread::sleep(std::time::Duration::from_millis(50));
-              if let Ok(mut process) = state.lock()
-                && let Some(mut child) = process.take()
-              {
-                kill_backend_process(&mut child);
+              if let Ok(mut process) = state.lock() {
+                if let Some(mut child) = process.take() {
+                  kill_backend_process(&mut child);
+                }
               }
             }
           }
@@ -1646,13 +1646,14 @@ pub fn run() {
       if let tauri::RunEvent::ExitRequested { .. } = event {
         info!("App exit requested, cleaning up backend process...");
         // Cleanup backend process synchronously on app exit to ensure it completes
-        if let Some(state) = app.try_state::<Mutex<Option<Child>>>()
-          && let Ok(mut process) = state.lock()
-          && let Some(mut child) = process.take()
-        {
-          kill_backend_process(&mut child);
-          // Wait a moment to ensure process is killed
-          std::thread::sleep(std::time::Duration::from_millis(200));
+        if let Some(state) = app.try_state::<Mutex<Option<Child>>>() {
+          if let Ok(mut process) = state.lock() {
+            if let Some(mut child) = process.take() {
+              kill_backend_process(&mut child);
+              // Wait a moment to ensure process is killed
+              std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+          }
         }
         // Also kill any process on port 8000 as a fallback
         kill_process_on_port(8000);
