@@ -441,13 +441,18 @@ fn start_backend_server(
   
   // Try Tauri resource resolution (for bundled resources)
   if let Ok(resource_dir) = app.path().resource_dir() {
+    // Resources may be in a 'resources' subdirectory (AppImage structure)
     #[cfg(windows)]
     {
+      possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
+      possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
       possible_exe_paths.push(resource_dir.join("backend-server.exe"));
       possible_exe_paths.push(resource_dir.join("backend-server"));
     }
     #[cfg(not(windows))]
     {
+      possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
+      possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
       possible_exe_paths.push(resource_dir.join("backend-server"));
       possible_exe_paths.push(resource_dir.join("backend-server.exe"));
     }
@@ -982,13 +987,18 @@ pub fn run() {
               warn!("Resource directory does not exist: {:?}", resource_dir);
             }
             // Prioritize platform-specific executables
+            // Note: Resources may be in a 'resources' subdirectory (AppImage structure)
             #[cfg(windows)]
             {
+              possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
+              possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
               possible_exe_paths.push(resource_dir.join("backend-server.exe"));
               possible_exe_paths.push(resource_dir.join("backend-server"));
             }
             #[cfg(not(windows))]
             {
+              possible_exe_paths.push(resource_dir.join("resources").join("backend-server"));
+              possible_exe_paths.push(resource_dir.join("resources").join("backend-server.exe"));
               possible_exe_paths.push(resource_dir.join("backend-server"));
               possible_exe_paths.push(resource_dir.join("backend-server.exe"));
             }
@@ -1031,6 +1041,11 @@ pub fn run() {
             if let Ok(appdir) = std::env::var("APPDIR") {
               info!("AppImage APPDIR: {}", appdir);
               let appdir_path = PathBuf::from(&appdir);
+              // AppImage structure: usr/lib/ProductName/resources/backend-server
+              possible_exe_paths.push(appdir_path.join("usr").join("lib").join("Budget Planer").join("resources").join("backend-server"));
+              possible_exe_paths.push(appdir_path.join("usr").join("lib").join("budget-planer").join("resources").join("backend-server"));
+              possible_exe_paths.push(appdir_path.join("usr").join("lib").join("com.budgetplaner").join("resources").join("backend-server"));
+              // Also check without resources subdirectory
               possible_exe_paths.push(appdir_path.join("usr").join("lib").join("backend-server"));
               possible_exe_paths.push(appdir_path.join("usr").join("share").join("backend-server"));
               possible_exe_paths.push(appdir_path.join("resources").join("backend-server"));
