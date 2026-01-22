@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { BudgetCategory, BudgetEntry, SalaryReduction, TaxEntry } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
 
@@ -15,8 +16,10 @@ interface BudgetSummaryProps {
 }
 
 function BudgetSummary({ categories, entries, salaryReductions, taxEntries, selectedMonth, displayCurrency }: BudgetSummaryProps) {
+  const { t } = useTranslation()
   const [incomeMode, setIncomeMode] = useState<IncomeCalculationMode>('net')
   const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false)
+  
   // Get gross salary for a specific month
   const getGrossSalaryForMonth = (month: number): number => {
     const salaryCategory = categories.find(
@@ -249,15 +252,15 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
           <button
             onClick={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
             className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
-            title={isSummaryCollapsed ? 'Aufklappen' : 'Zuklappen'}
-            aria-label={isSummaryCollapsed ? 'Aufklappen' : 'Zuklappen'}
+            title={isSummaryCollapsed ? t('common.expand') : t('common.collapse')}
+            aria-label={isSummaryCollapsed ? t('common.expand') : t('common.collapse')}
           >
             <span className={`text-sm transition-transform duration-200 ${isSummaryCollapsed ? 'rotate-0' : 'rotate-90'}`}>
               ▶
             </span>
           </button>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Zusammenfassung
+            {t('summary.summary')}
           </h2>
         </div>
         
@@ -267,21 +270,21 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
             {!selectedMonth && (
               <div className="mb-6 p-4 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
-                  Berechnungsmodus für Gesamteinnahmen:
+                  {t('summary.calculationMode')}:
                 </label>
                 <select
                   value={incomeMode}
                   onChange={(e) => setIncomeMode(e.target.value as IncomeCalculationMode)}
                   className="w-full md:w-auto px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-600 text-slate-900 dark:text-white text-sm cursor-pointer"
                 >
-                  <option value="gross">Brutto + alles andere</option>
-                  <option value="net">Netto + alles andere</option>
-                  <option value="net_minus_taxes">Netto - Steuern + alles andere</option>
+                  <option value="gross">{t('summary.grossPlusAll')}</option>
+                  <option value="net">{t('summary.netPlusAll')}</option>
+                  <option value="net_minus_taxes">{t('summary.netMinusTaxes')}</option>
                 </select>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                  {incomeMode === 'gross' && 'Brutto-Gehalt wird verwendet (ohne Abzüge)'}
-                  {incomeMode === 'net' && 'Netto-Gehalt wird verwendet (Brutto - Abzüge)'}
-                  {incomeMode === 'net_minus_taxes' && 'Netto-Gehalt - Steuern wird verwendet (Steuern werden von Einnahmen abgezogen, nicht zu Ausgaben hinzugefügt)'}
+                  {incomeMode === 'gross' && t('summary.grossDescription')}
+                  {incomeMode === 'net' && t('summary.netDescription')}
+                  {incomeMode === 'net_minus_taxes' && t('summary.netMinusTaxesDescription')}
                 </p>
               </div>
             )}
@@ -291,7 +294,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
               <div className="flex items-center gap-3 mb-3">
                 <div className="text-4xl">💰</div>
                 <h3 className="text-sm font-semibold text-green-700 dark:text-green-300 uppercase tracking-wide">
-                  Gesamteinnahmen {selectedMonth ? `(Monat ${selectedMonth})` : '(Jahr)'}
+                  {t('summary.totalIncome')} {selectedMonth ? t('summary.month', { month: selectedMonth }) : `(${t('summary.year')})`}
                 </h3>
               </div>
               <p className="text-4xl font-bold text-green-700 dark:text-green-300">
@@ -303,7 +306,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
               <div className="flex items-center gap-3 mb-3">
                 <div className="text-4xl">💸</div>
                 <h3 className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase tracking-wide">
-                  Gesamtausgaben {selectedMonth ? `(Monat ${selectedMonth})` : '(Jahr)'}
+                  {t('summary.totalExpenses')} {selectedMonth ? t('summary.month', { month: selectedMonth }) : `(${t('summary.year')})`}
                 </h3>
               </div>
               <p className="text-4xl font-bold text-red-700 dark:text-red-300">
@@ -323,7 +326,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
                     ? 'text-blue-700 dark:text-blue-300'
                     : 'text-orange-700 dark:text-orange-300'
                 }`}>
-                  Bilanz {selectedMonth ? `(Monat ${selectedMonth})` : '(Jahr)'}
+                  {t('summary.balance')} {selectedMonth ? t('summary.month', { month: selectedMonth }) : `(${t('summary.year')})`}
                 </h3>
               </div>
               <p className={`text-4xl font-bold ${

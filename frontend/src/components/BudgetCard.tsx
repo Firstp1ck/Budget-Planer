@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { budgetApi } from '../services/api'
 import type { Budget, TaxEntry } from '../types/budget'
 import { formatCurrency, Currency } from '../utils/currency'
@@ -12,7 +13,11 @@ interface BudgetCardProps {
 }
 
 function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps) {
+  const { t, i18n } = useTranslation()
   const displayCurrency: Currency = budget.currency as Currency || 'CHF'
+
+  // Get locale for date formatting based on current language
+  const dateLocale = i18n.language === 'de-DE' ? 'de-DE' : 'en-US'
 
   // Fetch summary data to calculate yearly SOLL balance
   const { data: summaryData } = useQuery({
@@ -29,10 +34,13 @@ function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps)
 
     const { categories, entries, tax_entries, salary_reductions } = summaryData
 
+    // Get translated salary name for comparison
+    const salaryName = t('categorySuggestions.salary').toLowerCase()
+
     // Get gross salary for a specific month
     const getGrossSalaryForMonth = (month: number): number => {
       const salaryCategory = categories.find(
-        (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+        (c) => c.category_type === 'INCOME' && (c.name.toLowerCase().includes('gehalt') || c.name.toLowerCase().includes(salaryName) || c.name.toLowerCase().includes('salary'))
       )
       if (!salaryCategory) return 0
 
@@ -120,7 +128,7 @@ function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps)
       let categoryTotal = 0
 
       // For salary category, use net salary
-      if (category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt')) {
+      if (category.category_type === 'INCOME' && (category.name.toLowerCase().includes('gehalt') || category.name.toLowerCase().includes(salaryName) || category.name.toLowerCase().includes('salary'))) {
         let salarySum = 0
         for (let month = 1; month <= 12; month++) {
           salarySum += getNetSalaryForMonth(month)
@@ -207,7 +215,7 @@ function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps)
             {yearlyBalance !== null && (
               <div>
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                  Jährliche SOLL Bilanz
+                  {t('budget.yearlyBalance')}
                 </p>
                 <p className={`text-2xl font-bold ${
                   yearlyBalance >= 0
@@ -222,13 +230,13 @@ function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps)
 
           <div className="flex gap-3">
             <div className="flex-1 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm flex items-center justify-center">
-              Öffnen
+              {t('budget.open')}
             </div>
             <button
               data-export-button
               onClick={handleExportClick}
               className="px-4 py-3 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-all font-medium shadow-sm border border-green-200 dark:border-green-800 text-sm"
-              title="Budget exportieren"
+              title={t('budget.exportBudget')}
             >
               📤
             </button>
@@ -237,7 +245,7 @@ function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps)
               onClick={handleDeleteClick}
               disabled={isDeleting}
               className="px-4 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-all font-medium disabled:opacity-50 shadow-sm border border-red-200 dark:border-red-800 text-sm"
-              title="Budget löschen"
+              title={t('budget.deleteBudget')}
             >
               🗑️
             </button>
@@ -245,14 +253,14 @@ function BudgetCard({ budget, onDelete, onExport, isDeleting }: BudgetCardProps)
 
           <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <p className="text-xs italic text-gray-500 dark:text-gray-400">
-              Erstellt am {new Date(budget.created_at).toLocaleDateString('de-DE', {
+              {t('budget.createdAt')} {new Date(budget.created_at).toLocaleDateString(dateLocale, {
                 day: '2-digit',
                 month: 'long',
                 year: 'numeric'
               })}
             </p>
             <p className="text-xs italic text-gray-500 dark:text-gray-400">
-              Aktualisiert am {new Date(budget.updated_at).toLocaleDateString('de-DE', {
+              {t('budget.updatedAt')} {new Date(budget.updated_at).toLocaleDateString(dateLocale, {
                 day: '2-digit',
                 month: 'long',
                 year: 'numeric'

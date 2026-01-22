@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { categoryApi } from '../services/api'
 import type { BudgetCategory, BudgetEntry, TaxEntry, SalaryReduction, MonthlyActualBalance } from '../types/budget'
@@ -21,52 +22,20 @@ interface BudgetTableProps {
   actualBalances?: MonthlyActualBalance[]
 }
 
-const MONTHS = [
-  'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
-]
-
-// Common category suggestions
-const COMMON_CATEGORIES: Record<string, { name: string; type: 'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS' }[]> = {
-  INCOME: [
-    { name: 'Gehalt', type: 'INCOME' },
-    { name: '13. Monatslohn', type: 'INCOME' },
-    { name: 'Bonus', type: 'INCOME' },
-    { name: 'Nebenverdienst', type: 'INCOME' },
-    { name: 'Kapitalerträge', type: 'INCOME' },
-  ],
-  FIXED_EXPENSE: [
-    { name: 'Miete', type: 'FIXED_EXPENSE' },
-    { name: 'Krankenversicherung', type: 'FIXED_EXPENSE' },
-    { name: 'Strom', type: 'FIXED_EXPENSE' },
-    { name: 'Internet/Telefon', type: 'FIXED_EXPENSE' },
-    { name: 'Auto/Verkehr', type: 'FIXED_EXPENSE' },
-    { name: 'Versicherungen', type: 'FIXED_EXPENSE' },
-    { name: 'Steuern', type: 'FIXED_EXPENSE' },
-  ],
-  VARIABLE_EXPENSE: [
-    { name: 'Lebensmittel', type: 'VARIABLE_EXPENSE' },
-    { name: 'Restaurant', type: 'VARIABLE_EXPENSE' },
-    { name: 'Kleidung', type: 'VARIABLE_EXPENSE' },
-    { name: 'Freizeit', type: 'VARIABLE_EXPENSE' },
-    { name: 'Sport', type: 'VARIABLE_EXPENSE' },
-    { name: 'Geschenke', type: 'VARIABLE_EXPENSE' },
-    { name: 'Haushalt', type: 'VARIABLE_EXPENSE' },
-  ],
-  SAVINGS: [
-    { name: 'Notfallfonds', type: 'SAVINGS' },
-    { name: 'Altersvorsorge', type: 'SAVINGS' },
-    { name: 'Sparen', type: 'SAVINGS' },
-    { name: 'Investitionen', type: 'SAVINGS' },
-  ],
-}
-
 function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductions, selectedMonth, displayCurrency, budgetYear, actualBalances = [] }: BudgetTableProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryType, setNewCategoryType] = useState<'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS'>('VARIABLE_EXPENSE')
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false)
+  
+  // Month names from translations
+  const MONTHS = [
+    t('months.jan'), t('months.feb'), t('months.mar'), t('months.apr'),
+    t('months.may'), t('months.jun'), t('months.jul'), t('months.aug'),
+    t('months.sep'), t('months.oct'), t('months.nov'), t('months.dec')
+  ]
   
   // Global collapse state for all groups
   const [collapseStates, setCollapseStates] = useState<Record<string, boolean>>({
@@ -109,10 +78,10 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setIsAddingCategory(false)
       setNewCategoryName('')
-      toast.success('Kategorie erfolgreich hinzugefügt!')
+      toast.success(t('category.addSuccess'))
     },
     onError: () => {
-      toast.error('Fehler beim Hinzufügen der Kategorie')
+      toast.error(t('category.addError'))
     },
   })
 
@@ -129,7 +98,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
         yearly_amount: null,
       })
     } else {
-      toast.error('Bitte geben Sie einen Kategorienamen ein')
+      toast.error(t('category.enterName'))
     }
   }
 
@@ -310,12 +279,12 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
           <button
             onClick={toggleAllGroups}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold transition-all shadow-lg hover:shadow-xl active:scale-95 border border-blue-500/20"
-            title={allCollapsed ? 'Alle Gruppen aufklappen' : 'Alle Gruppen zuklappen'}
+            title={allCollapsed ? t('common.expandAll') : t('common.collapseAll')}
           >
             <span className={`text-lg transition-transform duration-200 ${allCollapsed ? 'rotate-0' : 'rotate-90'}`}>
               ▶
             </span>
-            <span>{allCollapsed ? 'Alle aufklappen' : 'Alle zuklappen'}</span>
+            <span>{allCollapsed ? t('common.expandAll') : t('common.collapseAll')}</span>
           </button>
           {!isAddingCategory && (
             <button
@@ -323,7 +292,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-sm font-semibold transition-all shadow-lg hover:shadow-xl active:scale-95 border border-green-500/20"
             >
               <span className="text-xl font-bold">+</span>
-              <span>Kategorie hinzufügen</span>
+              <span>{t('category.addCategory')}</span>
             </button>
           )}
         </div>
@@ -331,33 +300,33 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
             <div className="space-y-4 max-w-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                Neue Kategorie hinzufügen
+                {t('category.addNew')}
               </h3>
               <button
                 onClick={() => setShowCategorySuggestions(!showCategorySuggestions)}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
               >
-                💡 {showCategorySuggestions ? 'Vorschläge ausblenden' : 'Vorschläge anzeigen'}
+                💡 {showCategorySuggestions ? t('category.hideSuggestions') : t('category.showSuggestions')}
               </button>
             </div>
 
             {showCategorySuggestions && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
-                {Object.entries(COMMON_CATEGORIES).map(([type, cats]) => (
+                {(['INCOME', 'FIXED_EXPENSE', 'VARIABLE_EXPENSE', 'SAVINGS'] as const).map((type) => (
                   <div key={type} className="space-y-2">
                     <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-2">
-                      {type === 'INCOME' ? 'Einnahmen' : type === 'FIXED_EXPENSE' ? 'Fixkosten' : type === 'VARIABLE_EXPENSE' ? 'Variable Kosten' : 'Sparen'}
+                      {t(`categoryTypes.${type}`)}
                     </div>
-                    {cats.map((cat) => (
+                    {(t(`categorySuggestions.${type}`, { returnObjects: true }) as string[]).map((catName: string) => (
                       <button
-                        key={cat.name}
+                        key={catName}
                         onClick={() => {
-                          setNewCategoryName(cat.name)
-                          setNewCategoryType(cat.type)
+                          setNewCategoryName(catName)
+                          setNewCategoryType(type)
                         }}
                         className="w-full text-left px-3 py-2 text-sm bg-slate-100 dark:bg-slate-600 hover:bg-slate-200 dark:hover:bg-slate-500 rounded-md transition-colors text-slate-700 dark:text-slate-300"
                       >
-                        {cat.name}
+                        {catName}
                       </button>
                     ))}
                   </div>
@@ -368,7 +337,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Kategoriename *
+                  {t('category.categoryName')} *
                 </label>
                 <input
                   type="text"
@@ -385,13 +354,13 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                     }
                   }}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-gray-900 dark:text-white"
-                  placeholder="z.B. Miete, Lebensmittel..."
+                  placeholder={t('category.namePlaceholder')}
                   autoFocus
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Typ *
+                  {t('common.type')} *
                 </label>
                 <select
                   value={newCategoryType}
@@ -408,10 +377,10 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                   }}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-gray-900 dark:text-white"
                 >
-                  <option value="INCOME">Einnahmen</option>
-                  <option value="FIXED_EXPENSE">Fixkosten</option>
-                  <option value="VARIABLE_EXPENSE">Variable Kosten</option>
-                  <option value="SAVINGS">Sparen</option>
+                  <option value="INCOME">{t('categoryTypes.INCOME')}</option>
+                  <option value="FIXED_EXPENSE">{t('categoryTypes.FIXED_EXPENSE')}</option>
+                  <option value="VARIABLE_EXPENSE">{t('categoryTypes.VARIABLE_EXPENSE')}</option>
+                  <option value="SAVINGS">{t('categoryTypes.SAVINGS')}</option>
                 </select>
               </div>
             </div>
@@ -424,10 +393,10 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 {addCategoryMutation.isPending ? (
                   <span className="flex items-center gap-2">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Speichern...
+                    {t('category.saving')}
                   </span>
                 ) : (
-                  '✓ Speichern'
+                  `✓ ${t('common.save')}`
                 )}
               </button>
               <button
@@ -438,7 +407,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 disabled={addCategoryMutation.isPending}
                 className="px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm text-sm"
               >
-                ✕ Abbrechen
+                ✕ {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -450,10 +419,10 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
           <thead>
             <tr className="bg-slate-100 dark:bg-slate-700">
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 sticky left-0 bg-slate-100 dark:bg-slate-700 z-10 min-w-[180px]">
-                Kategorie
+                {t('table.category')}
               </th>
               <th className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[100px]">
-                Typ
+                {t('common.type')}
               </th>
               {displayMonths.map((month) => (
                 <th
@@ -464,10 +433,10 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 </th>
               ))}
               <th className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[120px]">
-                Gesamt
+                {t('common.total')}
               </th>
               <th className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[80px]">
-                Aktionen
+                {t('common.actions')}
               </th>
             </tr>
           </thead>
@@ -527,14 +496,14 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                   <button
                     onClick={() => handleCollapseChange('MONTHLY_BALANCE', !collapseStates.MONTHLY_BALANCE)}
                     className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-slate-300 dark:border-slate-600"
-                    title={collapseStates.MONTHLY_BALANCE ? 'Aufklappen' : 'Zuklappen'}
-                    aria-label={collapseStates.MONTHLY_BALANCE ? 'Aufklappen' : 'Zuklappen'}
+                    title={collapseStates.MONTHLY_BALANCE ? t('common.expand') : t('common.collapse')}
+                    aria-label={collapseStates.MONTHLY_BALANCE ? t('common.expand') : t('common.collapse')}
                   >
                     <span className={`text-sm transition-transform duration-200 ${collapseStates.MONTHLY_BALANCE ? 'rotate-0' : 'rotate-90'}`}>
                       ▶
                     </span>
                   </button>
-                  <span>📊 Monatliche Bilanz</span>
+                  <span>📊 {t('table.monthlyBalance')}</span>
                 </div>
               </td>
             </tr>
@@ -543,26 +512,26 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
             {/* Monthly Summary Row */}
             <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-2 border-slate-400 dark:border-slate-500">
               <td className="px-4 py-2 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-r border-slate-300 dark:border-slate-600 z-10">
-                Monatliche Bilanz SOLL
+                {t('table.monthlyBalancePlanned')}
               </td>
               <td className="px-3 py-2 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
                 <div className="space-y-1.5">
                   <div className="text-sm font-semibold text-green-700 dark:text-green-400">
                     <div className="flex items-center justify-center gap-1">
                       <span>💰</span>
-                      <span className="opacity-75">Einnahme</span>
+                      <span className="opacity-75">{t('summary.income')}</span>
                     </div>
                   </div>
                   <div className="text-sm font-semibold text-red-700 dark:text-red-400">
                     <div className="flex items-center justify-center gap-1">
                       <span>💸</span>
-                      <span className="opacity-75">Ausgabe</span>
+                      <span className="opacity-75">{t('summary.expenses')}</span>
                     </div>
                   </div>
                   <div className="text-sm font-semibold text-blue-700 dark:text-blue-400 pt-1 border-t border-slate-300 dark:border-slate-600">
                     <div className="flex items-center justify-center gap-1">
                       <span>📈</span>
-                      <span className="opacity-75">Bilanz</span>
+                      <span className="opacity-75">{t('summary.balance')}</span>
                     </div>
                   </div>
                 </div>
@@ -604,12 +573,12 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
             {/* Actual Balance Section - Income Row */}
             <tr className="bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-t-2 border-slate-400 dark:border-slate-500">
               <td className="px-4 py-2 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-700/50 dark:to-slate-800/50 border-r border-slate-300 dark:border-slate-600 z-10" rowSpan={3}>
-                Monatliche Bilanz IST
+                {t('table.monthlyBalanceActual')}
               </td>
               <td className="px-3 py-2 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
                 <div className="flex items-center justify-center gap-1">
                   <span>💰</span>
-                  <span className="opacity-75 font-semibold text-green-700 dark:text-green-400">Einnahme</span>
+                  <span className="opacity-75 font-semibold text-green-700 dark:text-green-400">{t('summary.income')}</span>
                 </div>
               </td>
               {displayMonths.map((month) => {
@@ -636,7 +605,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               <td className="px-3 py-2 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
                 <div className="flex items-center justify-center gap-1">
                   <span>💸</span>
-                  <span className="opacity-75 font-semibold text-red-700 dark:text-red-400">Ausgabe</span>
+                  <span className="opacity-75 font-semibold text-red-700 dark:text-red-400">{t('summary.expenses')}</span>
                 </div>
               </td>
               {displayMonths.map((month) => {
@@ -663,7 +632,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
               <td className="px-3 py-2 text-center text-sm text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-600">
                 <div className="flex items-center justify-center gap-1">
                   <span>📈</span>
-                  <span className="opacity-75 font-semibold text-blue-700 dark:text-blue-400">Bilanz</span>
+                  <span className="opacity-75 font-semibold text-blue-700 dark:text-blue-400">{t('summary.balance')}</span>
                 </div>
               </td>
               {displayMonths.map((month) => {

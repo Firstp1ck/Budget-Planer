@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { budgetApi, templateApi } from '../services/api'
 import BudgetTable from '../components/BudgetTable'
@@ -20,6 +21,7 @@ import {
 
 
 function BudgetEditor() {
+  const { t, i18n } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const budgetId = parseInt(id || '0')
   const queryClient = useQueryClient()
@@ -30,6 +32,9 @@ function BudgetEditor() {
   const [showOverwriteDialog, setShowOverwriteDialog] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [activeTab, setActiveTab] = useState<'table' | 'graphs'>('table')
+
+  // Get locale for date formatting based on current language
+  const dateLocale = i18n.language === 'de-DE' ? 'de-DE' : 'en-US'
 
   const { data: summaryData, isLoading, error } = useQuery({
     queryKey: ['budget', budgetId, 'summary'],
@@ -58,21 +63,21 @@ function BudgetEditor() {
       setShowTemplateDialog(false)
       setShowOverwriteDialog(false)
       setTemplateName('')
-      toast.success('Vorlage erfolgreich gespeichert')
+      toast.success(t('template.saved'))
     },
     onError: (error: any) => {
       // Check if it's a duplicate name error
       if (error.response?.status === 409 && error.response?.data?.error === 'DUPLICATE_NAME') {
         setShowOverwriteDialog(true)
       } else {
-        toast.error(error.response?.data?.message || error.response?.data?.error || 'Fehler beim Speichern der Vorlage')
+        toast.error(error.response?.data?.message || error.response?.data?.error || t('template.errorSaving'))
       }
     },
   })
 
   const handleSaveAsTemplate = () => {
     if (!templateName.trim()) {
-      toast.error('Bitte geben Sie einen Namen für die Vorlage ein')
+      toast.error(t('template.enterName'))
       return
     }
     createTemplateMutation.mutate({ name: templateName.trim() })
@@ -80,7 +85,7 @@ function BudgetEditor() {
 
   const handleOverwriteTemplate = () => {
     if (!templateName.trim()) {
-      toast.error('Bitte geben Sie einen Namen für die Vorlage ein')
+      toast.error(t('template.enterName'))
       return
     }
     createTemplateMutation.mutate({ name: templateName.trim(), overwrite: true })
@@ -98,32 +103,32 @@ function BudgetEditor() {
         const minutesDiff = (now.getTime() - lastUpdated.getTime()) / (1000 * 60)
 
         if (minutesDiff < 5) {
-          toast.success('Wechselkurse aktualisiert')
+          toast.success(t('currency.ratesUpdated'))
         }
       } catch (error) {
         console.error('Error initializing exchange rates:', error)
-        toast.error('Fehler beim Laden der Wechselkurse')
+        toast.error(t('currency.errorLoadingRates'))
       } finally {
         setIsLoadingRates(false)
       }
     }
 
     updateRates()
-  }, [])
+  }, [t])
 
   const handleCurrencyChange = (currency: Currency) => {
     setDisplayCurrency(currency)
     setSelectedCurrency(currency)
-    toast.success(`Währung geändert zu ${CURRENCY_NAMES[currency]}`)
+    toast.success(t('currency.currencyChanged', { currency: CURRENCY_NAMES[currency] }))
   }
 
   const handleRefreshRates = async () => {
     setIsLoadingRates(true)
     try {
       await fetchExchangeRates()
-      toast.success('Wechselkurse erfolgreich aktualisiert')
+      toast.success(t('currency.ratesRefreshed'))
     } catch (error) {
-      toast.error('Fehler beim Aktualisieren der Wechselkurse')
+      toast.error(t('currency.errorRefreshingRates'))
     } finally {
       setIsLoadingRates(false)
     }
@@ -172,7 +177,7 @@ function BudgetEditor() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-20 w-20 border-4 border-indigo-200 dark:border-indigo-800 border-t-indigo-600 dark:border-t-indigo-400 mx-auto mb-6"></div>
-          <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">Lade Budget...</p>
+          <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">{t('budget.loadingBudget')}</p>
         </div>
       </div>
     )
@@ -183,15 +188,15 @@ function BudgetEditor() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center bg-white dark:bg-slate-800 rounded-xl p-12 shadow-md border border-slate-200 dark:border-slate-700">
           <div className="text-7xl mb-6 animate-pulse">⚠️</div>
-          <h2 className="text-3xl font-bold text-red-600 dark:text-red-400 mb-3">Budget nicht gefunden</h2>
+          <h2 className="text-3xl font-bold text-red-600 dark:text-red-400 mb-3">{t('budget.notFound')}</h2>
           <p className="text-lg text-gray-600 dark:text-gray-300 mb-8 max-w-md">
-            Das angeforderte Budget existiert nicht oder konnte nicht geladen werden.
+            {t('budget.notFoundDescription')}
           </p>
           <Link
             to="/"
             className="px-10 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all inline-flex items-center font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm"
           >
-            ← Zurück zur Übersicht
+            ← {t('budget.backToOverview')}
           </Link>
         </div>
       </div>
@@ -210,18 +215,18 @@ function BudgetEditor() {
               className="inline-flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium transition-all hover:gap-3 group"
             >
               <span className="text-lg group-hover:-translate-x-1 transition-transform">←</span>
-              <span>Zurück zur Übersicht</span>
+              <span>{t('budget.backToOverview')}</span>
             </Link>
           </div>
 
           {/* Budget Info - Centered */}
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">
-              {budget?.name || 'Budget'}
+              {budget?.name || t('budget.budget')}
             </h1>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
-                <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">Basis:</span>
+                <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">{t('budget.base')}:</span>
                 <span className="text-slate-700 dark:text-slate-300 font-semibold text-sm">{budget?.currency || 'CHF'}</span>
               </div>
             </div>
@@ -232,22 +237,22 @@ function BudgetEditor() {
             {/* Save as Template Button */}
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide text-center">
-                Vorlage
+                {t('template.template')}
               </label>
               <button
                 onClick={() => setShowTemplateDialog(true)}
                 className="px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-sm flex items-center gap-2"
-                title="Aktuelle Kategorien als Vorlage speichern"
+                title={t('template.saveAsTemplate')}
               >
                 <span>💾</span>
-                Als Vorlage speichern
+                {t('template.saveAsTemplate')}
               </button>
             </div>
 
             {/* Currency Selector */}
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide text-center">
-                Anzeigewährung
+                {t('currency.displayCurrency')}
               </label>
               <div className="flex items-center gap-2">
                 <select
@@ -263,7 +268,7 @@ function BudgetEditor() {
                   onClick={handleRefreshRates}
                   disabled={isLoadingRates}
                   className="px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-50 shadow-sm font-medium text-base"
-                  title="Wechselkurse aktualisieren"
+                  title={t('currency.refreshRates')}
                 >
                   {isLoadingRates ? (
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-400 dark:border-slate-300 border-t-transparent"></div>
@@ -277,7 +282,7 @@ function BudgetEditor() {
             {/* Year Selector */}
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide text-center">
-                Jahr
+                {t('editor.year')}
               </label>
               <select
                 value={selectedYear || ''}
@@ -302,10 +307,10 @@ function BudgetEditor() {
                 {selectedCurrency !== 'CHF' ? (
                   <>
                     <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                      Aktueller Kurs: 1 CHF = {rates[selectedCurrency].toFixed(4)} {CURRENCY_SYMBOLS[selectedCurrency]}
+                      {t('currency.currentRate')}: 1 CHF = {rates[selectedCurrency].toFixed(4)} {CURRENCY_SYMBOLS[selectedCurrency]}
                     </p>
                     <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                      Stand: {new Date(rates.lastUpdated).toLocaleDateString('de-DE', {
+                      {t('currency.asOf')}: {new Date(rates.lastUpdated).toLocaleDateString(dateLocale, {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',
@@ -317,14 +322,14 @@ function BudgetEditor() {
                 ) : (
                   <>
                     <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">
-                      Aktuelle Wechselkurse (Basis: CHF):
+                      {t('currency.currentRates')}:
                     </p>
                     <div className="flex flex-wrap gap-4 text-xs text-blue-700 dark:text-blue-300">
                       <span>1 CHF = {rates.EUR.toFixed(4)} {CURRENCY_SYMBOLS.EUR}</span>
                       <span>1 CHF = {rates.USD.toFixed(4)} {CURRENCY_SYMBOLS.USD}</span>
                     </div>
                     <p className="text-xs text-blue-700 dark:text-blue-300 mt-1.5">
-                      Stand: {new Date(rates.lastUpdated).toLocaleDateString('de-DE', {
+                      {t('currency.asOf')}: {new Date(rates.lastUpdated).toLocaleDateString(dateLocale, {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',
@@ -379,7 +384,7 @@ function BudgetEditor() {
             >
               <span className="flex items-center justify-center gap-2">
                 <span className="text-xl">📊</span>
-                <span>Tabelle</span>
+                <span>{t('editor.table')}</span>
               </span>
               {activeTab === 'table' && (
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-white dark:bg-blue-300 rounded-t-full"></div>
@@ -395,7 +400,7 @@ function BudgetEditor() {
             >
               <span className="flex items-center justify-center gap-2">
                 <span className="text-xl">📈</span>
-                <span>Grafiken</span>
+                <span>{t('editor.graphs')}</span>
               </span>
               {activeTab === 'graphs' && (
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-white dark:bg-blue-300 rounded-t-full"></div>
@@ -434,8 +439,8 @@ function BudgetEditor() {
         {/* Help Text */}
         <div className="mt-6 text-center">
           <div className="inline-flex flex-col gap-1.5 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 shadow-sm">
-            <p className="text-sm text-blue-700 dark:text-blue-300">💡 Tipp: Klicken Sie auf eine Zelle, um Beträge zu bearbeiten</p>
-            <p className="text-sm text-blue-700 dark:text-blue-300">💱 Alle Beträge werden in der gewählten Währung angezeigt</p>
+            <p className="text-sm text-blue-700 dark:text-blue-300">💡 {t('editor.tipClickCell')}</p>
+            <p className="text-sm text-blue-700 dark:text-blue-300">💱 {t('editor.tipCurrencyDisplay')}</p>
           </div>
         </div>
       </div>
@@ -445,15 +450,15 @@ function BudgetEditor() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-6 max-w-md w-full">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
-              💾 Als Vorlage speichern
+              {t('template.saveAsTemplateTitle')}
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Speichern Sie die aktuellen Kategorien und deren Konfiguration (ohne Werte) als Vorlage für zukünftige Budgets.
+              {t('template.saveAsTemplateDescription')}
             </p>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Vorlagenname:
+                  {t('template.templateName')}:
                 </label>
                 <div className="relative">
                   <input
@@ -461,7 +466,7 @@ function BudgetEditor() {
                     list="template-suggestions"
                     value={templateName}
                     onChange={(e) => setTemplateName(e.target.value)}
-                    placeholder="z.B. Standard Budget 2026"
+                    placeholder={t('template.templateNamePlaceholder')}
                     className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:bg-slate-700 text-slate-900 dark:text-white text-sm"
                     autoFocus
                     onKeyDown={(e) => {
@@ -489,10 +494,10 @@ function BudgetEditor() {
                   {createTemplateMutation.isPending ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Speichern...
+                      {t('category.saving')}
                     </span>
                   ) : (
-                    '✓ Speichern'
+                    `✓ ${t('common.save')}`
                   )}
                 </button>
                 <button
@@ -503,7 +508,7 @@ function BudgetEditor() {
                   disabled={createTemplateMutation.isPending}
                   className="flex-1 px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm"
                 >
-                  ✕ Abbrechen
+                  ✕ {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -516,11 +521,10 @@ function BudgetEditor() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-6 max-w-md w-full">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
-              ⚠️ Vorlage überschreiben?
+              {t('template.overwriteTitle')}
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Eine Vorlage mit dem Namen <strong className="text-slate-900 dark:text-white">"{templateName}"</strong> existiert bereits.
-              Möchten Sie die vorhandene Vorlage überschreiben?
+              {t('template.overwriteDescription', { name: templateName })}
             </p>
             <div className="flex gap-3">
               <button
@@ -531,10 +535,10 @@ function BudgetEditor() {
                 {createTemplateMutation.isPending ? (
                   <span className="flex items-center justify-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Überschreiben...
+                    {t('template.overwriting')}
                   </span>
                 ) : (
-                  '✓ Überschreiben'
+                  `✓ ${t('template.overwrite')}`
                 )}
               </button>
               <button
@@ -545,7 +549,7 @@ function BudgetEditor() {
                 disabled={createTemplateMutation.isPending}
                 className="flex-1 px-5 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all font-medium disabled:opacity-50 shadow-sm"
               >
-                ✕ Abbrechen
+                ✕ {t('common.cancel')}
               </button>
             </div>
           </div>

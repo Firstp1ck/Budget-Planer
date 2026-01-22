@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { salaryReductionApi } from '../services/api'
 import type { SalaryReduction, BudgetCategory, BudgetEntry, ReductionType } from '../types/budget'
@@ -28,6 +29,7 @@ function SalaryReductionsSection({
   isCollapsed: externalIsCollapsed,
   onCollapseChange,
 }: SalaryReductionsSectionProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [internalIsCollapsed, setInternalIsCollapsed] = useState(false)
   const isCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalIsCollapsed
@@ -129,12 +131,12 @@ function SalaryReductionsSection({
     mutationFn: (data: Partial<SalaryReduction>) => salaryReductionApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      toast.success('Abzug hinzugefügt')
+      toast.success(t('salaryReduction.added'))
       setIsAddingReduction(false)
       setReductionFormData({ name: '', reduction_type: 'PERCENTAGE', value: '' })
     },
     onError: () => {
-      toast.error('Fehler beim Hinzufügen des Abzugs')
+      toast.error(t('salaryReduction.errorAdding'))
     },
   })
 
@@ -143,12 +145,12 @@ function SalaryReductionsSection({
       salaryReductionApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      toast.success('Abzug aktualisiert')
+      toast.success(t('salaryReduction.updated'))
       setEditingReductionId(null)
       setReductionFormData({ name: '', reduction_type: 'PERCENTAGE', value: '' })
     },
     onError: () => {
-      toast.error('Fehler beim Aktualisieren des Abzugs')
+      toast.error(t('salaryReduction.errorUpdating'))
     },
   })
 
@@ -156,27 +158,27 @@ function SalaryReductionsSection({
     mutationFn: (id: number) => salaryReductionApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      toast.success('Abzug gelöscht')
+      toast.success(t('salaryReduction.deleted'))
     },
     onError: () => {
-      toast.error('Fehler beim Löschen des Abzugs')
+      toast.error(t('salaryReduction.errorDeleting'))
     },
   })
 
   const handleAddReduction = () => {
     if (!reductionFormData.name || !reductionFormData.value) {
-      toast.error('Bitte alle Felder ausfüllen')
+      toast.error(t('validation.fillAllFields'))
       return
     }
 
     const value = parseFloat(reductionFormData.value)
     if (isNaN(value) || value < 0) {
-      toast.error('Ungültiger Wert')
+      toast.error(t('validation.invalidValue'))
       return
     }
 
     if (reductionFormData.reduction_type === 'PERCENTAGE' && value > 100) {
-      toast.error('Prozentsatz darf nicht über 100% liegen')
+      toast.error(t('validation.percentageMax'))
       return
     }
 
@@ -201,18 +203,18 @@ function SalaryReductionsSection({
 
   const handleUpdateReduction = () => {
     if (!reductionFormData.name || !reductionFormData.value) {
-      toast.error('Bitte alle Felder ausfüllen')
+      toast.error(t('validation.fillAllFields'))
       return
     }
 
     const value = parseFloat(reductionFormData.value)
     if (isNaN(value) || value < 0) {
-      toast.error('Ungültiger Wert')
+      toast.error(t('validation.invalidValue'))
       return
     }
 
     if (reductionFormData.reduction_type === 'PERCENTAGE' && value > 100) {
-      toast.error('Prozentsatz darf nicht über 100% liegen')
+      toast.error(t('validation.percentageMax'))
       return
     }
 
@@ -229,7 +231,7 @@ function SalaryReductionsSection({
   }
 
   const handleDeleteReduction = (id: number, name: string) => {
-    if (confirm(`Möchten Sie den Abzug "${name}" wirklich löschen?`)) {
+    if (confirm(t('salaryReduction.confirmDelete', { name }))) {
       deleteReductionMutation.mutate(id)
     }
   }
@@ -254,7 +256,7 @@ function SalaryReductionsSection({
     return (
       <tr className="bg-yellow-50 dark:bg-yellow-900/20 border-t-2 border-yellow-300 dark:border-yellow-600">
         <td colSpan={displayMonths.length + 4} className="px-4 py-2 text-sm text-yellow-800 dark:text-yellow-300">
-          ⚠️ Keine "Gehalt" Kategorie gefunden. Bitte erstellen Sie eine Einnahmen-Kategorie mit dem Namen "Gehalt".
+          ⚠️ {t('salaryReduction.noSalaryCategory')}
         </td>
       </tr>
     )
@@ -273,14 +275,14 @@ function SalaryReductionsSection({
                 <button
                   onClick={() => setIsCollapsed(!isCollapsed)}
                   className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
-                  title="Aufklappen"
-                  aria-label="Aufklappen"
+                  title={t('common.expand')}
+                  aria-label={t('common.expand')}
                 >
                   <span className="text-sm transition-transform duration-200 rotate-0">
                     ▶
                   </span>
                 </button>
-                <span>💰 Gehaltsabzüge (Brutto → Netto)</span>
+                <span>{t('salaryReduction.titleIcon')}</span>
                 <span className="text-xs font-normal opacity-75">({salaryReductions.length})</span>
               </div>
             </td>
@@ -305,14 +307,14 @@ function SalaryReductionsSection({
               <button
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
-                title="Zuklappen"
-                aria-label="Zuklappen"
+                title={t('common.collapse')}
+                aria-label={t('common.collapse')}
               >
                 <span className="text-sm transition-transform duration-200 rotate-90">
                   ▶
                 </span>
               </button>
-              <span>💰 Gehaltsabzüge (Brutto → Netto)</span>
+              <span>{t('salaryReduction.titleIcon')}</span>
               <span className="text-xs font-normal opacity-75">({salaryReductions.length})</span>
               {!isAddingReduction && (
                 <button
@@ -322,7 +324,7 @@ function SalaryReductionsSection({
                   }}
                   className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
-                  + Abzug hinzufügen
+                  + {t('salaryReduction.addReduction')}
                 </button>
               )}
             </div>
@@ -350,7 +352,7 @@ function SalaryReductionsSection({
                         }
                       }}
                       className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                      placeholder="Name"
+                      placeholder={t('common.name')}
                     />
                   </td>
                   <td className="px-4 py-2 text-center">
@@ -369,8 +371,8 @@ function SalaryReductionsSection({
                         }}
                         className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       >
-                        <option value="PERCENTAGE">Prozent</option>
-                        <option value="FIXED">Fixbetrag</option>
+                        <option value="PERCENTAGE">{t('salaryReduction.percentage')}</option>
+                        <option value="FIXED">{t('salaryReduction.fixedAmount')}</option>
                       </select>
                       <input
                         type="number"
@@ -389,7 +391,7 @@ function SalaryReductionsSection({
                           }
                         }}
                         className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                        placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? 'Prozent (z.B. 5.125)' : 'Betrag'}
+                        placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? t('salaryReduction.percentagePlaceholder') : t('salaryReduction.amountPlaceholder')}
                       />
                     </div>
                   </td>
@@ -413,7 +415,7 @@ function SalaryReductionsSection({
                         }}
                         disabled={updateReductionMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Speichern"
+                        title={t('common.save')}
                       >
                         ✓
                       </button>
@@ -423,7 +425,7 @@ function SalaryReductionsSection({
                           handleCancelEdit()
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title="Abbrechen"
+                        title={t('common.cancel')}
                       >
                         ✕
                       </button>
@@ -457,7 +459,7 @@ function SalaryReductionsSection({
                           handleEditReduction(reduction)
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title="Bearbeiten"
+                        title={t('salaryReduction.editReduction')}
                       >
                         ✏️
                       </button>
@@ -468,7 +470,7 @@ function SalaryReductionsSection({
                         }}
                         disabled={deleteReductionMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Löschen"
+                        title={t('salaryReduction.deleteReduction')}
                       >
                         🗑️
                       </button>
@@ -495,7 +497,7 @@ function SalaryReductionsSection({
                     }
                   }}
                   className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Name (z.B. AHV, Krankenkasse)"
+                  placeholder={t('salaryReduction.namePlaceholder')}
                 />
               </td>
               <td className="px-4 py-2 text-center">
@@ -514,8 +516,8 @@ function SalaryReductionsSection({
                     }}
                     className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   >
-                    <option value="PERCENTAGE">Prozent</option>
-                    <option value="FIXED">Fixbetrag</option>
+                    <option value="PERCENTAGE">{t('salaryReduction.percentage')}</option>
+                    <option value="FIXED">{t('salaryReduction.fixedAmount')}</option>
                   </select>
                   <input
                     type="number"
@@ -532,7 +534,7 @@ function SalaryReductionsSection({
                       }
                     }}
                     className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? 'Prozent (z.B. 5.125)' : 'Betrag'}
+                    placeholder={reductionFormData.reduction_type === 'PERCENTAGE' ? t('salaryReduction.percentagePlaceholder') : t('salaryReduction.amountPlaceholder')}
                   />
                 </div>
               </td>
@@ -553,7 +555,7 @@ function SalaryReductionsSection({
                     }}
                     disabled={createReductionMutation.isPending}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Speichern"
+                    title={t('common.save')}
                   >
                     ✓
                   </button>
@@ -563,7 +565,7 @@ function SalaryReductionsSection({
                       handleCancelEdit()
                     }}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                    title="Abbrechen"
+                    title={t('common.cancel')}
                   >
                     ✕
                   </button>
@@ -574,7 +576,7 @@ function SalaryReductionsSection({
           {!isAddingReduction && (
             <tr className="bg-orange-100 dark:bg-orange-900/30 border-b-2 border-orange-300 dark:border-orange-600 font-bold">
               <td className="px-4 py-2 text-sm font-bold text-orange-800 dark:text-orange-300 sticky left-0 bg-orange-100 dark:bg-orange-900/30 border-r border-orange-300 dark:border-orange-600">
-                Gesamt
+                {t('common.total')}
               </td>
               <td className="px-3 py-2 text-center border-r border-orange-300 dark:border-orange-600">
                 {/* Empty cell for type column */}
@@ -598,7 +600,7 @@ function SalaryReductionsSection({
           )}
           <tr className="bg-green-50 dark:bg-green-900/20 border-b-2 border-green-300 dark:border-green-600">
             <td colSpan={2} className="px-4 py-2 text-sm font-bold text-green-800 dark:text-green-300">
-              Netto-Gehalt (Brutto - Abzüge)
+              {t('salaryReduction.netSalary')}
             </td>
             {displayMonths.map((month) => (
               <td key={month} className="px-3 py-2 text-center text-sm font-bold text-green-800 dark:text-green-300">

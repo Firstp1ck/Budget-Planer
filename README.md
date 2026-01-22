@@ -205,6 +205,21 @@ The application supports multiple currencies with automatic conversion:
 - **Exchange Rates**: Automatically fetched from [exchangerate-api.com](https://www.exchangerate-api.com/)
 - **Caching**: Exchange rates are cached in localStorage and refreshed daily
 
+## Supported Languages
+
+The application currently supports the following languages:
+
+- **German (Deutsch)** - Primary language
+  - Full UI translation
+  - Default language for the application
+  - Locale: `de-DE`
+
+- **English** - Partial support
+  - Some tooltips and accessibility labels
+  - Documentation and README
+
+The user interface is primarily in German, with the backend configured to use German (`de-DE`) as the default locale. English translations are available for some interface elements such as tooltips and aria-labels.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

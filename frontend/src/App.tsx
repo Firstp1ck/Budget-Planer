@@ -1,19 +1,40 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { DarkModeProvider } from './contexts/DarkModeContext'
 import Layout from './components/Layout'
+import LoadingScreen from './components/LoadingScreen'
 import BudgetDashboard from './pages/BudgetDashboard'
 import BudgetEditor from './pages/BudgetEditor'
 import { initializeExchangeRates } from './utils/currency'
 
+// Initialize i18n - must be imported before any component that uses translations
+import './i18n'
+
 function App() {
-  // Initialize exchange rates on app startup
+  const [isBackendReady, setIsBackendReady] = useState(false)
+  
+  // Initialize exchange rates when backend becomes ready
   useEffect(() => {
-    initializeExchangeRates().catch((error) => {
-      console.error('Failed to initialize exchange rates on app startup:', error)
-    })
-  }, [])
+    if (isBackendReady) {
+      initializeExchangeRates().catch((error) => {
+        console.error('Failed to initialize exchange rates on app startup:', error)
+      })
+    }
+  }, [isBackendReady])
+
+  const handleBackendReady = () => {
+    setIsBackendReady(true)
+  }
+
+  // Show loading screen until backend is ready
+  if (!isBackendReady) {
+    return (
+      <DarkModeProvider>
+        <LoadingScreen onReady={handleBackendReady} />
+      </DarkModeProvider>
+    )
+  }
 
   return (
     <Router>

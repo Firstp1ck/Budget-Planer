@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { taxApi } from '../services/api'
 import type { TaxEntry, BudgetCategory, BudgetEntry } from '../types/budget'
@@ -28,6 +29,7 @@ function TaxesSection({
   isCollapsed: externalIsCollapsed,
   onCollapseChange,
 }: TaxesSectionProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [internalIsCollapsed, setInternalIsCollapsed] = useState(false)
   const isCollapsed = externalIsCollapsed !== undefined ? externalIsCollapsed : internalIsCollapsed
@@ -98,10 +100,10 @@ function TaxesSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       handleCancelEdit()
-      toast.success('Steuer hinzugefügt')
+      toast.success(t('tax.added'))
     },
     onError: () => {
-      toast.error('Fehler beim Hinzufügen der Steuer')
+      toast.error(t('tax.errorAdding'))
     },
   })
 
@@ -111,10 +113,10 @@ function TaxesSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       handleCancelEdit()
-      toast.success('Steuer aktualisiert')
+      toast.success(t('tax.updated'))
     },
     onError: () => {
-      toast.error('Fehler beim Aktualisieren der Steuer')
+      toast.error(t('tax.errorUpdating'))
     },
   })
 
@@ -122,22 +124,22 @@ function TaxesSection({
     mutationFn: (id: number) => taxApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      toast.success('Steuer gelöscht')
+      toast.success(t('tax.deleted'))
     },
     onError: () => {
-      toast.error('Fehler beim Löschen der Steuer')
+      toast.error(t('tax.errorDeleting'))
     },
   })
 
   const handleSaveTax = () => {
     if (!taxFormData.name.trim() || !taxFormData.percentage) {
-      toast.error('Bitte geben Sie Name und Prozentsatz ein')
+      toast.error(t('validation.enterNameAndPercentage'))
       return
     }
 
     const percentage = parseFloat(taxFormData.percentage)
     if (isNaN(percentage) || percentage < 0 || percentage > 100) {
-      toast.error('Prozentsatz muss zwischen 0 und 100 liegen')
+      toast.error(t('validation.percentageRange'))
       return
     }
 
@@ -177,7 +179,7 @@ function TaxesSection({
   }
 
   const handleDeleteTax = (id: number, name: string) => {
-    if (window.confirm(`Steuer "${name}" wirklich löschen?`)) {
+    if (window.confirm(t('tax.confirmDelete', { name }))) {
       deleteTaxMutation.mutate(id)
     }
   }
@@ -207,14 +209,14 @@ function TaxesSection({
                 <button
                   onClick={() => setIsCollapsed(!isCollapsed)}
                   className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
-                  title="Aufklappen"
-                  aria-label="Aufklappen"
+                  title={t('common.expand')}
+                  aria-label={t('common.expand')}
                 >
                   <span className="text-sm transition-transform duration-200 rotate-0">
                     ▶
                   </span>
                 </button>
-                <span>💰 Steuern</span>
+                <span>{t('tax.taxesIcon')}</span>
                 <span className="text-xs font-normal opacity-75">({taxEntries.length})</span>
               </div>
             </td>
@@ -242,14 +244,14 @@ function TaxesSection({
               <button
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
-                title="Zuklappen"
-                aria-label="Zuklappen"
+                title={t('common.collapse')}
+                aria-label={t('common.collapse')}
               >
                 <span className="text-sm transition-transform duration-200 rotate-90">
                   ▶
                 </span>
               </button>
-              <span>💰 Steuern</span>
+              <span>{t('tax.taxesIcon')}</span>
               <span className="text-xs font-normal opacity-75">({taxEntries.length})</span>
               {!isAddingTax && (
                 <button
@@ -259,12 +261,12 @@ function TaxesSection({
                   }}
                   className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
-                  + Steuer hinzufügen
+                  + {t('tax.addTax')}
                 </button>
               )}
               {!salaryCategory && (
                 <span className="text-xs font-normal text-orange-600 dark:text-orange-400">
-                  ⚠️ Keine Gehalt-Kategorie gefunden
+                  ⚠️ {t('tax.noSalaryCategory')}
                 </span>
               )}
             </div>
@@ -295,7 +297,7 @@ function TaxesSection({
                         }
                       }}
                       className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                      placeholder="Name"
+                      placeholder={t('common.name')}
                     />
                   </td>
                   <td className="px-4 py-2 text-center">
@@ -318,7 +320,7 @@ function TaxesSection({
                             }
                           }}
                           className="flex-1 px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                          placeholder="Prozent (z.B. 10.5)"
+                          placeholder={t('tax.percentagePlaceholder')}
                         />
                         <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">%</span>
                       </div>
@@ -352,7 +354,7 @@ function TaxesSection({
                         }}
                         disabled={updateTaxMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Speichern"
+                        title={t('common.save')}
                       >
                         ✓
                       </button>
@@ -362,7 +364,7 @@ function TaxesSection({
                           handleCancelEdit()
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title="Abbrechen"
+                        title={t('common.cancel')}
                       >
                         ✕
                       </button>
@@ -388,7 +390,7 @@ function TaxesSection({
                       <td
                         key={month}
                         className="px-3 py-2 text-center text-sm border bg-red-50 dark:bg-red-900/10"
-                        title={`Berechnet: ${formatCurrency(salary, displayCurrency)} × ${tax.percentage}% = ${formatCurrency(taxAmount, displayCurrency)}`}
+                        title={t('tax.calculatedTooltip', { salary: formatCurrency(salary, displayCurrency), percentage: tax.percentage, amount: formatCurrency(taxAmount, displayCurrency) })}
                       >
                         <div className="font-semibold text-xs text-red-700 dark:text-red-300">
                           {formatCurrency(taxAmount, displayCurrency)}
@@ -410,7 +412,7 @@ function TaxesSection({
                           handleEditTax(tax)
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title="Steuer bearbeiten"
+                        title={t('tax.editTax')}
                       >
                         ✏️
                       </button>
@@ -421,7 +423,7 @@ function TaxesSection({
                         }}
                         disabled={deleteTaxMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Steuer löschen"
+                        title={t('tax.deleteTax')}
                       >
                         🗑️
                       </button>
@@ -435,7 +437,7 @@ function TaxesSection({
           {sortedTaxEntries.length > 0 && (
             <tr className="bg-red-100 dark:bg-red-900/30 border-b-2 border-red-300 dark:border-red-600 font-bold">
               <td className="px-4 py-2 text-sm font-bold text-red-800 dark:text-red-300 sticky left-0 bg-red-100 dark:bg-red-900/30 border-r border-red-300 dark:border-red-600">
-                Gesamt
+                {t('common.total')}
               </td>
               <td className="px-3 py-2 text-center border-r border-red-300 dark:border-red-600">
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-200 dark:bg-red-800/50 text-red-900 dark:text-red-200">
@@ -492,7 +494,7 @@ function TaxesSection({
                     }
                   }}
                   className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Name (z.B. Einkommenssteuer, AHV)"
+                  placeholder={t('tax.namePlaceholder')}
                 />
               </td>
               <td className="px-4 py-2 text-center">
@@ -515,7 +517,7 @@ function TaxesSection({
                         }
                       }}
                       className="flex-1 px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                      placeholder="Prozent (z.B. 10.5)"
+                      placeholder={t('tax.percentagePlaceholder')}
                     />
                     <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">%</span>
                   </div>
@@ -538,7 +540,7 @@ function TaxesSection({
                     }}
                     disabled={createTaxMutation.isPending}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Speichern"
+                    title={t('common.save')}
                   >
                     ✓
                   </button>
@@ -548,7 +550,7 @@ function TaxesSection({
                       handleCancelEdit()
                     }}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                    title="Abbrechen"
+                    title={t('common.cancel')}
                   >
                     ✕
                   </button>

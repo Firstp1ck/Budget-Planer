@@ -1,12 +1,15 @@
 /**
- * Header component with navigation and dark mode toggle.
+ * Header component with navigation, dark mode toggle, and language switcher.
  */
 
 import { Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useDarkMode } from '../contexts/DarkModeContext';
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '../i18n';
 
 function Header() {
   const { isDark, toggleDarkMode } = useDarkMode();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
 
   const isActiveRoute = (path: string): boolean => {
@@ -16,6 +19,12 @@ function Header() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const handleLanguageChange = (lang: SupportedLanguage) => {
+    i18n.changeLanguage(lang);
+  };
+
+  const currentLanguage = i18n.language as SupportedLanguage;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 shadow-lg border-b border-gray-200 dark:border-gray-700">
@@ -33,7 +42,7 @@ function Header() {
             </div>
             <div className="flex flex-col">
               <h1 className="m-0 text-sm sm:text-lg lg:text-xl font-bold text-gray-900 dark:text-white leading-tight group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
-                Budget Planer
+                {t('header.title')}
               </h1>
             </div>
           </Link>
@@ -50,20 +59,35 @@ function Header() {
                     : 'text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300'
                 }`}
               >
-                Übersicht
+                {t('header.overview')}
               </Link>
             </div>
 
             {/* Separator */}
             <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
 
+            {/* Language Selector */}
+            <select
+              value={currentLanguage}
+              onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+              className="px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm hover:shadow cursor-pointer border-none text-sm font-medium"
+              aria-label={t('header.language')}
+              title={t('header.language')}
+            >
+              {Object.entries(SUPPORTED_LANGUAGES).map(([code, { name, flag }]) => (
+                <option key={code} value={code}>
+                  {flag} {name}
+                </option>
+              ))}
+            </select>
+
             {/* Scroll to Top Button */}
             <button
               type="button"
               onClick={scrollToTop}
               className="px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm hover:shadow flex-shrink-0 cursor-pointer"
-              aria-label="Scroll to top"
-              title="Nach oben scrollen"
+              aria-label={t('header.scrollToTop')}
+              title={t('header.scrollToTop')}
             >
               <span className="text-base leading-none">↑</span>
             </button>
@@ -74,7 +98,7 @@ function Header() {
               onClick={toggleDarkMode}
               className="px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm hover:shadow flex-shrink-0 cursor-pointer"
               aria-label="Toggle dark mode"
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDark ? t('header.switchToLightMode') : t('header.switchToDarkMode')}
             >
               <span className="text-base leading-none">{isDark ? '☀️' : '🌙'}</span>
             </button>
@@ -82,13 +106,27 @@ function Header() {
 
           {/* Mobile Menu Button */}
           <div className="lg:hidden flex items-center gap-1.5">
+            {/* Language Selector - Mobile */}
+            <select
+              value={currentLanguage}
+              onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+              className="px-1.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm hover:shadow cursor-pointer border-none text-xs font-medium h-8"
+              aria-label={t('header.language')}
+            >
+              {Object.entries(SUPPORTED_LANGUAGES).map(([code, { flag }]) => (
+                <option key={code} value={code}>
+                  {flag}
+                </option>
+              ))}
+            </select>
+
             {/* Scroll to Top Button */}
             <button
               type="button"
               onClick={scrollToTop}
               className="px-1.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm hover:shadow flex-shrink-0 cursor-pointer h-8"
-              aria-label="Scroll to top"
-              title="Nach oben scrollen"
+              aria-label={t('header.scrollToTop')}
+              title={t('header.scrollToTop')}
             >
               <span className="text-sm leading-none">↑</span>
             </button>
@@ -99,7 +137,7 @@ function Header() {
               onClick={toggleDarkMode}
               className="px-1.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 shadow-sm hover:shadow flex-shrink-0 cursor-pointer h-8"
               aria-label="Toggle dark mode"
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDark ? t('header.switchToLightMode') : t('header.switchToDarkMode')}
             >
               <span className="text-sm leading-none">{isDark ? '☀️' : '🌙'}</span>
             </button>

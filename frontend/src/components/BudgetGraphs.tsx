@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   LineChart,
   Line,
@@ -16,16 +17,6 @@ import {
 } from 'recharts'
 import type { BudgetCategory, BudgetEntry, SalaryReduction, TaxEntry, MonthlyActualBalance } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
-
-const MONTHS = [
-  'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
-]
-
-const MONTHS_FULL = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-]
 
 interface BudgetGraphsProps {
   categories: BudgetCategory[]
@@ -65,7 +56,24 @@ function BudgetGraphs({
   displayCurrency,
   budgetYear,
 }: BudgetGraphsProps) {
+  const { t } = useTranslation()
   const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('monthly')
+  
+  // Get translated month names
+  const MONTHS = useMemo(() => [
+    t('months.short.1'), t('months.short.2'), t('months.short.3'),
+    t('months.short.4'), t('months.short.5'), t('months.short.6'),
+    t('months.short.7'), t('months.short.8'), t('months.short.9'),
+    t('months.short.10'), t('months.short.11'), t('months.short.12')
+  ], [t])
+  
+  const MONTHS_FULL = useMemo(() => [
+    t('months.1'), t('months.2'), t('months.3'),
+    t('months.4'), t('months.5'), t('months.6'),
+    t('months.7'), t('months.8'), t('months.9'),
+    t('months.10'), t('months.11'), t('months.12')
+  ], [t])
+
   // Get gross salary for a specific month
   const getGrossSalaryForMonth = (month: number): number => {
     const salaryCategory = categories.find(
@@ -218,7 +226,7 @@ function BudgetGraphs({
         actualBalance: actualBalance ? parseFloat(actualBalance.balance) : null,
       }
     })
-  }, [categories, entries, taxEntries, salaryReductions, actualBalances, budgetYear])
+  }, [categories, entries, taxEntries, salaryReductions, actualBalances, budgetYear, MONTHS, MONTHS_FULL])
 
   // Calculate category distribution data
   const categoryDistribution = useMemo(() => {
@@ -250,6 +258,7 @@ function BudgetGraphs({
     })
 
     // Add taxes
+    const taxesLabel = t('tax.taxes')
     for (let month = 1; month <= 12; month++) {
       const totalTaxes = taxEntries.reduce((sum, tax) => {
         if (tax.is_active) {
@@ -258,7 +267,7 @@ function BudgetGraphs({
         return sum
       }, 0)
       if (totalTaxes > 0) {
-        categoryTotals['Steuern'] = (categoryTotals['Steuern'] || 0) + totalTaxes
+        categoryTotals[taxesLabel] = (categoryTotals[taxesLabel] || 0) + totalTaxes
       }
     }
 
@@ -271,14 +280,14 @@ function BudgetGraphs({
       .slice(0, 10) // Top 10 categories
     
     return result
-  }, [categories, entries, taxEntries, viewMode])
+  }, [categories, entries, taxEntries, viewMode, t])
 
   // Calculate expense breakdown by category type
   const expenseByType = useMemo(() => {
     const typeTotals: Record<string, number> = {
-      'Fixkosten': 0,
-      'Variable Kosten': 0,
-      'Sparen': 0,
+      [t('categoryType.FIXED_EXPENSE')]: 0,
+      [t('categoryType.VARIABLE_EXPENSE')]: 0,
+      [t('categoryType.SAVINGS')]: 0,
     }
 
     categories.forEach((category) => {
@@ -303,15 +312,16 @@ function BudgetGraphs({
 
       const typeName =
         category.category_type === 'FIXED_EXPENSE'
-          ? 'Fixkosten'
+          ? t('categoryType.FIXED_EXPENSE')
           : category.category_type === 'VARIABLE_EXPENSE'
-          ? 'Variable Kosten'
-          : 'Sparen'
+          ? t('categoryType.VARIABLE_EXPENSE')
+          : t('categoryType.SAVINGS')
 
       typeTotals[typeName] += categoryTotal
     })
 
     // Add taxes to variable expenses
+    const variableExpenseLabel = t('categoryType.VARIABLE_EXPENSE')
     for (let month = 1; month <= 12; month++) {
       const totalTaxes = taxEntries.reduce((sum, tax) => {
         if (tax.is_active) {
@@ -319,7 +329,7 @@ function BudgetGraphs({
         }
         return sum
       }, 0)
-      typeTotals['Variable Kosten'] += totalTaxes
+      typeTotals[variableExpenseLabel] += totalTaxes
     }
 
     return Object.entries(typeTotals)
@@ -328,7 +338,7 @@ function BudgetGraphs({
         name, 
         value: viewMode === 'monthly' ? value / 12 : value 
       }))
-  }, [categories, entries, taxEntries, viewMode])
+  }, [categories, entries, taxEntries, viewMode, t])
 
   // Custom tooltip formatter
   const formatTooltipValue = (value: number) => {
@@ -340,7 +350,7 @@ function BudgetGraphs({
       {/* Monthly Income vs Expenses */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-          📈 Monatliche Einnahmen vs. Ausgaben
+          📈 {t('graphs.monthlyIncomeVsExpenses')}
         </h2>
         <ResponsiveContainer width="100%" height={400}>
           <LineChart data={monthlyData}>
@@ -368,7 +378,7 @@ function BudgetGraphs({
             <Line
               type="monotone"
               dataKey="income"
-              name="Einnahmen"
+              name={t('graphs.income')}
               stroke={COLORS.income}
               strokeWidth={3}
               dot={{ r: 5 }}
@@ -377,7 +387,7 @@ function BudgetGraphs({
             <Line
               type="monotone"
               dataKey="expenses"
-              name="Ausgaben"
+              name={t('graphs.expenses')}
               stroke={COLORS.expenses}
               strokeWidth={3}
               dot={{ r: 5 }}
@@ -390,7 +400,7 @@ function BudgetGraphs({
       {/* Monthly Balance Trend */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
         <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-          💰 Monatliche Bilanz
+          💰 {t('graphs.monthlyBalance')}
         </h2>
         <ResponsiveContainer width="100%" height={400}>
           <LineChart data={monthlyData}>
@@ -418,7 +428,7 @@ function BudgetGraphs({
             <Line
               type="monotone"
               dataKey="balance"
-              name="Bilanz (Einnahmen - Ausgaben)"
+              name={t('graphs.balanceIncomeMinusExpenses')}
               stroke={COLORS.balance}
               strokeWidth={3}
               dot={{ r: 5 }}
@@ -427,7 +437,7 @@ function BudgetGraphs({
             <Line
               type="monotone"
               dataKey="plannedBalance"
-              name="Geplante Bilanz"
+              name={t('graphs.plannedBalance')}
               stroke={COLORS.planned}
               strokeWidth={2}
               strokeDasharray="5 5"
@@ -437,7 +447,7 @@ function BudgetGraphs({
               <Line
                 type="monotone"
                 dataKey="actualBalance"
-                name="Tatsächliche Bilanz"
+                name={t('graphs.actualBalance')}
                 stroke={COLORS.actual}
                 strokeWidth={2}
                 dot={{ r: 4 }}
@@ -451,7 +461,7 @@ function BudgetGraphs({
       {actualBalances.length > 0 && (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-            📊 Geplant vs. Tatsächlich
+            📊 {t('graphs.plannedVsActual')}
           </h2>
           <ResponsiveContainer width="100%" height={400}>
             <BarChart data={monthlyData}>
@@ -476,10 +486,10 @@ function BudgetGraphs({
                 }}
               />
               <Legend />
-              <Bar dataKey="plannedIncome" name="Geplante Einnahmen" fill={COLORS.planned} />
-              <Bar dataKey="income" name="Tatsächliche Einnahmen" fill={COLORS.income} />
-              <Bar dataKey="plannedExpenses" name="Geplante Ausgaben" fill="#a855f7" />
-              <Bar dataKey="expenses" name="Tatsächliche Ausgaben" fill={COLORS.expenses} />
+              <Bar dataKey="plannedIncome" name={t('graphs.plannedIncome')} fill={COLORS.planned} />
+              <Bar dataKey="income" name={t('graphs.actualIncome')} fill={COLORS.income} />
+              <Bar dataKey="plannedExpenses" name={t('graphs.plannedExpenses')} fill="#a855f7" />
+              <Bar dataKey="expenses" name={t('graphs.actualExpenses')} fill={COLORS.expenses} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -489,7 +499,7 @@ function BudgetGraphs({
       <div className="flex items-center justify-center mb-6">
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-4 inline-flex items-center gap-4">
           <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-            Ansicht:
+            {t('graphs.view')}:
           </span>
           <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
             <button
@@ -500,7 +510,7 @@ function BudgetGraphs({
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              Jahr
+              {t('graphs.year')}
             </button>
             <button
               onClick={() => setViewMode('monthly')}
@@ -510,7 +520,7 @@ function BudgetGraphs({
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              Monat (Ø)
+              {t('graphs.monthAvg')}
             </button>
           </div>
         </div>
@@ -520,7 +530,7 @@ function BudgetGraphs({
         {/* Category Distribution Pie Chart */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-            🥧 Ausgabenverteilung nach Kategorie {viewMode === 'monthly' && '(Ø pro Monat)'}
+            🥧 {t('graphs.expenseDistributionByCategory')} {viewMode === 'monthly' && t('graphs.avgPerMonth')}
           </h2>
           {categoryDistribution.length > 0 ? (
             <ResponsiveContainer width="100%" height={400}>
@@ -554,7 +564,7 @@ function BudgetGraphs({
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-[400px] text-slate-500 dark:text-slate-400">
-              Keine Daten verfügbar
+              {t('common.noData')}
             </div>
           )}
         </div>
@@ -562,7 +572,7 @@ function BudgetGraphs({
         {/* Expense Breakdown by Type */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 p-8">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">
-            📊 Ausgaben nach Typ {viewMode === 'monthly' && '(Ø pro Monat)'}
+            📊 {t('graphs.expensesByType')} {viewMode === 'monthly' && t('graphs.avgPerMonth')}
           </h2>
           {expenseByType.length > 0 ? (
             <ResponsiveContainer width="100%" height={400}>
@@ -594,7 +604,7 @@ function BudgetGraphs({
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-[400px] text-slate-500 dark:text-slate-400">
-              Keine Daten verfügbar
+              {t('common.noData')}
             </div>
           )}
         </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { BudgetCategory, BudgetEntry, TaxEntry, SalaryReduction, MonthlyActualBalance } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
 
@@ -23,6 +24,7 @@ function BalanceDifferenceCard({
   displayCurrency,
   budgetYear,
 }: BalanceDifferenceCardProps) {
+  const { t } = useTranslation()
   const [viewMode, setViewMode] = useState<'yearly' | 'untilCurrent'>('untilCurrent')
   const [isCollapsed, setIsCollapsed] = useState(false)
   
@@ -259,8 +261,8 @@ function BalanceDifferenceCard({
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
-            title={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
-            aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+            title={isCollapsed ? t('common.expand') : t('common.collapse')}
+            aria-label={isCollapsed ? t('common.expand') : t('common.collapse')}
           >
             <span className={`text-sm transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-90'}`}>
               ▶
@@ -271,14 +273,14 @@ function BalanceDifferenceCard({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Bilanz Differenz (SOLL vs IST)
+              {t('balance.balanceDifference')}
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400">
               {selectedMonth 
-                ? `Monat ${selectedMonth}` 
+                ? t('summary.month', { month: selectedMonth })
                 : viewMode === 'untilCurrent' && isCurrentYear
-                  ? `Bis Monat ${lastMonthWithData !== null ? lastMonthWithData : currentMonth}`
-                  : 'Gesamtjahr'}
+                  ? t('balance.untilMonth', { month: lastMonthWithData !== null ? lastMonthWithData : currentMonth })
+                  : t('balance.fullYear')}
             </p>
           </div>
         </div>
@@ -294,7 +296,7 @@ function BalanceDifferenceCard({
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
-              Bis aktuell
+              {t('balance.untilCurrent')}
             </button>
             <button
               onClick={() => setViewMode('yearly')}
@@ -304,7 +306,7 @@ function BalanceDifferenceCard({
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
             >
-              Gesamtjahr
+              {t('balance.fullYear')}
             </button>
           </div>
         )}
@@ -315,7 +317,7 @@ function BalanceDifferenceCard({
         {/* SOLL Balance */}
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
-            SOLL Bilanz
+            {t('balance.sollBalance')}
           </div>
           <div className={`text-2xl font-bold ${
             plannedTotals.balance >= 0
@@ -329,7 +331,7 @@ function BalanceDifferenceCard({
         {/* IST Balance */}
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
           <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
-            IST Bilanz
+            {t('balance.istBalance')}
           </div>
           <div className={`text-2xl font-bold ${
             actualTotals.balance >= 0
@@ -347,7 +349,7 @@ function BalanceDifferenceCard({
             : 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
         }`}>
           <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
-            Differenz
+            {t('balance.difference')}
           </div>
           <div className={`text-2xl font-bold ${
             difference >= 0
@@ -357,7 +359,7 @@ function BalanceDifferenceCard({
             {difference >= 0 ? '+' : ''}{formatCurrency(difference, displayCurrency)}
           </div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-            {difference >= 0 ? '✅ Über Plan' : '⚠️ Unter Plan'}
+            {difference >= 0 ? `✅ ${t('balance.abovePlan')}` : `⚠️ ${t('balance.belowPlan')}`}
           </div>
         </div>
       </div>

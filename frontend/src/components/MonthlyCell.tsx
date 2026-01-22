@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { entryApi, categoryApi } from '../services/api'
 import type { BudgetEntry, BudgetCategory } from '../types/budget'
@@ -16,6 +17,7 @@ interface MonthlyCellProps {
 }
 
 function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, category, calculatedMonthlyAmount }: MonthlyCellProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
   const [plannedAmount, setPlannedAmount] = useState(entry?.planned_amount || '0.00')
@@ -76,10 +78,10 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setIsEditing(false)
-      toast.success('Eintrag erstellt')
+      toast.success(t('entry.created'))
     },
     onError: () => {
-      toast.error('Fehler beim Erstellen des Eintrags')
+      toast.error(t('entry.errorCreating'))
       setIsEditing(false)
     },
   })
@@ -90,10 +92,10 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setIsEditing(false)
-      toast.success('Eintrag aktualisiert')
+      toast.success(t('entry.updated'))
     },
     onError: () => {
-      toast.error('Fehler beim Aktualisieren des Eintrags')
+      toast.error(t('entry.errorUpdating'))
       setIsEditing(false)
     },
   })
@@ -176,10 +178,14 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setIsEditing(false)
-      toast.success(`${result.months} Zahlungen à ${formatCurrency(result.paymentAmount, displayCurrency)} in Monaten ${result.paymentMonths.join(', ')}`)
+      toast.success(t('autofill.paymentsCreated', { 
+        count: result.months, 
+        amount: formatCurrency(result.paymentAmount, displayCurrency), 
+        months: result.paymentMonths.join(', ') 
+      }))
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Fehler beim Verteilen')
+      toast.error(error.message || t('autofill.errorFilling'))
       setIsEditing(false)
     },
   })
@@ -190,7 +196,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     if (category.input_mode === 'CUSTOM' && category.custom_months && month === startMonth) {
       const firstMonthValue = parseFloat(plannedAmount)
       if (isNaN(firstMonthValue) || firstMonthValue <= 0) {
-        toast.error('Bitte geben Sie einen gültigen Betrag ein')
+        toast.error(t('validation.enterValidAmount'))
         return
       }
       distributeCustomAmountMutation.mutate({ firstMonthValue })
@@ -271,16 +277,16 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                Geplant
+                {t('entry.planned')}
               </label>
               {(previousEntry || averageAmount > 0) && (
                 <button
                   type="button"
                   onClick={() => setShowSuggestions(!showSuggestions)}
                   className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                  title="Vorschläge anzeigen"
+                  title={t('entry.suggestions')}
                 >
-                  💡 Vorschläge
+                  💡 {t('entry.suggestions')}
                 </button>
               )}
             </div>
@@ -316,7 +322,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
                     }}
                     className="w-full text-left text-[10px] px-1.5 py-0.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded hover:bg-gray-50 dark:hover:bg-gray-500"
                   >
-                    📅 Vormonat: {parseFloat(previousEntry.actual_amount || previousEntry.planned_amount).toFixed(2)}
+                    📅 {t('entry.previousMonth')}: {parseFloat(previousEntry.actual_amount || previousEntry.planned_amount).toFixed(2)}
                   </button>
                 )}
                 {averageAmount > 0 && (
@@ -328,7 +334,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
                     }}
                     className="w-full text-left text-[10px] px-1.5 py-0.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded hover:bg-gray-50 dark:hover:bg-gray-500"
                   >
-                    📊 Durchschnitt: {averageAmount.toFixed(2)}
+                    📊 {t('entry.average')}: {averageAmount.toFixed(2)}
                   </button>
                 )}
               </div>
@@ -337,7 +343,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
           {(!plannedAmount || plannedAmount === '0' || plannedAmount === '0.00') && category.category_type !== 'FIXED_EXPENSE' && category.category_type !== 'VARIABLE_EXPENSE' && (
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Ist
+                {t('entry.actual')}
               </label>
               <input
                 type="number"
@@ -365,7 +371,10 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
           <div className="flex gap-2 pt-2">
             {category.input_mode === 'CUSTOM' && category.custom_months && month === (category.custom_start_month || 1) && (
               <div className="text-[10px] text-blue-600 dark:text-blue-400 mb-1">
-                ℹ️ {formatCurrency(parseFloat(plannedAmount || '0'), displayCurrency)} pro Zahlung, {category.custom_months}x über das Jahr verteilt
+                ℹ️ {t('autofill.customPaymentInfo', { 
+                  amount: formatCurrency(parseFloat(plannedAmount || '0'), displayCurrency), 
+                  count: category.custom_months 
+                })}
               </div>
             )}
             <button
@@ -379,7 +388,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
                   ...
                 </span>
               ) : (
-                '✓ OK'
+                `✓ ${t('common.ok')}`
               )}
             </button>
             <button
@@ -403,14 +412,14 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     return (
       <td
         className="px-3 py-2 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
-        title="Berechnet: Jahresbetrag / 12"
+        title={t('inputMode.calculatedYearly')}
       >
         <div>
           <div className="font-semibold text-xs text-blue-700 dark:text-blue-300">
             {formatCurrency(calculatedMonthlyAmount, displayCurrency)}
           </div>
           <div className="text-[10px] mt-0.5 text-blue-600 dark:text-blue-400">
-            📅 Berechnet
+            📅 {t('inputMode.calculated')}
           </div>
         </div>
       </td>
@@ -426,7 +435,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       return (
         <td
           className="px-3 py-2 text-center text-sm border bg-gray-50 dark:bg-gray-800/50"
-          title={`Keine Zahlung in diesem Monat (Zahlungen in Monaten: ${paymentMonths.join(', ')})`}
+          title={t('inputMode.noPaymentThisMonth', { months: paymentMonths.join(', ') })}
         >
           <div>
             <div className="font-semibold text-xs text-gray-400 dark:text-gray-600">
@@ -450,14 +459,14 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
           <td
             onClick={() => setIsEditing(true)}
             className="px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-blue-50 dark:bg-blue-900/10"
-            title="Klicken zum Bearbeiten - Betrag pro Zahlung"
+            title={t('inputMode.calculatedClickable')}
           >
             <div>
               <div className="font-semibold text-xs text-blue-700 dark:text-blue-300">
                 {formatCurrency(calculatedMonthlyAmount, displayCurrency)}
               </div>
               <div className="text-[10px] mt-0.5 text-blue-600 dark:text-blue-400">
-                📊 Berechnet (klickbar)
+                📊 {t('inputMode.calculatedClickable')}
               </div>
             </div>
           </td>
@@ -469,7 +478,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
         <td
           onClick={() => setIsEditing(true)}
           className={`px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border ${getStatusColor()}`}
-          title="Klicken zum Bearbeiten - Betrag pro Zahlung"
+          title={t('common.clickToEdit')}
         >
           {entry ? (
             <div>
@@ -478,7 +487,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
               </div>
               {entry.actual_amount && (
                 <div className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
-                  Plan: {formatCurrency(parseFloat(entry.planned_amount), displayCurrency)}
+                  {t('entry.plan')}: {formatCurrency(parseFloat(entry.planned_amount), displayCurrency)}
                 </div>
               )}
             </div>
@@ -496,14 +505,14 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
         return (
           <td
             className="px-3 py-2 text-center text-sm border bg-blue-50 dark:bg-blue-900/10"
-            title="Berechnet: Zahlung in diesem Monat"
+            title={t('inputMode.calculated')}
           >
             <div>
               <div className="font-semibold text-xs text-blue-700 dark:text-blue-300">
                 {formatCurrency(calculatedMonthlyAmount, displayCurrency)}
               </div>
               <div className="text-[10px] mt-0.5 text-blue-600 dark:text-blue-400">
-                📊 Berechnet
+                📊 {t('inputMode.calculated')}
               </div>
             </div>
           </td>
@@ -514,7 +523,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
       return (
         <td
           className="px-3 py-2 text-center text-sm border bg-gray-50 dark:bg-gray-800/50"
-          title="Warten auf Eingabe im ersten Monat"
+          title={t('inputMode.waitingForFirstMonth')}
         >
           <div>
             <div className="font-semibold text-xs text-gray-400 dark:text-gray-600">
@@ -534,7 +543,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
     <td
       onClick={() => setIsEditing(true)}
       className={`px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border ${getStatusColor()}`}
-      title="Klicken zum Bearbeiten"
+      title={t('common.clickToEdit')}
     >
       {entry ? (
         <div>
@@ -543,7 +552,7 @@ function MonthlyCell({ categoryId, month, entry, budgetId, displayCurrency, cate
           </div>
           {entry.actual_amount && (
             <div className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
-              Plan: {formatCurrency(parseFloat(entry.planned_amount), displayCurrency)}
+              {t('entry.plan')}: {formatCurrency(parseFloat(entry.planned_amount), displayCurrency)}
             </div>
           )}
         </div>

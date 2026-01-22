@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { actualBalanceApi } from '../services/api'
 import type { MonthlyActualBalance } from '../types/budget'
@@ -15,6 +16,7 @@ interface ActualBalanceCellProps {
 }
 
 function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurrency, field }: ActualBalanceCellProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
   const [value, setValue] = useState(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
@@ -25,10 +27,10 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setIsEditing(false)
-      toast.success('Eintrag erstellt')
+      toast.success(t('entry.created'))
     },
     onError: () => {
-      toast.error('Fehler beim Erstellen des Eintrags')
+      toast.error(t('entry.errorCreating'))
       setIsEditing(false)
     },
   })
@@ -39,10 +41,10 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setIsEditing(false)
-      toast.success('Eintrag aktualisiert')
+      toast.success(t('entry.updated'))
     },
     onError: () => {
-      toast.error('Fehler beim Aktualisieren des Eintrags')
+      toast.error(t('entry.errorUpdating'))
       setIsEditing(false)
     },
   })
@@ -50,7 +52,7 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
   const handleSave = () => {
     const numValue = parseFloat(value)
     if (isNaN(numValue) || numValue < 0) {
-      toast.error('Bitte geben Sie einen gültigen Betrag ein')
+      toast.error(t('validation.enterValidAmount'))
       return
     }
 
@@ -110,7 +112,7 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
         <div ref={cellRef} className="space-y-2 min-w-[150px]" tabIndex={-1}>
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {field === 'income' ? 'Einnahmen' : 'Ausgaben'}
+              {field === 'income' ? t('summary.income') : t('summary.expenses')}
             </label>
             <input
               type="number"
@@ -145,7 +147,7 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
                   ...
                 </span>
               ) : (
-                '✓ OK'
+                `✓ ${t('common.ok')}`
               )}
             </button>
             <button
@@ -167,7 +169,7 @@ function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurren
     <td
       onClick={() => setIsEditing(true)}
       className="px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-white dark:bg-gray-800"
-      title="Klicken zum Bearbeiten"
+      title={t('common.clickToEdit')}
     >
       {balance ? (
         <div className="font-semibold text-xs text-gray-900 dark:text-white">
