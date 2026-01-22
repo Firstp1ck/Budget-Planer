@@ -30,6 +30,7 @@ A modern budget planning application with monthly overview, tax calculation, and
   - Expense breakdown by type
 - ✅ **Actual balance tracking** - Record and compare actual vs planned balances
 - ✅ **Budget import/export** - Import and export budgets as JSON files
+- ✅ **Internationalization (i18n)** - Full support for multiple languages (German, English) with automatic detection and language switcher
 - ✅ **Dark mode** - Full dark mode support for comfortable viewing
 - ✅ **Desktop app** - Native desktop application for Windows, Linux, and macOS (via Tauri)
 
@@ -95,15 +96,17 @@ To install dependencies without starting the servers:
 
 ## Getting Started
 
+> **Tip**: You can change the application language at any time using the language selector in the header. The application supports German and English.
+
 ### 1. Create a New Budget
 
-- Click on "Create New Budget" (or "Neues Budget erstellen")
+- Click on "Create New Budget" (or "Neues Budget erstellen" in German)
 - Enter a name and select the year
 - The budget will be created with CHF as the default currency
 
 ### 2. Add Categories
 
-- Click on "+ Add Category" (or "+ Kategorie hinzufügen")
+- Click on "+ Add Category" (or "+ Kategorie hinzufügen" in German)
 - Choose the category type:
   - **Income**: Money coming in (e.g., Salary)
   - **Fixed Expense**: Regular fixed costs (e.g., Rent, Insurance)
@@ -200,25 +203,18 @@ The application is available as a native desktop app for Windows, Linux, and mac
 
 The application supports multiple currencies with automatic conversion:
 
-- **Base Currency**: CHF (Swiss Francs) - all data is stored in CHF
-- **Display Currencies**: CHF, EUR, USD
-- **Exchange Rates**: Automatically fetched from [exchangerate-api.com](https://www.exchangerate-api.com/)
-- **Caching**: Exchange rates are cached in localStorage and refreshed daily
+- **Supported Currencies**: CHF (Swiss Francs), EUR (Euros), USD (US Dollars)
+- **Exchange Rates**: Automatically updated daily
+- **Data Storage**: All amounts are stored in CHF and converted for display
 
 ## Supported Languages
 
-The application currently supports the following languages:
+The application supports multiple languages:
 
-- **German (Deutsch)** - Primary language
-  - Full UI translation
-  - Default language for the application
-  - Locale: `de-DE`
+- **German (Deutsch)** 🇩🇪
+- **English** 🇺🇸
 
-- **English** - Partial support
-  - Some tooltips and accessibility labels
-  - Documentation and README
-
-The user interface is primarily in German, with the backend configured to use German (`de-DE`) as the default locale. English translations are available for some interface elements such as tooltips and aria-labels.
+The application automatically detects your browser's language preference. You can change the language anytime using the language selector in the header. Your language preference is saved and remembered for future sessions.
 
 ## Contributing
 

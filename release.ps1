@@ -14,29 +14,29 @@ $ErrorActionPreference = "Stop"
 # Colors for output (PowerShell 5.1+ compatible)
 function Write-Info {
     param([string]$Message)
-    Write-Host "ℹ $Message" -ForegroundColor Cyan
+    Write-Host "[i] $Message" -ForegroundColor Cyan
 }
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "✓ $Message" -ForegroundColor Green
+    Write-Host "[+] $Message" -ForegroundColor Green
 }
 
-function Write-Warning {
+function Write-Warn {
     param([string]$Message)
-    Write-Host "⚠ $Message" -ForegroundColor Yellow
+    Write-Host "[!] $Message" -ForegroundColor Yellow
 }
 
-function Write-Error {
+function Write-Err {
     param([string]$Message)
-    Write-Host "✗ $Message" -ForegroundColor Red
+    Write-Host "[x] $Message" -ForegroundColor Red
 }
 
 # Check for required tools
 Write-Info "Checking for required tools..."
 
 if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) {
-    Write-Error "git is not installed. Please install it first."
+    Write-Err "git is not installed. Please install it first."
     exit 1
 }
 Write-Success "git is installed"
@@ -47,14 +47,14 @@ if (Get-Command "gh" -ErrorAction SilentlyContinue) {
     $GhAvailable = $true
     Write-Success "GitHub CLI (gh) is installed"
 } else {
-    Write-Warning "GitHub CLI (gh) is not installed (optional, but recommended for release management)"
-    Write-Warning "Install it from: https://cli.github.com/"
+    Write-Warn "GitHub CLI (gh) is not installed (optional, but recommended for release management)"
+    Write-Warn "Install it from: https://cli.github.com/"
 }
 
 # Validate version format (should be vX.X.X)
 $VersionPattern = '^v\d+\.\d+\.\d+$'
 if ($Version -notmatch $VersionPattern) {
-    Write-Error "Invalid version format: $Version"
+    Write-Err "Invalid version format: $Version"
     Write-Host "Version should be in format: vX.X.X"
     Write-Host "Examples: v1.0.0, v1.2.3, v2.0.0"
     exit 1
@@ -66,7 +66,7 @@ Write-Success "Version format is valid: $Version"
 try {
     $null = git rev-parse --git-dir 2>&1
 } catch {
-    Write-Error "Not in a git repository"
+    Write-Err "Not in a git repository"
     exit 1
 }
 
@@ -77,7 +77,7 @@ if ($StatusOutput) {
     # Filter out untracked files (lines starting with ??)
     $TrackedChanges = $StatusOutput | Where-Object { $_ -notmatch '^\?\?' }
     if ($TrackedChanges) {
-        Write-Warning "You have uncommitted changes in tracked files"
+        Write-Warn "You have uncommitted changes in tracked files"
         $Response = Read-Host "Do you want to continue anyway? (y/N)"
         if ($Response -notmatch '^[Yy]$') {
             Write-Info "Release cancelled"
@@ -90,7 +90,7 @@ if ($StatusOutput) {
 try {
     $null = git remote get-url origin 2>&1
 } catch {
-    Write-Error "No remote 'origin' configured"
+    Write-Err "No remote 'origin' configured"
     exit 1
 }
 
@@ -108,7 +108,7 @@ if ($GhAvailable -and $RepoName) {
     try {
         $null = gh release view "$Version" --repo "$RepoName" 2>&1
         $ReleaseExists = $true
-        Write-Warning "Release $Version already exists on GitHub"
+        Write-Warn "Release $Version already exists on GitHub"
     } catch {
         Write-Info "Release $Version does not exist on GitHub"
     }
@@ -137,10 +137,10 @@ try {
 # If release or tag exists, delete them
 if ($ReleaseExists -or $TagExistsLocal -or $TagExistsRemote) {
     if ($ReleaseExists) {
-        Write-Warning "Release $Version will be deleted and recreated"
+        Write-Warn "Release $Version will be deleted and recreated"
     }
     if ($TagExistsLocal -or $TagExistsRemote) {
-        Write-Warning "Tag $Version will be deleted and recreated"
+        Write-Warn "Tag $Version will be deleted and recreated"
     }
     
     # Delete GitHub release if it exists
@@ -150,12 +150,12 @@ if ($ReleaseExists -or $TagExistsLocal -or $TagExistsRemote) {
             gh release delete "$Version" --repo "$RepoName" --yes 2>&1 | Out-Null
             Write-Success "GitHub release deleted"
         } catch {
-            Write-Error "Failed to delete GitHub release"
-            Write-Warning "You may need to delete it manually from GitHub"
+            Write-Err "Failed to delete GitHub release"
+            Write-Warn "You may need to delete it manually from GitHub"
         }
     } elseif ($ReleaseExists) {
-        Write-Warning "Cannot delete GitHub release automatically (gh CLI not available)"
-        Write-Warning "Please delete it manually from: https://github.com/$RepoName/releases/tag/$Version"
+        Write-Warn "Cannot delete GitHub release automatically (gh CLI not available)"
+        Write-Warn "Please delete it manually from: https://github.com/$RepoName/releases/tag/$Version"
     }
     
     # Delete remote tag if it exists
@@ -165,7 +165,7 @@ if ($ReleaseExists -or $TagExistsLocal -or $TagExistsRemote) {
             git push origin ":refs/tags/$Version" 2>&1 | Out-Null
             Write-Success "Remote tag deleted"
         } catch {
-            Write-Warning "Failed to delete remote tag (may not exist or already deleted)"
+            Write-Warn "Failed to delete remote tag (may not exist or already deleted)"
         }
     }
     
@@ -183,7 +183,7 @@ Write-Info "Current branch: $CurrentBranch"
 
 # Check if we're on main/master branch
 if ($CurrentBranch -ne "main" -and $CurrentBranch -ne "master") {
-    Write-Warning "You're not on main/master branch"
+    Write-Warn "You're not on main/master branch"
     $Response = Read-Host "Do you want to continue anyway? (y/N)"
     if ($Response -notmatch '^[Yy]$') {
         Write-Info "Release cancelled"
@@ -193,7 +193,7 @@ if ($CurrentBranch -ne "main" -and $CurrentBranch -ne "master") {
 
 # Check if remote is configured (already checked above, but verify)
 if (-not $RepoName) {
-    Write-Error "Could not determine repository name from remote URL"
+    Write-Err "Could not determine repository name from remote URL"
     exit 1
 }
 
@@ -201,8 +201,8 @@ Write-Info "Remote repository: $RepoName"
 
 # Confirm release
 Write-Host ""
-Write-Warning "You are about to create and push tag: $Version"
-Write-Warning "This will trigger the GitHub Actions release workflow"
+Write-Warn "You are about to create and push tag: $Version"
+Write-Warn "This will trigger the GitHub Actions release workflow"
 Write-Host ""
 $Response = Read-Host "Are you sure you want to continue? (y/N)"
 if ($Response -notmatch '^[Yy]$') {
@@ -221,8 +221,8 @@ try {
     git push origin "$Version" 2>&1 | Out-Null
     Write-Success "Tag pushed successfully"
 } catch {
-    Write-Error "Failed to push tag"
-    Write-Warning "Tag was created locally but not pushed"
+    Write-Err "Failed to push tag"
+    Write-Warn "Tag was created locally but not pushed"
     Write-Host "You can push it manually with: git push origin $Version"
     exit 1
 }
