@@ -1,6 +1,6 @@
 [package]
 name = "budget-planer"
-version = "1.0.0"
+version = "1.0.1"
 description = "Budget Planer - A budget planning application"
 authors = ["Budget Planer Team"]
 license = ""
