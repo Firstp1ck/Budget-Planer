@@ -33,6 +33,16 @@ A modern budget planning application with monthly overview, tax calculation, and
 - ✅ **Dark mode** - Full dark mode support for comfortable viewing
 - ✅ **Desktop app** - Native desktop application for Windows, Linux, and macOS (via Tauri)
 
+## Screenshots
+
+### Overview
+
+**Dark Mode:**
+![Overview - Dark Mode](images/Overview.png)
+
+**Light Mode:**
+![Overview - Light Mode](images/Overview_Lightmode.png)
+
 ## Quick Start
 
 ### Prerequisites
@@ -110,6 +120,16 @@ To install dependencies without starting the servers:
 - Enter planned and actual amounts
 - The system automatically calculates totals and balances
 
+**Sample Budget View:**
+
+![Sample Budget - Top Section](images/Top_SampleBudget.png)
+
+![Sample Budget - Middle Section 1](images/Mid1_SampleBudget.png)
+
+![Sample Budget - Middle Section 2](images/Mid2_SampleBudget.png)
+
+![Sample Budget - Bottom Section](images/Bot_SampleBudget.png)
+
 ### 4. Configure Salary Deductions
 
 - In the budget editor, find the "Salary Reductions" section
@@ -142,23 +162,32 @@ To install dependencies without starting the servers:
 
 The application is available as a native desktop app for Windows, Linux, and macOS. Pre-built installers are available in the Releases section of the repository.
 
-### Prerequisites
+### Installation (Recommended for Windows)
 
-**Windows:**
+**For Windows users, the easiest way to get started:**
+
+1. Go to the [Releases](https://github.com/yourusername/Budget-Planer/releases) page
+2. Download the latest `.exe` installer (e.g., `Budget-Planer_1.0.0_x64-setup.exe`)
+3. Run the downloaded `.exe` file
+4. Follow the installation wizard
+5. Launch the application from your Start menu or desktop shortcut
+
+**Prerequisites for Windows:**
 - Windows 10 or higher
 - WebView2 Runtime (usually pre-installed on Windows 10/11)
 
+### Installation for Other Platforms
+
 **Linux:**
-- Modern Linux distribution with GTK support
+- Download the `.AppImage` or `.deb` package from the Releases page
+- For `.AppImage`: Make it executable (`chmod +x`) and run it
+- For `.deb`: Install using your package manager
+- Prerequisites: Modern Linux distribution with GTK support
 
 **macOS:**
-- macOS 10.15 or higher
-
-### Installation
-
-1. Download the installer for your platform from the Releases page
-2. Run the installer and follow the setup wizard
-3. Launch the application from your applications menu
+- Download the `.dmg` file from the Releases page
+- Open the `.dmg` and drag the application to your Applications folder
+- Prerequisites: macOS 10.15 or higher
 
 ### Troubleshooting
 
