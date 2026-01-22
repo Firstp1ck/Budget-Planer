@@ -118,20 +118,18 @@ if ($GhAvailable -and $RepoName) {
 $TagExistsLocal = $false
 $TagExistsRemote = $false
 
-try {
-    $null = git rev-parse "$Version" 2>&1
+# Check local tag
+$null = git rev-parse "$Version" 2>&1 | Out-Null
+if ($LASTEXITCODE -eq 0) {
     $TagExistsLocal = $true
-} catch {
-    $TagExistsLocal = $false
 }
 
-try {
-    $RemoteTags = git ls-remote --tags origin 2>&1
-    if ($RemoteTags -match "refs/tags/$Version") {
+# Check remote tag
+$RemoteTagsCheck = git ls-remote --tags origin 2>&1
+if ($LASTEXITCODE -eq 0) {
+    if ($RemoteTagsCheck -match "refs/tags/$Version`$") {
         $TagExistsRemote = $true
     }
-} catch {
-    $TagExistsRemote = $false
 }
 
 # If release or tag exists, delete them
@@ -161,19 +159,25 @@ if ($ReleaseExists -or $TagExistsLocal -or $TagExistsRemote) {
     # Delete remote tag if it exists
     if ($TagExistsRemote) {
         Write-Info "Deleting remote tag..."
-        try {
-            git push origin ":refs/tags/$Version" 2>&1 | Out-Null
+        $DeleteRemoteOutput = git push origin ":refs/tags/$Version" 2>&1
+        if ($LASTEXITCODE -eq 0) {
             Write-Success "Remote tag deleted"
-        } catch {
+        } else {
             Write-Warn "Failed to delete remote tag (may not exist or already deleted)"
+            Write-Host "Error: $DeleteRemoteOutput"
         }
     }
     
     # Delete local tag if it exists
     if ($TagExistsLocal) {
         Write-Info "Deleting local tag..."
-        git tag -d "$Version" 2>&1 | Out-Null
-        Write-Success "Local tag deleted"
+        $DeleteLocalOutput = git tag -d "$Version" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "Local tag deleted"
+        } else {
+            Write-Warn "Failed to delete local tag"
+            Write-Host "Error: $DeleteLocalOutput"
+        }
     }
 }
 
@@ -210,21 +214,99 @@ if ($Response -notmatch '^[Yy]$') {
     exit 0
 }
 
-# Create the tag
-Write-Info "Creating tag $Version..."
-git tag -a "$Version" -m "Release $Version" 2>&1 | Out-Null
-Write-Success "Tag created locally"
+# Check if tag already exists locally (shouldn't happen due to earlier deletion, but double-check)
+$TagExistsNow = $false
+$null = git rev-parse "$Version" 2>&1 | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    $TagExistsNow = $true
+}
+
+# Create the tag if it doesn't exist
+if (-not $TagExistsNow) {
+    Write-Info "Creating tag $Version..."
+    $TagOutput = git tag -a "$Version" -m "Release $Version" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Failed to create tag"
+        Write-Host "Error: $TagOutput"
+        exit 1
+    }
+    Write-Success "Tag created locally"
+} else {
+    Write-Info "Tag $Version already exists locally, skipping creation"
+}
+
+# Check if tag already exists remotely before pushing
+Write-Info "Checking if tag exists on remote..."
+$RemoteTagsOutput = git ls-remote --tags origin 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Err "Failed to check remote tags"
+    Write-Host "Error: $RemoteTagsOutput"
+    exit 1
+}
+
+# Check if tag exists (match the exact tag name, not just part of it)
+$TagExistsRemote = $false
+if ($RemoteTagsOutput -match "refs/tags/$Version`$") {
+    $TagExistsRemote = $true
+}
 
 # Push the tag
-Write-Info "Pushing tag to remote..."
-try {
-    git push origin "$Version" 2>&1 | Out-Null
-    Write-Success "Tag pushed successfully"
-} catch {
-    Write-Err "Failed to push tag"
-    Write-Warn "Tag was created locally but not pushed"
-    Write-Host "You can push it manually with: git push origin $Version"
-    exit 1
+if ($TagExistsRemote) {
+    Write-Info "Tag already exists on remote, verifying..."
+    # Verify it's the same tag
+    $LocalTagCommit = git rev-parse "$Version^{}" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Failed to get local tag commit"
+        Write-Host "Error: $LocalTagCommit"
+        exit 1
+    }
+    
+    $RemoteTagCommitOutput = git ls-remote origin "refs/tags/$Version" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Failed to get remote tag commit"
+        Write-Host "Error: $RemoteTagCommitOutput"
+        exit 1
+    }
+    
+    if ($RemoteTagCommitOutput -match "(\S+)\s+refs/tags/$Version") {
+        $RemoteCommit = $matches[1]
+        if ($LocalTagCommit -eq $RemoteCommit) {
+            Write-Success "Tag already exists on remote and matches local tag"
+        } else {
+            Write-Warn "Tag exists on remote but points to different commit"
+            Write-Warn "Local: $LocalTagCommit"
+            Write-Warn "Remote: $RemoteCommit"
+            Write-Err "Cannot push - tag conflict. Please resolve manually."
+            exit 1
+        }
+    } else {
+        Write-Warn "Could not parse remote tag information"
+        Write-Warn "Assuming tag exists and matches (manual verification recommended)"
+    }
+} else {
+    Write-Info "Pushing tag to remote..."
+    $PushOutput = git push origin "$Version" 2>&1
+    $PushExitCode = $LASTEXITCODE
+    
+    if ($PushExitCode -ne 0) {
+        Write-Err "Failed to push tag (exit code: $PushExitCode)"
+        Write-Host "Error output:"
+        Write-Host $PushOutput
+        Write-Warn "Tag was created locally but not pushed"
+        Write-Host "You can push it manually with: git push origin $Version"
+        exit 1
+    }
+    
+    # Verify the push succeeded by checking remote
+    Start-Sleep -Milliseconds 500  # Brief delay for remote to update
+    $VerifyTagsOutput = git ls-remote --tags origin 2>&1
+    if ($LASTEXITCODE -eq 0 -and $VerifyTagsOutput -match "refs/tags/$Version`$") {
+        Write-Success "Tag pushed successfully and verified on remote"
+    } else {
+        Write-Warn "Tag push reported success but verification failed"
+        Write-Warn "Tag may still be syncing. Please verify manually:"
+        Write-Host "  git ls-remote --tags origin | grep $Version"
+    }
 }
 
 # Print success message
