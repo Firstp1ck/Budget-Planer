@@ -783,6 +783,8 @@ jobs:
     name: Publish Release
     needs: [get-version, build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download Linux artifacts
         uses: actions/download-artifact@v4
@@ -1094,5 +1096,4 @@ jobs:
           draft: false
           prerelease: false
           fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
