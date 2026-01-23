@@ -61,6 +61,21 @@ get_venv_activate() {
     fi
 }
 
+# Function to get the virtual environment Python interpreter path
+get_venv_python() {
+    local venv_dir="$1"
+    # Check for Windows path first (Scripts/python.exe)
+    if [ -f "$venv_dir/Scripts/python.exe" ]; then
+        echo "$venv_dir/Scripts/python.exe"
+    # Check for Unix path (bin/python)
+    elif [ -f "$venv_dir/bin/python" ]; then
+        echo "$venv_dir/bin/python"
+    else
+        print_error "Could not find Python interpreter in $venv_dir"
+        exit 1
+    fi
+}
+
 # Check for required tools
 print_info "Checking for required tools..."
 
@@ -85,7 +100,7 @@ cd "$BACKEND_DIR"
 # Check if virtual environment exists, create if not
 if [ ! -d ".venv" ]; then
     print_info "Creating Python virtual environment..."
-    uv venv
+    uv venv --seed
     print_success "Virtual environment created"
 else
     print_success "Virtual environment already exists"
@@ -94,18 +109,25 @@ fi
 # Activate virtual environment
 print_info "Activating virtual environment..."
 VENV_ACTIVATE=$(get_venv_activate ".venv")
+# shellcheck source=/dev/null
 source "$VENV_ACTIVATE"
 
 # Install Python dependencies
 print_info "Installing Python dependencies with uv..."
-uv pip install --native-tls -r requirements.txt
+VENV_PYTHON=$(get_venv_python ".venv")
+# Use uv pip install with explicit Python path - uv doesn't require pip in venv
+uv pip install --python "$VENV_PYTHON" --native-tls -r requirements.txt
 print_success "Python dependencies installed"
 
 # Check if .env file exists
 if [ ! -f ".env" ]; then
     print_warning ".env file not found. Creating default .env file..."
+    # Get venv Python if not already set
+    if [ -z "${VENV_PYTHON:-}" ]; then
+        VENV_PYTHON=$(get_venv_python ".venv")
+    fi
     cat > .env << EOF
-SECRET_KEY=$(python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())")
+SECRET_KEY=$("$VENV_PYTHON" -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())")
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 CORS_ALLOWED_ORIGINS=http://localhost:5173
@@ -117,7 +139,7 @@ fi
 
 # Run migrations
 print_info "Running Django migrations..."
-python manage.py migrate --noinput
+"$VENV_PYTHON" manage.py migrate --noinput
 print_success "Migrations completed"
 
 # Setup frontend
@@ -147,38 +169,40 @@ kill_port() {
     local port=$1
     local killed=false
     
-    # Try lsof first (Unix/Linux/macOS)
+    # Try lsof first (Unix/Linux/macOS) - most reliable and fast
     if command_exists lsof; then
-        local pid=$(lsof -ti:$port 2>/dev/null)
-        if [ ! -z "$pid" ]; then
-            kill -9 $pid 2>/dev/null && killed=true
+        local pid
+        # Use timeout to prevent hanging, with fallback if timeout doesn't exist
+        if command_exists timeout; then
+            pid=$(timeout 1 lsof -ti:${port} 2>/dev/null || true)
+        else
+            pid=$(lsof -ti:${port} 2>/dev/null || true)
+        fi
+        if [ ! -z "$pid" ] && [ "$pid" != "0" ]; then
+            kill -9 ${pid} 2>/dev/null && killed=true
         fi
     fi
     
     # Try netstat + taskkill (Windows/MSYS2)
     if [ "$killed" = false ] && command_exists netstat && command_exists taskkill; then
         # Windows netstat format: TCP    0.0.0.0:8000    0.0.0.0:0    LISTENING    12345
-        local pid=$(netstat -ano 2>/dev/null | grep -E ":$port[[:space:]]" | grep LISTENING | awk '{print $NF}' | head -1)
+        local pid
+        # Extract last field (PID) from netstat output using rev and cut to avoid ShellCheck issues with awk $NF
+        if command_exists timeout; then
+            pid=$(timeout 1 netstat -ano 2>/dev/null | grep -E ":${port}[[:space:]]" | grep LISTENING | head -1 | rev | cut -d' ' -f1 | rev || true)
+        else
+            pid=$(netstat -ano 2>/dev/null | grep -E ":${port}[[:space:]]" | grep LISTENING | head -1 | rev | cut -d' ' -f1 | rev || true)
+        fi
         if [ ! -z "$pid" ] && [ "$pid" != "0" ]; then
-            taskkill //F //PID $pid 2>/dev/null && killed=true
+            taskkill //F //PID ${pid} 2>/dev/null && killed=true
         fi
     fi
     
-    # Try ss (modern Linux alternative)
-    if [ "$killed" = false ] && command_exists ss; then
-        local pid=$(ss -lptn "sport = :$port" 2>/dev/null | grep -oP 'pid=\K\d+' | head -1)
-        if [ ! -z "$pid" ]; then
-            kill -9 $pid 2>/dev/null && killed=true
-        fi
-    fi
-    
-    # Try fuser (some Unix systems)
-    if [ "$killed" = false ] && command_exists fuser; then
-        fuser -k $port/tcp 2>/dev/null && killed=true
-    fi
+    # Note: ss -p and fuser can hang or require root, so we skip them
+    # lsof should work on most Unix/Linux/macOS systems
     
     if [ "$killed" = true ]; then
-        print_info "Killed existing process on port $port"
+        print_info "Killed existing process on port ${port}"
     fi
 }
 
@@ -224,17 +248,17 @@ fi
 
 # Check and kill any existing processes on ports 8000 and 5173
 print_info "Checking for existing processes on ports 8000 and 5173..."
-kill_port 8000
-kill_port 5173
+kill_port 8000 || true
+kill_port 5173 || true
 sleep 1
+print_info "Port check completed, starting servers..."
 
 # Start backend server
 print_info "Starting Django backend server on http://localhost:8000..."
 cd "$BACKEND_DIR"
-VENV_ACTIVATE=$(get_venv_activate ".venv")
-source "$VENV_ACTIVATE"
+VENV_PYTHON=$(get_venv_python ".venv")
 (
-    $STDBUF_CMD python manage.py runserver 2>&1 | prefix_output "$BLUE" "Backend"
+    $STDBUF_CMD "$VENV_PYTHON" manage.py runserver 2>&1 | prefix_output "$BLUE" "Backend"
 ) &
 BACKEND_PID=$!
 
