@@ -5,7 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
     "Django>=6.0.4",
-    "django>=6.0.6",
+    "django>=6.0.7",
     "django-cors-headers>=4.3.0",
     "python-dotenv>=1.0.0",
     "openpyxl>=3.1.0",
