@@ -1,3 +1,4 @@
+import { isSalaryCategory } from '../utils/salary'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -51,7 +52,7 @@ function SalaryReductionsSection({
 
   // Find salary category (Gehalt)
   const salaryCategory = categories.find(
-    (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+    isSalaryCategory
   )
 
   // Get gross salary amount for a specific month
@@ -166,13 +167,14 @@ function SalaryReductionsSection({
   })
 
   const handleAddReduction = () => {
-    if (!reductionFormData.name || !reductionFormData.value) {
+    if (createReductionMutation.isPending || updateReductionMutation.isPending) return
+    if (!reductionFormData.name.trim() || !reductionFormData.value) {
       toast.error(t('validation.fillAllFields'))
       return
     }
 
-    const value = parseFloat(reductionFormData.value)
-    if (isNaN(value) || value < 0) {
+    const value = Number(reductionFormData.value)
+    if (!Number.isFinite(value) || value < 0) {
       toast.error(t('validation.invalidValue'))
       return
     }
@@ -184,9 +186,9 @@ function SalaryReductionsSection({
 
     createReductionMutation.mutate({
       budget: budgetId,
-      name: reductionFormData.name,
+      name: reductionFormData.name.trim(),
       reduction_type: reductionFormData.reduction_type,
-      value: reductionFormData.value,
+      value: value.toFixed(2),
       order: salaryReductions.length,
       is_active: true,
     })
@@ -202,13 +204,14 @@ function SalaryReductionsSection({
   }
 
   const handleUpdateReduction = () => {
-    if (!reductionFormData.name || !reductionFormData.value) {
+    if (createReductionMutation.isPending || updateReductionMutation.isPending) return
+    if (!reductionFormData.name.trim() || !reductionFormData.value) {
       toast.error(t('validation.fillAllFields'))
       return
     }
 
-    const value = parseFloat(reductionFormData.value)
-    if (isNaN(value) || value < 0) {
+    const value = Number(reductionFormData.value)
+    if (!Number.isFinite(value) || value < 0) {
       toast.error(t('validation.invalidValue'))
       return
     }
@@ -222,9 +225,9 @@ function SalaryReductionsSection({
       updateReductionMutation.mutate({
         id: editingReductionId,
         data: {
-          name: reductionFormData.name,
+          name: reductionFormData.name.trim(),
           reduction_type: reductionFormData.reduction_type,
-          value: reductionFormData.value,
+          value: value.toFixed(2),
         },
       })
     }
@@ -256,7 +259,7 @@ function SalaryReductionsSection({
     return (
       <tr className="bg-yellow-50 dark:bg-yellow-900/20 border-t-2 border-yellow-300 dark:border-yellow-600">
         <td colSpan={displayMonths.length + 4} className="px-4 py-2 text-sm text-yellow-800 dark:text-yellow-300">
-          ⚠️ {t('salaryReduction.noSalaryCategory')}
+          ⚠️ {t('editorUX.salaryNames')}
         </td>
       </tr>
     )
@@ -274,6 +277,7 @@ function SalaryReductionsSection({
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setIsCollapsed(!isCollapsed)}
+                  aria-expanded={!isCollapsed}
                   className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
                   title={t('common.expand')}
                   aria-label={t('common.expand')}
@@ -306,6 +310,7 @@ function SalaryReductionsSection({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsCollapsed(!isCollapsed)}
+                  aria-expanded={!isCollapsed}
                 className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
                 title={t('common.collapse')}
                 aria-label={t('common.collapse')}
@@ -315,8 +320,9 @@ function SalaryReductionsSection({
                 </span>
               </button>
               <span>{t('salaryReduction.titleIcon')}</span>
+              <span className="text-xs font-normal">{t('editorUX.sharedSettings')}</span>
               <span className="text-xs font-normal opacity-75">({salaryReductions.length})</span>
-              {!isAddingReduction && (
+              {!isAddingReduction && !editingReductionId && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -331,6 +337,7 @@ function SalaryReductionsSection({
           </td>
         )}
       </tr>
+      {(createReductionMutation.isError || updateReductionMutation.isError) && <tr><td colSpan={displayMonths.length + 4}><p role="alert" className="p-3 text-sm text-red-700 dark:text-red-300">{t(createReductionMutation.isError ? 'salaryReduction.errorAdding' : 'salaryReduction.errorUpdating')} {t('editorUX.retry')}</p></td></tr>}
       {!isCollapsed && (
         <>
           {sortedReductions.map((reduction) => (
@@ -340,6 +347,10 @@ function SalaryReductionsSection({
                   <td className="px-4 py-2">
                     <input
                       type="text"
+                      autoFocus
+                      maxLength={200}
+                      aria-label={t('common.name')}
+                      disabled={createReductionMutation.isPending || updateReductionMutation.isPending}
                       value={reductionFormData.name}
                       onChange={(e) => setReductionFormData({ ...reductionFormData, name: e.target.value })}
                       onKeyDown={(e) => {
@@ -348,7 +359,7 @@ function SalaryReductionsSection({
                           handleUpdateReduction()
                         } else if (e.key === 'Escape') {
                           e.preventDefault()
-                          handleCancelEdit()
+                          if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                         }
                       }}
                       className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -358,6 +369,8 @@ function SalaryReductionsSection({
                   <td className="px-4 py-2 text-center">
                     <div className="space-y-2">
                       <select
+                        aria-label={t('editorUX.deductionType')}
+                        disabled={createReductionMutation.isPending || updateReductionMutation.isPending}
                         value={reductionFormData.reduction_type}
                         onChange={(e) => setReductionFormData({ ...reductionFormData, reduction_type: e.target.value as ReductionType })}
                         onKeyDown={(e) => {
@@ -366,16 +379,18 @@ function SalaryReductionsSection({
                             handleUpdateReduction()
                           } else if (e.key === 'Escape') {
                             e.preventDefault()
-                            handleCancelEdit()
+                            if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                           }
                         }}
                         className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       >
                         <option value="PERCENTAGE">{t('salaryReduction.percentage')}</option>
-                        <option value="FIXED">{t('salaryReduction.fixedAmount')}</option>
+                        <option value="FIXED">{t('salaryReduction.fixedAmount')} (CHF)</option>
                       </select>
                       <input
                         type="number"
+                      aria-label={reductionFormData.reduction_type === 'PERCENTAGE' ? t('editorUX.deductionPercentage') : t('editorUX.deductionCHF')}
+                      disabled={createReductionMutation.isPending || updateReductionMutation.isPending}
                         step="0.01"
                         min="0"
                         max={reductionFormData.reduction_type === 'PERCENTAGE' ? '100' : undefined}
@@ -387,7 +402,7 @@ function SalaryReductionsSection({
                             handleUpdateReduction()
                           } else if (e.key === 'Escape') {
                             e.preventDefault()
-                            handleCancelEdit()
+                            if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                           }
                         }}
                         className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -415,17 +430,17 @@ function SalaryReductionsSection({
                         }}
                         disabled={updateReductionMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={t('common.save')}
+                        title={t('common.save')} aria-label={t('common.save')}
                       >
                         ✓
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleCancelEdit()
+                          if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title={t('common.cancel')}
+                        title={t('common.cancel')} aria-label={t('common.cancel')}
                       >
                         ✕
                       </button>
@@ -452,14 +467,14 @@ function SalaryReductionsSection({
                     )}
                   </td>
                   <td className="px-4 py-2 text-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 justify-center">
+                    <div className="opacity-100 transition-opacity flex gap-2 justify-center">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           handleEditReduction(reduction)
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title={t('salaryReduction.editReduction')}
+                        title={t('salaryReduction.editReduction')} aria-label={t('salaryReduction.editReduction')}
                       >
                         ✏️
                       </button>
@@ -470,7 +485,7 @@ function SalaryReductionsSection({
                         }}
                         disabled={deleteReductionMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={t('salaryReduction.deleteReduction')}
+                        title={t('salaryReduction.deleteReduction')} aria-label={t('salaryReduction.deleteReduction')}
                       >
                         🗑️
                       </button>
@@ -485,6 +500,10 @@ function SalaryReductionsSection({
               <td className="px-4 py-2">
                 <input
                   type="text"
+                      autoFocus
+                      maxLength={200}
+                      aria-label={t('common.name')}
+                      disabled={createReductionMutation.isPending || updateReductionMutation.isPending}
                   value={reductionFormData.name}
                   onChange={(e) => setReductionFormData({ ...reductionFormData, name: e.target.value })}
                   onKeyDown={(e) => {
@@ -493,7 +512,7 @@ function SalaryReductionsSection({
                       handleAddReduction()
                     } else if (e.key === 'Escape') {
                       e.preventDefault()
-                      handleCancelEdit()
+                      if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                     }
                   }}
                   className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -503,6 +522,8 @@ function SalaryReductionsSection({
               <td className="px-4 py-2 text-center">
                 <div className="space-y-2">
                   <select
+                        aria-label={t('editorUX.deductionType')}
+                        disabled={createReductionMutation.isPending || updateReductionMutation.isPending}
                     value={reductionFormData.reduction_type}
                     onChange={(e) => setReductionFormData({ ...reductionFormData, reduction_type: e.target.value as ReductionType })}
                     onKeyDown={(e) => {
@@ -511,16 +532,18 @@ function SalaryReductionsSection({
                         handleAddReduction()
                       } else if (e.key === 'Escape') {
                         e.preventDefault()
-                        handleCancelEdit()
+                        if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                       }
                     }}
                     className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                   >
                     <option value="PERCENTAGE">{t('salaryReduction.percentage')}</option>
-                    <option value="FIXED">{t('salaryReduction.fixedAmount')}</option>
+                    <option value="FIXED">{t('salaryReduction.fixedAmount')} (CHF)</option>
                   </select>
                   <input
                     type="number"
+                      aria-label={reductionFormData.reduction_type === 'PERCENTAGE' ? t('editorUX.deductionPercentage') : t('editorUX.deductionCHF')}
+                      disabled={createReductionMutation.isPending || updateReductionMutation.isPending}
                     step={reductionFormData.reduction_type === 'PERCENTAGE' ? '0.01' : '0.01'}
                     value={reductionFormData.value}
                     onChange={(e) => setReductionFormData({ ...reductionFormData, value: e.target.value })}
@@ -530,7 +553,7 @@ function SalaryReductionsSection({
                         handleAddReduction()
                       } else if (e.key === 'Escape') {
                         e.preventDefault()
-                        handleCancelEdit()
+                        if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                       }
                     }}
                     className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -555,17 +578,17 @@ function SalaryReductionsSection({
                     }}
                     disabled={createReductionMutation.isPending}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={t('common.save')}
+                    title={t('common.save')} aria-label={t('common.save')}
                   >
                     ✓
                   </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      handleCancelEdit()
+                      if (!createReductionMutation.isPending && !updateReductionMutation.isPending) handleCancelEdit()
                     }}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                    title={t('common.cancel')}
+                    title={t('common.cancel')} aria-label={t('common.cancel')}
                   >
                     ✕
                   </button>
@@ -573,7 +596,7 @@ function SalaryReductionsSection({
               </td>
             </tr>
           )}
-          {!isAddingReduction && (
+          {!isAddingReduction && !editingReductionId && (
             <tr className="bg-orange-100 dark:bg-orange-900/30 border-b-2 border-orange-300 dark:border-orange-600 font-bold">
               <td className="px-4 py-2 text-sm font-bold text-orange-800 dark:text-orange-300 sticky left-0 bg-orange-100 dark:bg-orange-900/30 border-r border-orange-300 dark:border-orange-600">
                 {t('common.total')}

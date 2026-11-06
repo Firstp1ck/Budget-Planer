@@ -3,6 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import Header from './Header';
 
 interface LayoutProps {
@@ -10,12 +11,14 @@ interface LayoutProps {
 }
 
 function Layout({ children }: LayoutProps) {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-light-green-50 dark:bg-gray-900 relative overflow-x-hidden w-full max-w-full">
+      <a href="#main-content" className="skip-link">{t('shellUX.skipToContent')}</a>
       {/* Content Overlay */}
       <div className="relative z-10 w-full max-w-full overflow-x-hidden">
         <Header />
-        <main className="w-full pt-16 sm:pt-20 md:pt-24 pb-4 sm:pb-6 md:pb-8 max-w-full overflow-x-hidden">
+        <main id="main-content" tabIndex={-1} className="w-full pt-16 sm:pt-20 md:pt-24 pb-4 sm:pb-6 md:pb-8 max-w-full overflow-x-hidden">
           {children}
         </main>
       </div>

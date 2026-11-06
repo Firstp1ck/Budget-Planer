@@ -9,23 +9,21 @@ class BudgetModelTests(TestCase):
     def setUp(self):
         self.budget = Budget.objects.create(
             name="Test Budget",
-            year=2026,
             currency="EUR"
         )
 
     def test_budget_creation(self):
         """Test creating a budget"""
         self.assertEqual(self.budget.name, "Test Budget")
-        self.assertEqual(self.budget.year, 2026)
         self.assertEqual(self.budget.currency, "EUR")
 
     def test_budget_str(self):
         """Test budget string representation"""
-        self.assertEqual(str(self.budget), "Test Budget (2026)")
+        self.assertEqual(str(self.budget), "Test Budget")
 
     def test_yearly_summary_empty(self):
         """Test yearly summary with no entries"""
-        summary = self.budget.get_yearly_summary()
+        summary = self.budget.get_yearly_summary(2026)
         self.assertEqual(summary['year'], 2026)
         self.assertEqual(summary['total_income'], Decimal('0'))
         self.assertEqual(summary['total_expenses'], Decimal('0'))
@@ -38,7 +36,6 @@ class BudgetCategoryTests(TestCase):
     def setUp(self):
         self.budget = Budget.objects.create(
             name="Test Budget",
-            year=2026,
             currency="EUR"
         )
         self.category = BudgetCategory.objects.create(
@@ -67,7 +64,6 @@ class BudgetEntryTests(TestCase):
     def setUp(self):
         self.budget = Budget.objects.create(
             name="Test Budget",
-            year=2026,
             currency="EUR"
         )
         self.income_category = BudgetCategory.objects.create(
@@ -178,7 +174,6 @@ class BudgetTemplateTests(TestCase):
         """Test applying template to a budget"""
         budget = Budget.objects.create(
             name="Test Budget",
-            year=2026,
             currency="EUR"
         )
 
@@ -194,7 +189,6 @@ class BudgetCalculationTests(TestCase):
     def setUp(self):
         self.budget = Budget.objects.create(
             name="Test Budget",
-            year=2026,
             currency="EUR"
         )
 
@@ -231,13 +225,13 @@ class BudgetCalculationTests(TestCase):
 
     def test_monthly_summary(self):
         """Test monthly summary calculation"""
-        summary = self.budget.get_monthly_summary(1)
+        summary = self.budget.get_monthly_summary(1, 2026)
         self.assertEqual(summary['total_income'], Decimal('3000.00'))
         self.assertEqual(summary['total_expenses'], Decimal('1000.00'))
         self.assertEqual(summary['balance'], Decimal('2000.00'))
 
     def test_category_monthly_total(self):
         """Test category monthly total calculation"""
-        total = self.income_cat.get_monthly_total(1)
+        total = self.income_cat.get_monthly_total(1, 2026)
         self.assertEqual(total['total_planned'], Decimal('3000.00'))
         self.assertEqual(total['total_actual'], Decimal('3000.00'))

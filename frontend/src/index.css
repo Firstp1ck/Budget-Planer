@@ -186,3 +186,113 @@ select {
 .dark select {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
 }
+
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  color: white;
+  background: #1d4ed8;
+  border-radius: 0.5rem;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* The annual grid shares the available width; content wraps instead of widening it. */
+.budget-grid {
+  container-type: inline-size;
+}
+
+.budget-table {
+  table-layout: fixed;
+  width: 100%;
+  max-width: 100%;
+}
+
+.budget-table :is(th, td) {
+  min-width: 0;
+  padding-inline: 2px;
+  padding-inline: clamp(1px, 0.25cqw, 6px);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 12px;
+  font-size: clamp(10px, 0.85cqw, 12px);
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-table :is(th, td) :where(div, span, button) {
+  font-size: inherit;
+}
+
+.budget-table :is(th, td) > .flex {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.budget-table :is(th, td) > .flex > span {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+}
+
+.budget-table .truncate {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.budget-table td:nth-child(2) > span {
+  display: inline-block;
+  max-width: 100%;
+  padding-inline: 2px;
+}
+
+.budget-table td:not([colspan]):last-child > .flex {
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.budget-table td:not([colspan]):last-child > .flex > button {
+  flex: 0 1 32px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding-inline: 2px;
+}
+
+.budget-table :is(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.budget-cell-editor {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(24rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+@media (pointer: coarse) {
+  .budget-table td:not([colspan]):last-child > .flex > button {
+    flex-basis: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

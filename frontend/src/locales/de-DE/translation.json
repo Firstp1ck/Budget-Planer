@@ -40,7 +40,8 @@
     "scrollToTop": "Nach oben scrollen",
     "switchToLightMode": "Zum Hellmodus wechseln",
     "switchToDarkMode": "Zum Dunkelmodus wechseln",
-    "language": "Sprache"
+    "language": "Sprache",
+    "switchLanguage": "Sprache zu {{language}} wechseln"
   },
   "dashboard": {
     "title": "Budget Planer",
@@ -429,10 +430,37 @@
     "viewMonthAvg": "Monat (Ø)"
   },
   "categorySuggestions": {
-    "INCOME": ["Gehalt", "13. Monatslohn", "Bonus", "Nebenverdienst", "Kapitalerträge"],
-    "FIXED_EXPENSE": ["Miete", "Krankenversicherung", "Strom", "Internet/Telefon", "Auto/Verkehr", "Versicherungen", "Steuern"],
-    "VARIABLE_EXPENSE": ["Lebensmittel", "Restaurant", "Kleidung", "Freizeit", "Sport", "Geschenke", "Haushalt"],
-    "SAVINGS": ["Notfallfonds", "Altersvorsorge", "Sparen", "Investitionen"]
+    "INCOME": [
+      "Gehalt",
+      "13. Monatslohn",
+      "Bonus",
+      "Nebenverdienst",
+      "Kapitalerträge"
+    ],
+    "FIXED_EXPENSE": [
+      "Miete",
+      "Krankenversicherung",
+      "Strom",
+      "Internet/Telefon",
+      "Auto/Verkehr",
+      "Versicherungen",
+      "Steuern"
+    ],
+    "VARIABLE_EXPENSE": [
+      "Lebensmittel",
+      "Restaurant",
+      "Kleidung",
+      "Freizeit",
+      "Sport",
+      "Geschenke",
+      "Haushalt"
+    ],
+    "SAVINGS": [
+      "Notfallfonds",
+      "Altersvorsorge",
+      "Sparen",
+      "Investitionen"
+    ]
   },
   "categoryTypes": {
     "INCOME": "Einnahmen",
@@ -474,5 +502,88 @@
     "error_help_2": "Die erste Einrichtung benötigt mehr Zeit",
     "error_help_3": "Eine Firewall blockiert Port 8000",
     "error_help_4": "Python-Abhängigkeiten fehlen"
+  },
+  "shellUX": {
+    "skipToContent": "Zum Inhalt springen",
+    "connecting": "Verbindung wird hergestellt…",
+    "pageNotFound": "Seite nicht gefunden",
+    "pageNotFoundHint": "Diese Seite wurde möglicherweise verschoben. Kehre zur Budgetübersicht zurück."
+  },
+  "dashboardUX": {
+    "plannedBalance": "Geplanter Saldo · {{year}}",
+    "balanceUnavailable": "Der Saldo konnte nicht geladen werden.",
+    "openNamed": "{{name}} öffnen",
+    "exportNamed": "{{name}} exportieren",
+    "deleteNamed": "{{name}} löschen",
+    "setupFailed": "Budget «{{name}}» wurde erstellt, aber die Einrichtung konnte nicht abgeschlossen werden. Öffnen Sie es und prüfen Sie die Kategorien, bevor Sie Änderungen vornehmen. Die gewählte Einrichtung wurde nicht durch eine andere ersetzt.",
+    "createFailed": "Die Budgeterstellung konnte nicht bestätigt werden. Aktualisieren Sie zuerst die Liste, bevor Sie es erneut versuchen, um ein doppeltes Budget zu vermeiden.",
+    "invalidImport": "Diese Datei konnte nicht importiert werden. Wählen Sie einen unveränderten JSON-Budgetexport und prüfen Sie dessen Inhalt.",
+    "importUncertain": "Die Verbindung beim Import wurde unterbrochen. Aktualisieren Sie die Liste und prüfen Sie, ob das Budget erstellt wurde, bevor Sie erneut importieren.",
+    "refreshFailed": "Die Liste konnte nicht aktualisiert werden. Die zuvor geladenen Budgets werden weiterhin angezeigt.",
+    "openCreated": "Erstelltes Budget öffnen",
+    "refreshList": "Liste aktualisieren",
+    "dismiss": "Schliessen",
+    "importing": "Budget wird importiert… Bitte warten.",
+    "setupLabel": "Beginnen mit",
+    "starterOption": "Startkategorien",
+    "emptyOption": "Leeres Budget",
+    "starterHint": "Erstellt Gehalt, Miete, Krankenversicherung, Lebensmittel und Haushalt ohne Beträge. Steuern und Lohnabzüge richten Sie selbst ein. Alle Beträge werden in CHF eingegeben.",
+    "emptyHint": "Start ohne Kategorien, Steuern oder Abzüge. Ergänzen Sie diese im Editor. Alle Beträge werden in CHF eingegeben.",
+    "templatesLoading": "Gespeicherte Vorlagen werden geladen…",
+    "templatesFailed": "Gespeicherte Vorlagen konnten nicht geladen werden. Startkategorien und ein leeres Budget stehen weiterhin zur Verfügung.",
+    "search": "Budget suchen",
+    "searchPlaceholder": "Nach Budgetname suchen",
+    "sort": "Sortieren nach",
+    "sortUpdated": "Zuletzt aktualisiert",
+    "sortName": "Name (A–Z)",
+    "sortCreated": "Neueste zuerst",
+    "count": "{{count}} von {{total}} Budgets",
+    "noResults": "Keine Budgets für diese Suche gefunden",
+    "clearSearch": "Suche löschen",
+    "firstBudgetHint": "Erstellen Sie ein Budget mit Startkategorien oder einen leeren Plan und tragen Sie Ihre monatlichen Beträge ein. Sie können auch ein zuvor als JSON exportiertes Budget importieren.",
+    "starter": {
+      "salary": "Gehalt",
+      "rent": "Miete",
+      "healthInsurance": "Krankenversicherung",
+      "groceries": "Lebensmittel",
+      "household": "Haushalt"
+    }
+  },
+  "gridUX": {
+    "saveError": "Speichern konnte nicht bestätigt werden. Ihre Eingabe bleibt erhalten. Prüfen Sie die aktualisierten Werte und versuchen Sie es erneut.",
+    "editAmount": "{{category}} bearbeiten, Monat {{month}}, {{year}}",
+    "editBalance": "Tatsächliche {{field}} bearbeiten, Monat {{month}}, {{year}}",
+    "chfHelp": "Beträge in CHF eingeben. Die gewählte Währung ändert nur die Anzeige.",
+    "globalHelp": "Diese Kategorieeinstellungen gelten für Berechnungen in allen Jahren. Bestehende Monatseinträge, Istwerte und Notizen bleiben erhalten.",
+    "editGlobalSettings": "Einstellungen für {{category}} bearbeiten (alle Jahre)",
+    "noPayment": "Keine Zahlung",
+    "confirmGlobal": "Ich verstehe, dass diese Einstellungen für alle Jahre gelten.",
+    "confirmRequired": "Bestätigen Sie vor dem Speichern, dass die Einstellungen für alle Jahre gelten.",
+    "invalidSchedule": "Wählen Sie 1–12 Zahlungen und einen Startmonat von 1–12.",
+    "planCopied": "Plan des Vormonats kopiert. Istbeträge und Notizen bleiben erhalten.",
+    "autofillHelp": "Nur Planbeträge für {{year}} ändern. Istbeträge und Notizen bleiben erhalten.",
+    "actualHelp": "Istbetrag bis zur Erfassung leer lassen. Für einen erfassten Nullbetrag 0 eingeben.",
+    "status": {
+      "WITHIN_BUDGET": "Im Budget",
+      "WARNING": "Nahe am Budgetlimit",
+      "OVER_BUDGET": "Budget überschritten"
+    }
+  },
+  "editorUX": {
+    "loadError": "Budget konnte nicht geladen werden",
+    "loadErrorDetail": "Prüfe deine Verbindung und versuche es erneut. Dein gespeichertes Budget wurde nicht verändert.",
+    "refreshError": "Aktualisierung fehlgeschlagen. Das zuletzt geladene Budget wird weiterhin angezeigt.",
+    "retry": "Erneut versuchen",
+    "inputCurrency": "Alle Beträge in CHF eingeben. EUR und USD ändern nur die Anzeige. Jahresbeträge, Zahlungspläne, Steuern und Lohnabzüge gelten für alle Jahre.",
+    "tableHelp": "Alle Monate passen sich der verfügbaren Breite an. Beträge mit Tab und Enter zum Bearbeiten öffnen. Berechnete Jahresbeträge und benutzerdefinierte Zahlungen in den Kategorieeinstellungen ändern.",
+    "budgetGrid": "Monatliche Budgettabelle",
+    "gridCaption": "Budget für {{year}}. Geldbeträge in CHF eingeben.",
+    "taxPercentage": "Steuersatz in Prozent",
+    "deductionType": "Art des Lohnabzugs",
+    "deductionPercentage": "Lohnabzug in Prozent",
+    "deductionCHF": "Lohnabzug in CHF",
+    "sharedSettings": "Einstellungen gelten für alle Jahre",
+    "salaryNames": "Für Lohnabzüge eine Einnahmekategorie namens Gehalt, Bruttogehalt, Lohn oder Bruttolohn erstellen. Englische Lohnnamen werden ebenfalls unterstützt.",
+    "loadingGraphs": "Diagramme werden geladen…"
   }
 }

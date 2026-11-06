@@ -40,7 +40,8 @@
     "scrollToTop": "Scroll to top",
     "switchToLightMode": "Switch to light mode",
     "switchToDarkMode": "Switch to dark mode",
-    "language": "Language"
+    "language": "Language",
+    "switchLanguage": "Switch language to {{language}}"
   },
   "dashboard": {
     "title": "Budget Planner",
@@ -429,10 +430,37 @@
     "viewMonthAvg": "Month (Avg.)"
   },
   "categorySuggestions": {
-    "INCOME": ["Salary", "13th Month Salary", "Bonus", "Side Income", "Capital Gains"],
-    "FIXED_EXPENSE": ["Rent", "Health Insurance", "Electricity", "Internet/Phone", "Car/Transport", "Insurance", "Taxes"],
-    "VARIABLE_EXPENSE": ["Groceries", "Restaurant", "Clothing", "Leisure", "Sports", "Gifts", "Household"],
-    "SAVINGS": ["Emergency Fund", "Retirement", "Savings", "Investments"]
+    "INCOME": [
+      "Salary",
+      "13th Month Salary",
+      "Bonus",
+      "Side Income",
+      "Capital Gains"
+    ],
+    "FIXED_EXPENSE": [
+      "Rent",
+      "Health Insurance",
+      "Electricity",
+      "Internet/Phone",
+      "Car/Transport",
+      "Insurance",
+      "Taxes"
+    ],
+    "VARIABLE_EXPENSE": [
+      "Groceries",
+      "Restaurant",
+      "Clothing",
+      "Leisure",
+      "Sports",
+      "Gifts",
+      "Household"
+    ],
+    "SAVINGS": [
+      "Emergency Fund",
+      "Retirement",
+      "Savings",
+      "Investments"
+    ]
   },
   "categoryTypes": {
     "INCOME": "Income",
@@ -474,5 +502,88 @@
     "error_help_2": "First-time setup needs more time",
     "error_help_3": "A firewall is blocking port 8000",
     "error_help_4": "Python dependencies are missing"
+  },
+  "shellUX": {
+    "skipToContent": "Skip to content",
+    "connecting": "Connecting…",
+    "pageNotFound": "Page not found",
+    "pageNotFoundHint": "This page may have moved. Return to your budgets to continue."
+  },
+  "dashboardUX": {
+    "plannedBalance": "Planned balance · {{year}}",
+    "balanceUnavailable": "Balance could not be loaded.",
+    "openNamed": "Open {{name}}",
+    "exportNamed": "Export {{name}}",
+    "deleteNamed": "Delete {{name}}",
+    "setupFailed": "Budget “{{name}}” was created, but setup could not be completed. Open it to check its categories before making changes. Your chosen setup was not replaced with another one.",
+    "createFailed": "The budget could not be confirmed. Refresh the list before trying again to avoid creating a duplicate.",
+    "invalidImport": "This file could not be imported. Select an unchanged JSON budget export and check its contents.",
+    "importUncertain": "The import connection was interrupted. Refresh the list and check whether the budget was created before importing again.",
+    "refreshFailed": "The list could not be refreshed. Your previously loaded budgets are shown below.",
+    "openCreated": "Open created budget",
+    "refreshList": "Refresh list",
+    "dismiss": "Dismiss",
+    "importing": "Importing budget… Please wait.",
+    "setupLabel": "Start with",
+    "starterOption": "Starter categories",
+    "emptyOption": "Empty budget",
+    "starterHint": "Adds Salary, Rent, Health Insurance, Groceries and Household with no amounts. Configure taxes and salary deductions yourself. All amount inputs use CHF.",
+    "emptyHint": "Start without categories, taxes or deductions. Add your own in the editor. All amount inputs use CHF.",
+    "templatesLoading": "Loading saved templates…",
+    "templatesFailed": "Saved templates could not be loaded. You can still use starter categories or an empty budget.",
+    "search": "Find a budget",
+    "searchPlaceholder": "Search by budget name",
+    "sort": "Sort by",
+    "sortUpdated": "Recently updated",
+    "sortName": "Name (A–Z)",
+    "sortCreated": "Newest first",
+    "count": "{{count}} of {{total}} budgets",
+    "noResults": "No budgets match your search",
+    "clearSearch": "Clear search",
+    "firstBudgetHint": "Create a budget, choose starter categories or begin with an empty plan, then enter your monthly amounts. You can also import a previously exported JSON budget.",
+    "starter": {
+      "salary": "Salary",
+      "rent": "Rent",
+      "healthInsurance": "Health Insurance",
+      "groceries": "Groceries",
+      "household": "Household"
+    }
+  },
+  "gridUX": {
+    "saveError": "Could not confirm the save. Your draft is kept. Check the refreshed values and try again.",
+    "editAmount": "Edit {{category}}, month {{month}}, {{year}}",
+    "editBalance": "Edit actual {{field}}, month {{month}}, {{year}}",
+    "chfHelp": "Enter amounts in CHF. The selected currency changes display only.",
+    "globalHelp": "These category settings affect calculations in every year. Existing monthly entries, actual values and notes are kept.",
+    "editGlobalSettings": "Edit settings for {{category}} (all years)",
+    "noPayment": "No payment",
+    "confirmGlobal": "I understand these settings apply to every year.",
+    "confirmRequired": "Confirm that the settings apply to every year before saving.",
+    "invalidSchedule": "Choose 1–12 payments and a starting month from 1–12.",
+    "planCopied": "Previous month's plan copied. Actual amounts and notes kept.",
+    "autofillHelp": "Update planned amounts for {{year}} only. Actual amounts and notes are kept.",
+    "actualHelp": "Leave actual amount blank until recorded. Enter 0 for a recorded zero.",
+    "status": {
+      "WITHIN_BUDGET": "Within budget",
+      "WARNING": "Close to budget limit",
+      "OVER_BUDGET": "Over budget"
+    }
+  },
+  "editorUX": {
+    "loadError": "Could not load this budget",
+    "loadErrorDetail": "Check your connection and try again. Your saved budget has not been changed.",
+    "refreshError": "Could not refresh. The last loaded budget is still shown.",
+    "retry": "Try again",
+    "inputCurrency": "Enter all amounts in CHF. EUR and USD convert the display only. Annual amounts, payment schedules, taxes and salary deductions are shared across all years.",
+    "tableHelp": "All months fit the available width. Use Tab and Enter to open an amount editor. Calculated annual and custom payments are changed in category settings.",
+    "budgetGrid": "Monthly budget table",
+    "gridCaption": "Budget for {{year}}. Enter monetary amounts in CHF.",
+    "taxPercentage": "Tax percentage",
+    "deductionType": "Deduction type",
+    "deductionPercentage": "Deduction percentage",
+    "deductionCHF": "Deduction amount in CHF",
+    "sharedSettings": "Settings apply to all years",
+    "salaryNames": "Add an income category named Salary or Gross salary to calculate salary deductions. German salary names are also supported.",
+    "loadingGraphs": "Loading charts…"
   }
 }

@@ -32,6 +32,15 @@ export const CURRENCY_NAMES: Record<Currency, string> = {
   USD: 'US-Dollar',
 }
 
+export function isValidExchangeRates(value: unknown): value is ExchangeRates {
+  if (!value || typeof value !== 'object') return false
+  const rates = value as ExchangeRates
+  return rates.CHF === 1 && Number.isFinite(rates.EUR) && rates.EUR > 0 &&
+    Number.isFinite(rates.USD) && rates.USD > 0 &&
+    typeof rates.lastUpdated === 'string' && Number.isFinite(Date.parse(rates.lastUpdated)) &&
+    Date.parse(rates.lastUpdated) <= Date.now() + 5 * 60 * 1000
+}
+
 // Get exchange rates from localStorage or use fallback
 // Priority: 1. Valid cached rates (< 24h) 2. Any cached rates 3. Fallback rates
 export function getExchangeRates(): ExchangeRates {
@@ -42,19 +51,19 @@ export function getExchangeRates(): ExchangeRates {
 
       // Return cached rates even if old - they're better than fallback
       // Caller should check age and fetch new ones if needed
-      return rates
+      if (isValidExchangeRates(rates)) return rates
     }
   } catch (error) {
     console.error('Error reading exchange rates from localStorage:', error)
   }
 
   // Return fallback rates only if nothing is cached
-  console.warn('No cached exchange rates found, using fallback rates. Will attempt to fetch live rates.')
   return FALLBACK_RATES
 }
 
 // Save exchange rates to localStorage
 export function saveExchangeRates(rates: ExchangeRates): void {
+  if (!isValidExchangeRates(rates)) return
   try {
     localStorage.setItem('exchangeRates', JSON.stringify(rates))
   } catch (error) {
@@ -97,7 +106,6 @@ export function formatCurrency(
 // Fetch latest exchange rates from API
 export async function fetchExchangeRates(): Promise<ExchangeRates> {
   try {
-    console.log('Fetching live exchange rates from API...')
     // Using exchangerate-api.com free tier (supports CHF as base)
     // Alternative: https://api.frankfurter.app/latest?from=CHF
     const response = await fetch('https://api.exchangerate-api.com/v4/latest/CHF', {
@@ -112,28 +120,17 @@ export async function fetchExchangeRates(): Promise<ExchangeRates> {
 
     const rates: ExchangeRates = {
       CHF: 1.00,
-      EUR: data.rates.EUR || FALLBACK_RATES.EUR,
-      USD: data.rates.USD || FALLBACK_RATES.USD,
+      EUR: data.rates?.EUR,
+      USD: data.rates?.USD,
       lastUpdated: new Date().toISOString(),
     }
 
+    if (!isValidExchangeRates(rates)) throw new Error('The exchange rate service returned invalid rates.')
     saveExchangeRates(rates)
-    console.log('Exchange rates fetched and saved successfully:', rates)
     return rates
   } catch (error) {
-    console.error('Error fetching exchange rates from API:', error)
-
-    // Try to use cached rates as fallback
-    const cached = getExchangeRates()
-    if (cached.lastUpdated !== FALLBACK_RATES.lastUpdated) {
-      console.log('Using cached exchange rates as fallback')
-      return cached
-    }
-
-    // If no cached rates, use fallback and save them
-    console.warn('Using fallback exchange rates')
-    saveExchangeRates(FALLBACK_RATES)
-    return FALLBACK_RATES
+    // Manual refresh must report failure; existing cached rates remain available.
+    throw error
   }
 }
 
@@ -172,10 +169,12 @@ export function shouldUpdateRates(): boolean {
 // Initialize exchange rates - call this on app startup
 export async function initializeExchangeRates(): Promise<ExchangeRates> {
   if (shouldUpdateRates()) {
-    console.log('Exchange rates need updating, fetching from API...')
-    return await fetchExchangeRates()
+    try {
+      return await fetchExchangeRates()
+    } catch {
+      return getExchangeRates()
+    }
   } else {
-    console.log('Using cached exchange rates')
     return getExchangeRates()
   }
 }

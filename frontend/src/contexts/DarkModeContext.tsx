@@ -55,7 +55,6 @@ export function DarkModeProvider({ children }: { children: ReactNode }) {
         });
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount - isDark is intentionally excluded as we want initial value
 
   // Apply dark class whenever isDark changes
@@ -106,7 +105,6 @@ export function DarkModeProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useDarkMode() {
   const context = useContext(DarkModeContext);
   if (context === undefined) {

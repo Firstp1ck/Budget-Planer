@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -6,6 +6,8 @@ import { categoryApi } from '../services/api'
 import type { BudgetCategory, BudgetEntry, InputMode, SalaryReduction } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
 import MonthlyCell from './MonthlyCell'
+import CellEditorDialog from './CellEditorDialog'
+import { isSalaryCategory } from '../utils/salary'
 
 interface CategoryRowProps {
   type: string
@@ -90,50 +92,10 @@ function CategoryRow({
     startMonth: 1,
   })
 
-  // Global keyboard handler for dialogs (Escape to close, Enter to save)
-  const handleGlobalKeydown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (editingInputMode !== null) {
-        e.preventDefault()
-        setEditingInputMode(null)
-      } else if (editingName !== null) {
-        e.preventDefault()
-        setEditingName(null)
-        setCategoryName('')
-      } else if (showAutofillDialog !== null) {
-        e.preventDefault()
-        setShowAutofillDialog(null)
-      }
-    } else if (e.key === 'Enter') {
-      // Only trigger if not already handled by an input element
-      const target = e.target as HTMLElement
-      const isInputElement = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA'
-      
-      // If already on an input, let the input's own handler deal with it
-      if (isInputElement) return
-      
-      if (editingInputMode !== null) {
-        e.preventDefault()
-        handleSaveInputMode(editingInputMode)
-      } else if (editingName !== null) {
-        e.preventDefault()
-        handleSaveName(editingName)
-      } else if (showAutofillDialog !== null) {
-        e.preventDefault()
-        handleAutofill(showAutofillDialog)
-      }
-    }
-  }, [editingInputMode, editingName, showAutofillDialog])
-
-  useEffect(() => {
-    // Only add listener when a dialog is open
-    if (editingInputMode !== null || editingName !== null || showAutofillDialog !== null) {
-      document.addEventListener('keydown', handleGlobalKeydown)
-      return () => {
-        document.removeEventListener('keydown', handleGlobalKeydown)
-      }
-    }
-  }, [editingInputMode, editingName, showAutofillDialog, handleGlobalKeydown])
+  const [formError, setFormError] = useState('')
+  const [confirmedGlobalChange, setConfirmedGlobalChange] = useState(false)
+  const formSubmitting = useRef(false)
+  const copySubmitting = useRef(false)
 
   const deleteCategoryMutation = useMutation({
     mutationFn: (id: number) => categoryApi.delete(id),
@@ -232,11 +194,13 @@ function CategoryRow({
       categoryApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
+      formSubmitting.current = false
       setEditingInputMode(null)
       toast.success(t('inputMode.inputModeUpdated'))
     },
     onError: () => {
-      toast.error(t('inputMode.errorUpdatingInputMode'))
+      formSubmitting.current = false
+      setFormError(t('inputMode.errorUpdatingInputMode'))
     },
   })
 
@@ -245,117 +209,67 @@ function CategoryRow({
       categoryApi.update(id, { name }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
+      formSubmitting.current = false
       setEditingName(null)
       setCategoryName('')
       toast.success(t('category.nameUpdated'))
     },
     onError: (error: any) => {
       const errorMessage = error.response?.data?.name?.[0] || error.response?.data?.error || t('category.errorUpdatingName')
-      toast.error(errorMessage)
+      formSubmitting.current = false
+      setFormError(errorMessage)
     },
   })
 
   const copyPreviousMonthMutation = useMutation({
     mutationFn: async ({ categoryId, month }: { categoryId: number; month: number }) => {
-      const previousMonth = month === 1 ? 12 : month - 1
-      const previousEntry = entries.find(e => e.category === categoryId && e.month === previousMonth)
-
-      if (!previousEntry) {
-        throw new Error(t('entry.noPreviousMonth'))
-      }
-
-      const { entryApi } = await import('../services/api')
-
-      // Check if current month entry exists
-      const currentEntry = entries.find(e => e.category === categoryId && e.month === month)
-
-      if (currentEntry) {
-        return entryApi.update(currentEntry.id, {
-          planned_amount: previousEntry.planned_amount,
-          actual_amount: previousEntry.actual_amount,
-        })
-      } else {
-        return entryApi.create({
-          category: categoryId,
-          month,
-          year: year,
-          planned_amount: previousEntry.planned_amount,
-          actual_amount: previousEntry.actual_amount || null,
-        })
-      }
+      const previousEntry = entries.find(e => e.category === categoryId && e.year === year && e.month === month - 1)
+      if (!previousEntry) throw new Error(t('entry.noPreviousMonth'))
+      return categoryApi.planEntries(categoryId, { year, entries: [{ month, planned_amount: previousEntry.planned_amount }] })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      toast.success(t('entry.previousMonthCopied'))
+      copySubmitting.current = false
+      toast.success(t('gridUX.planCopied'))
     },
-    onError: (error: Error) => {
-      toast.error(error.message || t('entry.errorCopying'))
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
+      copySubmitting.current = false
+      toast.error(t('entry.errorCopying'))
     },
   })
 
   const autofillMonthsMutation = useMutation({
-    mutationFn: async ({ categoryId, amount, mode, startMonth }: {
-      categoryId: number;
-      amount: string;
-      mode: 'all' | 'empty' | 'remaining';
-      startMonth: number;
-    }) => {
-      const { entryApi } = await import('../services/api')
-      const categoryEntries = entries.filter(e => e.category === categoryId)
-      const promises = []
-
-      for (let month = 1; month <= 12; month++) {
-        const existingEntry = categoryEntries.find(e => e.month === month)
-
-        // Determine if we should fill this month
-        let shouldFill = false
-        if (mode === 'all') {
-          shouldFill = true
-        } else if (mode === 'empty') {
-          shouldFill = !existingEntry || (parseFloat(existingEntry.planned_amount) === 0 && !existingEntry.actual_amount)
-        } else if (mode === 'remaining') {
-          shouldFill = month >= startMonth
-        }
-
-        if (shouldFill) {
-          if (existingEntry) {
-            // Update existing entry
-            promises.push(
-              entryApi.update(existingEntry.id, {
-                planned_amount: amount,
-              })
-            )
-          } else {
-            // Create new entry
-            promises.push(
-              entryApi.create({
-                category: categoryId,
-                month,
-                year: year,
-                planned_amount: amount,
-                actual_amount: null,
-              })
-            )
-          }
-        }
-      }
-
-      await Promise.all(promises)
-      return promises.length
+    mutationFn: async ({ categoryId, amount, mode, startMonth }: { categoryId: number; amount: string; mode: 'all' | 'empty' | 'remaining'; startMonth: number }) => {
+      const categoryEntries = entries.filter(e => e.category === categoryId && e.year === year)
+      const plannedEntries = Array.from({ length: 12 }, (_, i) => i + 1).filter(month => {
+        const existing = categoryEntries.find(e => e.month === month)
+        return mode === 'all' || (mode === 'remaining' && month >= startMonth) || (mode === 'empty' && (!existing || (Number(existing.planned_amount) === 0 && existing.actual_amount == null)))
+      }).map(month => ({ month, planned_amount: Number(amount).toFixed(2) }))
+      if (!plannedEntries.length) return 0
+      await categoryApi.planEntries(categoryId, { year, entries: plannedEntries })
+      return plannedEntries.length
     },
-    onSuccess: (count) => {
+    onSuccess: count => {
+      formSubmitting.current = false
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
       setShowAutofillDialog(null)
       toast.success(t('autofill.monthsFilled', { count }))
     },
-    onError: (error: Error) => {
-      toast.error(error.message || t('autofill.errorFilling'))
+    onError: () => {
+      formSubmitting.current = false
+      queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
+      setFormError(t('gridUX.saveError'))
     },
   })
 
   const handleOpenAutofill = (category: BudgetCategory) => {
+    if (formSubmitting.current) return
+    setFormError('')
+    setEditingInputMode(null)
+    setEditingName(null)
     // Try to find an existing entry to suggest amount
-    const categoryEntries = entries.filter(e => e.category === category.id)
+    const categoryEntries = entries.filter(e => e.category === category.id && e.year === year)
     const firstEntry = categoryEntries.find(e => parseFloat(e.planned_amount) > 0)
 
     setAutofillData({
@@ -367,11 +281,14 @@ function CategoryRow({
   }
 
   const handleAutofill = (categoryId: number) => {
-    if (!autofillData.amount || parseFloat(autofillData.amount) <= 0) {
-      toast.error(t('autofill.enterValidAmount'))
+    if (formSubmitting.current) return
+    if (!autofillData.amount.trim() || !Number.isFinite(Number(autofillData.amount)) || Number(autofillData.amount) < 0 || !Number.isInteger(autofillData.startMonth) || autofillData.startMonth < 1 || autofillData.startMonth > 12) {
+      setFormError(t('autofill.enterValidAmount'))
       return
     }
 
+    formSubmitting.current = true
+    setFormError('')
     autofillMonthsMutation.mutate({
       categoryId,
       amount: autofillData.amount,
@@ -387,30 +304,43 @@ function CategoryRow({
   }
 
   const handleEditName = (category: BudgetCategory) => {
+    if (formSubmitting.current) return
+    setFormError('')
+    setEditingInputMode(null)
+    setShowAutofillDialog(null)
     setEditingName(category.id)
     setCategoryName(category.name)
   }
 
   const handleSaveName = (categoryId: number) => {
+    if (formSubmitting.current) return
     if (!categoryName.trim()) {
-      toast.error(t('category.enterName'))
+      setFormError(t('category.enterName'))
       return
     }
+    formSubmitting.current = true
+    setFormError('')
     updateCategoryNameMutation.mutate({ id: categoryId, name: categoryName.trim() })
   }
 
   const handleCancelEditName = () => {
+    if (formSubmitting.current) return
     setEditingName(null)
     setCategoryName('')
   }
 
   const handleEditInputMode = (category: BudgetCategory) => {
+    if (formSubmitting.current) return
+    setFormError('')
+    setConfirmedGlobalChange(false)
+    setEditingName(null)
+    setShowAutofillDialog(null)
     setEditingInputMode(category.id)
 
     // Calculate suggested yearly amount from existing entries
-    const categoryEntries = entries.filter((e) => e.category === category.id)
+    const categoryEntries = entries.filter((e) => e.category === category.id && e.year === year)
     const totalFromEntries = categoryEntries.reduce((sum, entry) => {
-      const amount = parseFloat(entry.actual_amount || entry.planned_amount)
+      const amount = parseFloat(entry.planned_amount)
       return sum + amount
     }, 0)
 
@@ -428,6 +358,11 @@ function CategoryRow({
   }
 
   const handleSaveInputMode = (categoryId: number) => {
+    if (formSubmitting.current) return
+    if (!confirmedGlobalChange) { setFormError(t('gridUX.confirmRequired')); return }
+    if (inputModeData.mode !== 'MONTHLY' && (!inputModeData.yearlyAmount.trim() || !Number.isFinite(Number(inputModeData.yearlyAmount)) || Number(inputModeData.yearlyAmount) < 0)) { setFormError(t('validation.enterValidAmount')); return }
+    if (inputModeData.mode === 'CUSTOM' && (!Number.isInteger(inputModeData.customMonths) || inputModeData.customMonths < 1 || inputModeData.customMonths > 12 || !Number.isInteger(inputModeData.customStartMonth) || inputModeData.customStartMonth < 1 || inputModeData.customStartMonth > 12)) { setFormError(t('gridUX.invalidSchedule')); return }
+    setFormError('')
     let yearlyAmount = inputModeData.yearlyAmount
     
     // If CUSTOM mode and user entered total amount, convert to payment amount
@@ -443,6 +378,7 @@ function CategoryRow({
       yearly_amount: inputModeData.mode !== 'MONTHLY' ? yearlyAmount : null,
     }
 
+    formSubmitting.current = true
     updateInputModeMutation.mutate({ id: categoryId, data })
   }
 
@@ -458,9 +394,9 @@ function CategoryRow({
     }
 
     // For MONTHLY mode, sum all entries
-    const categoryEntries = entries.filter((e) => e.category === category.id)
+    const categoryEntries = entries.filter((e) => e.category === category.id && e.year === year)
     return categoryEntries.reduce((sum, entry) => {
-      const amount = parseFloat(entry.actual_amount || entry.planned_amount)
+      const amount = parseFloat(entry.actual_amount ?? entry.planned_amount)
       return sum + amount
     }, 0)
   }
@@ -490,7 +426,7 @@ function CategoryRow({
     
     // Find salary category
     const salaryCategory = categories.find(
-      (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+      (c) => isSalaryCategory(c)
     )
     if (!salaryCategory) return 0
 
@@ -514,10 +450,10 @@ function CategoryRow({
       }
     } else if (salaryCategory.input_mode === 'MONTHLY') {
       const salaryEntry = entries.find(
-        (e) => e.category === salaryCategory.id && e.month === month
+        (e) => e.category === salaryCategory.id && e.year === year && e.month === month
       )
       if (salaryEntry) {
-        grossSalary = parseFloat(salaryEntry.actual_amount || salaryEntry.planned_amount)
+        grossSalary = parseFloat(salaryEntry.actual_amount ?? salaryEntry.planned_amount)
       }
     }
 
@@ -542,10 +478,10 @@ function CategoryRow({
     // For MONTHLY mode, get the entry for this month
     if (category.input_mode === 'MONTHLY') {
       const categoryEntries = entries.filter(
-        (e) => e.category === category.id && e.month === month
+        (e) => e.category === category.id && e.year === year && e.month === month
       )
       amount = categoryEntries.reduce((sum, entry) => {
-        return sum + parseFloat(entry.actual_amount || entry.planned_amount)
+        return sum + parseFloat(entry.actual_amount ?? entry.planned_amount)
       }, 0)
     } else if (category.input_mode === 'YEARLY') {
       // For YEARLY mode, distribute evenly
@@ -571,16 +507,16 @@ function CategoryRow({
     }
 
     // For income type, if it's salary, subtract reductions to get net salary
-    if (type === 'INCOME' && category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt')) {
+    if (type === 'INCOME' && category.id === categories.find(isSalaryCategory)?.id) {
       const reductions = getTotalReductionsForMonth(month)
-      return amount - reductions
+      return Math.max(0, amount - reductions)
     }
 
     return amount
   }
 
   // Calculate yearly total for all categories in this group
-  const yearlyTotal = categories.reduce((sum, category) => sum + calculateTotal(category), 0)
+  const yearlyTotal = categories.reduce((sum, category) => sum + Array.from({ length: 12 }, (_, i) => getCategoryAmountForMonth(category, i + 1)).reduce((total, amount) => total + amount, 0), 0)
 
   // Add category button labels
   const ADD_LABELS: Record<string, string> = {
@@ -669,7 +605,7 @@ function CategoryRow({
       </tr>
       {!isCollapsed && (
         <>
-      {categories.sort((a, b) => a.order - b.order).map((category) => (
+      {[...categories].sort((a, b) => a.order - b.order).map((category) => (
         <tr
           key={category.id}
           onDragOver={(e) => handleDragOver(e, category.id)}
@@ -694,7 +630,7 @@ function CategoryRow({
               >⋮⋮</span>
               <span className="truncate">{category.name}</span>
               {/* Show "Brutto" label for salary category */}
-              {category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt') && (
+              {category.id === categories.find(isSalaryCategory)?.id && (
                 <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded flex-shrink-0" title={t('category.gross')}>
                   {t('category.gross')}
                 </span>
@@ -708,11 +644,15 @@ function CategoryRow({
             </div>
             {/* Rename Category Dialog */}
             {editingName === category.id && (
+              <CellEditorDialog label={`${t('category.rename')}: ${category.name}`} onCancel={handleCancelEditName}>
               <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded space-y-2">
+                <p id={`category-error-${category.id}`} role={formError ? 'alert' : undefined} className="text-xs text-red-700 dark:text-red-300">{formError}</p>
                 <div>
-                  <label className="block text-[10px] font-medium mb-1">{t('category.categoryName')}:</label>
+                  <label htmlFor={`category-name-${category.id}`} className="block text-xs font-medium mb-1">{t('category.categoryName')}:</label>
                   <input
                     type="text"
+                    id={`category-name-${category.id}`} aria-invalid={!!formError} aria-describedby={`category-error-${category.id}`}
+                    disabled={updateCategoryNameMutation.isPending}
                     value={categoryName}
                     onChange={(e) => setCategoryName(e.target.value)}
                     onKeyDown={(e) => {
@@ -740,31 +680,26 @@ function CategoryRow({
                   </button>
                   <button
                     onClick={handleCancelEditName}
+                    disabled={updateCategoryNameMutation.isPending}
                     className="flex-1 px-3 py-2 text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
                   >
                     ✕ {t('common.cancel')}
                   </button>
                 </div>
               </div>
+              </CellEditorDialog>
             )}
             {editingInputMode === category.id && (
+              <CellEditorDialog label={`${t('inputMode.changeInputMode')}: ${category.name}`} onCancel={() => { if (!formSubmitting.current) setEditingInputMode(null) }}>
               <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded space-y-2">
-                {/* Warning if switching from MONTHLY with existing entries */}
-                {category.input_mode === 'MONTHLY' && inputModeData.mode !== 'MONTHLY' && entries.filter(e => e.category === category.id).length > 0 && (
-                  <div className="p-1.5 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded text-[10px] text-yellow-800 dark:text-yellow-200">
-                    ⚠️ {t('inputMode.warningOverwrite')}
-                  </div>
-                )}
-                {/* Info if switching to MONTHLY from YEARLY/CUSTOM */}
-                {category.input_mode !== 'MONTHLY' && inputModeData.mode === 'MONTHLY' && (
-                  <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 rounded text-[10px] text-blue-800 dark:text-blue-200">
-                    ℹ️ {t('inputMode.infoSwitchToMonthly')}
-                  </div>
-                )}
+                <p className="text-xs text-amber-800 dark:text-amber-200">{t('gridUX.globalHelp')}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-300">{t('gridUX.chfHelp')}</p>
+                <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={confirmedGlobalChange} onChange={e => setConfirmedGlobalChange(e.target.checked)} disabled={updateInputModeMutation.isPending} />{t('gridUX.confirmGlobal')}</label>
+                <p id={`category-error-${category.id}`} role={formError ? 'alert' : undefined} className="text-xs text-red-700 dark:text-red-300">{formError}</p>
                 <div>
-                  <label className="block text-[10px] font-medium mb-1">{t('inputMode.inputMode')}:</label>
+                  <label htmlFor={`category-mode-${category.id}`} className="block text-xs font-medium mb-1">{t('inputMode.inputMode')}:</label>
                   <select
-                    value={inputModeData.mode}
+                    autoFocus id={`category-mode-${category.id}`} aria-invalid={!!formError} aria-describedby={`category-error-${category.id}`} disabled={updateInputModeMutation.isPending} value={inputModeData.mode}
                     onChange={(e) => setInputModeData({ ...inputModeData, mode: e.target.value as InputMode })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -772,7 +707,7 @@ function CategoryRow({
                         handleSaveInputMode(category.id)
                       } else if (e.key === 'Escape') {
                         e.preventDefault()
-                        setEditingInputMode(null)
+                        if (!formSubmitting.current) setEditingInputMode(null)
                       }
                     }}
                     className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
@@ -785,12 +720,12 @@ function CategoryRow({
                 {inputModeData.mode === 'CUSTOM' && (
                   <>
                     <div>
-                      <label className="block text-[10px] font-medium mb-1">{t('inputMode.numberOfMonths')}:</label>
+                      <label htmlFor={`category-count-${category.id}`} className="block text-xs font-medium mb-1">{t('inputMode.numberOfMonths')}:</label>
                       <input
                         type="number"
                         min="1"
                         max="12"
-                        value={inputModeData.customMonths}
+                        id={`category-count-${category.id}`} aria-invalid={!!formError} aria-describedby={`category-error-${category.id}`} disabled={updateInputModeMutation.isPending} value={inputModeData.customMonths}
                         onChange={(e) => setInputModeData({ ...inputModeData, customMonths: parseInt(e.target.value) })}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
@@ -798,16 +733,16 @@ function CategoryRow({
                             handleSaveInputMode(category.id)
                           } else if (e.key === 'Escape') {
                             e.preventDefault()
-                            setEditingInputMode(null)
+                            if (!formSubmitting.current) setEditingInputMode(null)
                           }
                         }}
                         className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-medium mb-1">{t('inputMode.startMonth')}:</label>
+                      <label htmlFor={`category-start-${category.id}`} className="block text-xs font-medium mb-1">{t('inputMode.startMonth')}:</label>
                       <select
-                        value={inputModeData.customStartMonth}
+                        id={`category-start-${category.id}`} aria-invalid={!!formError} aria-describedby={`category-error-${category.id}`} disabled={updateInputModeMutation.isPending} value={inputModeData.customStartMonth}
                         onChange={(e) => setInputModeData({ ...inputModeData, customStartMonth: parseInt(e.target.value) })}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
@@ -815,7 +750,7 @@ function CategoryRow({
                             handleSaveInputMode(category.id)
                           } else if (e.key === 'Escape') {
                             e.preventDefault()
-                            setEditingInputMode(null)
+                            if (!formSubmitting.current) setEditingInputMode(null)
                           }
                         }}
                         className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
@@ -837,6 +772,7 @@ function CategoryRow({
                             <input
                               type="radio"
                               name={`customAmountType-${category.id}`}
+                              disabled={updateInputModeMutation.isPending}
                               checked={inputModeData.customAmountType === 'payment'}
                               onChange={() => setInputModeData({ ...inputModeData, customAmountType: 'payment' })}
                               className="w-3 h-3"
@@ -847,6 +783,7 @@ function CategoryRow({
                             <input
                               type="radio"
                               name={`customAmountType-${category.id}`}
+                              disabled={updateInputModeMutation.isPending}
                               checked={inputModeData.customAmountType === 'total'}
                               onChange={() => setInputModeData({ ...inputModeData, customAmountType: 'total' })}
                               className="w-3 h-3"
@@ -856,17 +793,17 @@ function CategoryRow({
                         </div>
                       </div>
                     )}
-                    <label className="block text-[10px] font-medium mb-1">
+                    <label htmlFor={`category-amount-${category.id}`} className="block text-xs font-medium mb-1">
                       {inputModeData.mode === 'YEARLY' 
                         ? `${t('inputMode.yearlyAmount')}:` 
                         : inputModeData.customAmountType === 'total' 
                           ? `${t('inputMode.totalAmount')}:` 
-                          : `${t('inputMode.paymentAmount')}:`}
+                          : `${t('inputMode.paymentAmount')}:`} (CHF)
                     </label>
                     <input
                       type="number"
                       step="0.01"
-                      value={inputModeData.yearlyAmount}
+                      id={`category-amount-${category.id}`} aria-invalid={!!formError} aria-describedby={`category-error-${category.id}`} disabled={updateInputModeMutation.isPending} value={inputModeData.yearlyAmount}
                       onChange={(e) => setInputModeData({ ...inputModeData, yearlyAmount: e.target.value })}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -874,7 +811,7 @@ function CategoryRow({
                           handleSaveInputMode(category.id)
                         } else if (e.key === 'Escape') {
                           e.preventDefault()
-                          setEditingInputMode(null)
+                          if (!formSubmitting.current) setEditingInputMode(null)
                         }
                       }}
                       className="w-full px-3 py-2 text-xs border rounded dark:bg-gray-600 dark:border-gray-500"
@@ -908,17 +845,22 @@ function CategoryRow({
                     ✓ {t('common.save')}
                   </button>
                   <button
-                    onClick={() => setEditingInputMode(null)}
+                    onClick={() => { if (!formSubmitting.current) setEditingInputMode(null) }}
+                    disabled={updateInputModeMutation.isPending}
                     className="flex-1 px-3 py-2 text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
                   >
                     ✕ {t('common.cancel')}
                   </button>
                 </div>
               </div>
+              </CellEditorDialog>
             )}
             {/* Autofill Dialog */}
             {showAutofillDialog === category.id && (
+              <CellEditorDialog label={`${t('autofill.autofillAll')}: ${category.name}`} onCancel={() => { if (!formSubmitting.current) setShowAutofillDialog(null) }}>
               <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded space-y-3 border border-gray-300 dark:border-gray-600">
+                <p className="text-xs text-gray-600 dark:text-gray-300">{t('gridUX.autofillHelp', { year })}</p>
+                <p id={`category-error-${category.id}`} role={formError ? 'alert' : undefined} className="text-xs text-red-700 dark:text-red-300">{formError}</p>
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold text-gray-900 dark:text-white">
                     🔄 {t('autofill.title')}
@@ -926,11 +868,11 @@ function CategoryRow({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-medium mb-1">{t('autofill.amountPerMonth')}:</label>
+                  <label htmlFor={`category-autofill-${category.id}`} className="block text-xs font-medium mb-1">{t('autofill.amountPerMonth')} (CHF):</label>
                   <input
                     type="number"
                     step="0.01"
-                    value={autofillData.amount}
+                    id={`category-autofill-${category.id}`} aria-invalid={!!formError} aria-describedby={`category-error-${category.id}`} disabled={autofillMonthsMutation.isPending} value={autofillData.amount}
                     onChange={(e) => setAutofillData({ ...autofillData, amount: e.target.value })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -938,7 +880,7 @@ function CategoryRow({
                         handleAutofill(category.id)
                       } else if (e.key === 'Escape') {
                         e.preventDefault()
-                        setShowAutofillDialog(null)
+                        if (!formSubmitting.current) setShowAutofillDialog(null)
                       }
                     }}
                     placeholder="0.00"
@@ -953,6 +895,7 @@ function CategoryRow({
                     <label className="flex items-center gap-1.5 text-xs">
                       <input
                         type="radio"
+                        disabled={autofillMonthsMutation.isPending}
                         checked={autofillData.mode === 'all'}
                         onChange={() => setAutofillData({ ...autofillData, mode: 'all' })}
                         className="text-purple-600"
@@ -962,6 +905,7 @@ function CategoryRow({
                     <label className="flex items-center gap-1.5 text-xs">
                       <input
                         type="radio"
+                        disabled={autofillMonthsMutation.isPending}
                         checked={autofillData.mode === 'empty'}
                         onChange={() => setAutofillData({ ...autofillData, mode: 'empty' })}
                         className="text-purple-600"
@@ -971,6 +915,7 @@ function CategoryRow({
                     <label className="flex items-center gap-1.5 text-xs">
                       <input
                         type="radio"
+                        disabled={autofillMonthsMutation.isPending}
                         checked={autofillData.mode === 'remaining'}
                         onChange={() => setAutofillData({ ...autofillData, mode: 'remaining' })}
                         className="text-purple-600"
@@ -978,7 +923,7 @@ function CategoryRow({
                       <span>{t('autofill.fillFromMonth')}:</span>
                       {autofillData.mode === 'remaining' && (
                         <select
-                          value={autofillData.startMonth}
+                          aria-label={t('inputMode.startMonth')} disabled={autofillMonthsMutation.isPending} value={autofillData.startMonth}
                           onChange={(e) => setAutofillData({ ...autofillData, startMonth: parseInt(e.target.value) })}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
@@ -986,7 +931,7 @@ function CategoryRow({
                               handleAutofill(category.id)
                             } else if (e.key === 'Escape') {
                               e.preventDefault()
-                              setShowAutofillDialog(null)
+                              if (!formSubmitting.current) setShowAutofillDialog(null)
                             }
                           }}
                           className="px-1.5 py-0.5 text-[10px] border rounded dark:bg-gray-600 dark:border-gray-500"
@@ -1009,13 +954,15 @@ function CategoryRow({
                     {autofillMonthsMutation.isPending ? `⏳ ${t('autofill.filling')}` : `✓ ${t('autofill.fill')}`}
                   </button>
                   <button
-                    onClick={() => setShowAutofillDialog(null)}
+                    onClick={() => { if (!formSubmitting.current) setShowAutofillDialog(null) }}
+                    disabled={autofillMonthsMutation.isPending}
                     className="flex-1 px-3 py-2 text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300"
                   >
                     ✕ {t('common.cancel')}
                   </button>
                 </div>
               </div>
+              </CellEditorDialog>
             )}
           </td>
           <td className="px-3 py-2 text-center">
@@ -1028,11 +975,13 @@ function CategoryRow({
             const monthlyAmount = getMonthlyAmount(category)
             return (
               <MonthlyCell
-                key={`${category.id}-${month}`}
+                key={`${category.id}-${year}-${month}`}
                 categoryId={category.id}
                 month={month}
                 entry={entry}
                 budgetId={budgetId}
+                budgetYear={year}
+                onEditSettings={() => handleEditInputMode(category)}
                 displayCurrency={displayCurrency}
                 category={category}
                 calculatedMonthlyAmount={monthlyAmount}
@@ -1043,15 +992,15 @@ function CategoryRow({
             {formatCurrency(calculateTotal(category), displayCurrency)}
           </td>
           <td className="px-3 py-2 text-center">
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 flex-nowrap">
+            <div className="flex items-center justify-center gap-1 flex-nowrap">
               {/* Rename button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   handleEditName(category)
                 }}
-                className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                title={t('category.rename')}
+                className="text-sm px-1.5 py-1 min-w-[44px] min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                aria-label={t('category.rename') + ": " + category.name} title={t('category.rename')}
               >
                 ✏️
               </button>
@@ -1061,8 +1010,8 @@ function CategoryRow({
                   e.stopPropagation()
                   handleEditInputMode(category)
                 }}
-                className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                title={t('inputMode.changeInputMode')}
+                className="text-sm px-1.5 py-1 min-w-[44px] min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                aria-label={t('inputMode.changeInputMode') + ": " + category.name} title={t('inputMode.changeInputMode')}
               >
                 ⚙️
               </button>
@@ -1073,8 +1022,8 @@ function CategoryRow({
                     e.stopPropagation()
                     handleOpenAutofill(category)
                   }}
-                  className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                  title={t('autofill.autofillAll')}
+                  className="text-sm px-1.5 py-1 min-w-[44px] min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
+                  aria-label={t('autofill.autofillAll') + ": " + category.name} title={t('autofill.autofillAll')}
                 >
                   🔄
                 </button>
@@ -1084,11 +1033,13 @@ function CategoryRow({
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
+                    if (copySubmitting.current) return
+                    copySubmitting.current = true
                     copyPreviousMonthMutation.mutate({ categoryId: category.id, month: displayMonths[0] })
                   }}
                   disabled={copyPreviousMonthMutation.isPending}
-                  className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={t('entry.copyPreviousMonth')}
+                  className="text-sm px-1.5 py-1 min-w-[44px] min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label={t('entry.copyPreviousMonth') + ": " + category.name} title={t('entry.copyPreviousMonth')}
                 >
                   ⏮️
                 </button>
@@ -1099,9 +1050,9 @@ function CategoryRow({
                   e.stopPropagation()
                   handleDeleteCategory(category.id, category.name)
                 }}
-                disabled={deleteCategoryMutation.isPending}
-                className="text-sm px-1.5 py-1 min-w-[24px] min-h-[24px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                title={t('common.delete')}
+                disabled={deleteCategoryMutation.isPending || updateInputModeMutation.isPending || updateCategoryNameMutation.isPending || autofillMonthsMutation.isPending}
+                className="text-sm px-1.5 py-1 min-w-[44px] min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label={t('common.delete') + ": " + category.name} title={t('common.delete')}
               >
                 🗑️
               </button>
@@ -1133,7 +1084,7 @@ function CategoryRow({
               })}
               <td className="px-3 py-2 text-center text-sm font-bold bg-gray-50 dark:bg-gray-700/50">
                 {formatCurrency(
-                  categories.reduce((sum, category) => sum + calculateTotal(category), 0),
+                  yearlyTotal,
                   displayCurrency
                 )}
               </td>

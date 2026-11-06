@@ -1,3 +1,4 @@
+import { isSalaryCategory } from '../utils/salary'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -86,9 +87,10 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
   })
 
   const handleAddCategory = () => {
+    if (addCategoryMutation.isPending) return
     if (newCategoryName.trim()) {
       addCategoryMutation.mutate({
-        name: newCategoryName,
+        name: newCategoryName.trim(),
         category_type: newCategoryType,
         order: categories.length,
         is_active: true,
@@ -117,7 +119,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
   // Get gross salary amount for a specific month (Brutto)
   const getGrossSalaryForMonth = (month: number): number => {
     const salaryCategory = categories.find(
-      (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+      isSalaryCategory
     )
     if (!salaryCategory) return 0
 
@@ -155,7 +157,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
       )
 
       if (salaryEntry) {
-        return parseFloat(salaryEntry.actual_amount || salaryEntry.planned_amount)
+        return parseFloat(salaryEntry.planned_amount)
       }
     }
 
@@ -234,14 +236,14 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
           (e) => e.category === category.id && e.month === month
         )
         categoryAmount = categoryEntries.reduce((sum, entry) => {
-          return sum + parseFloat(entry.actual_amount || entry.planned_amount)
+          return sum + parseFloat(entry.planned_amount)
         }, 0)
       }
 
       // Add to appropriate total
       if (category.category_type === 'INCOME') {
         // For salary category, use net salary (gross - reductions)
-        if (category.name.toLowerCase().includes('gehalt')) {
+        if (category.id === categories.find(isSalaryCategory)?.id) {
           income += getNetSalaryForMonth(month)
         } else {
           income += categoryAmount
@@ -278,6 +280,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <button
             onClick={toggleAllGroups}
+            aria-expanded={!allCollapsed}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold transition-all shadow-lg hover:shadow-xl active:scale-95 border border-blue-500/20"
             title={allCollapsed ? t('common.expandAll') : t('common.collapseAll')}
           >
@@ -336,11 +339,14 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="new-category-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {t('category.categoryName')} *
                 </label>
                 <input
                   type="text"
+                  id="new-category-name"
+                  maxLength={200}
+                  disabled={addCategoryMutation.isPending}
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   onKeyDown={(e) => {
@@ -359,10 +365,12 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="new-category-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {t('common.type')} *
                 </label>
                 <select
+                  id="new-category-type"
+                  disabled={addCategoryMutation.isPending}
                   value={newCategoryType}
                   onChange={(e) => setNewCategoryType(e.target.value as 'INCOME' | 'FIXED_EXPENSE' | 'VARIABLE_EXPENSE' | 'SAVINGS')}
                   onKeyDown={(e) => {
@@ -414,28 +422,37 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
         ) : null}
       </div>
 
-      <div className="overflow-x-auto w-full">
-        <table className="w-full border-collapse">
+      <p className="px-6 py-3 text-sm text-slate-600 dark:text-slate-300">{t('editorUX.tableHelp')}</p>
+      <div className="budget-grid w-full min-w-0" role="region" aria-label={t('editorUX.budgetGrid')}>
+        <table className="budget-table w-full border-collapse">
+          <caption className="sr-only">{t('editorUX.gridCaption', { year: budgetYear })}</caption>
+          <colgroup>
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '7%' }} />
+            {displayMonths.map(month => <col key={month} style={{ width: `${64 / displayMonths.length}%` }} />)}
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '7%' }} />
+          </colgroup>
           <thead>
             <tr className="bg-slate-100 dark:bg-slate-700">
-              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 sticky left-0 bg-slate-100 dark:bg-slate-700 z-10 min-w-[180px]">
+              <th scope="col" className="px-4 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700">
                 {t('table.category')}
               </th>
-              <th className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[100px]">
+              <th scope="col" className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600">
                 {t('common.type')}
               </th>
               {displayMonths.map((month) => (
-                <th
+                <th scope="col"
                   key={month}
-                  className="px-3 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[110px]"
+                  className="px-3 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600"
                 >
                   {MONTHS[month - 1]}
                 </th>
               ))}
-              <th className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[120px]">
+              <th scope="col" className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600">
                 {t('common.total')}
               </th>
-              <th className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600 min-w-[80px]">
+              <th scope="col" className="px-4 py-2 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-300 dark:border-slate-600">
                 {t('common.actions')}
               </th>
             </tr>
@@ -495,6 +512,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => handleCollapseChange('MONTHLY_BALANCE', !collapseStates.MONTHLY_BALANCE)}
+                    aria-expanded={!collapseStates.MONTHLY_BALANCE}
                     className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-slate-300 dark:border-slate-600"
                     title={collapseStates.MONTHLY_BALANCE ? t('common.expand') : t('common.collapse')}
                     aria-label={collapseStates.MONTHLY_BALANCE ? t('common.expand') : t('common.collapse')}
@@ -585,7 +603,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 const balance = getActualBalanceForMonth(month)
                 return (
                   <ActualBalanceCell
-                    key={month}
+                    key={`${budgetYear}-${month}`}
                     month={month}
                     balance={balance}
                     budgetId={budgetId}
@@ -612,7 +630,7 @@ function BudgetTable({ budgetId, categories, entries, taxEntries, salaryReductio
                 const balance = getActualBalanceForMonth(month)
                 return (
                   <ActualBalanceCell
-                    key={month}
+                    key={`${budgetYear}-${month}`}
                     month={month}
                     balance={balance}
                     budgetId={budgetId}

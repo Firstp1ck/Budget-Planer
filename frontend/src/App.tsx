@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Toaster } from 'react-hot-toast'
 import { DarkModeProvider } from './contexts/DarkModeContext'
 import Layout from './components/Layout'
@@ -12,6 +13,7 @@ import { initializeExchangeRates } from './utils/currency'
 import './i18n'
 
 function App() {
+  const { t } = useTranslation()
   const [isBackendReady, setIsBackendReady] = useState(false)
   
   // Initialize exchange rates when backend becomes ready
@@ -71,7 +73,15 @@ function App() {
           />
           <Routes>
             <Route path="/" element={<BudgetDashboard />} />
+            <Route path="/index.html" element={<Navigate to="/" replace />} />
             <Route path="/budget/:id" element={<BudgetEditor />} />
+            <Route path="*" element={
+              <div className="mx-auto max-w-lg px-4 py-12 text-center text-gray-900 dark:text-white">
+                <h1 className="text-2xl font-bold mb-3">{t('shellUX.pageNotFound')}</h1>
+                <p className="mb-6">{t('shellUX.pageNotFoundHint')}</p>
+                <Link to="/" className="inline-block rounded-lg bg-blue-600 px-5 py-3 text-white">{t('header.overview')}</Link>
+              </div>
+            } />
           </Routes>
         </Layout>
       </DarkModeProvider>

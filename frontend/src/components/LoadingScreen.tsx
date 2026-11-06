@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { budgetApi } from '../services/api'
 import { useDarkMode } from '../contexts/DarkModeContext'
@@ -41,16 +41,10 @@ function LoadingScreen({
   const [status, setStatus] = useState<LoadingStatus>('initializing')
   const [attempt, setAttempt] = useState(0)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [startTime] = useState(() => Date.now())
+  const [retryRun, setRetryRun] = useState(0)
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
-
-  // Update elapsed time every second
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000))
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [startTime])
 
   const getStatusInfo = useCallback((): StatusMessage => {
     switch (status) {
@@ -64,7 +58,7 @@ function LoadingScreen({
         return {
           status,
           message: t('loading.checking_backend', 'Verbindung wird hergestellt...'),
-          detail: t('loading.checking_backend_detail', `Versuch ${attempt + 1}`)
+          detail: t('loading.checking_backend_detail', { attempt: attempt + 1 })
         }
       case 'waiting_for_migrations':
         return {
@@ -93,74 +87,57 @@ function LoadingScreen({
     }
   }, [status, attempt, errorMessage, t])
 
-  const checkBackendHealth = useCallback(async (): Promise<boolean> => {
-    try {
-      await budgetApi.health()
-      return true
-    } catch {
-      return false
-    }
-  }, [])
-
-  const runHealthCheck = useCallback(async () => {
-    let currentAttempt = 0
-    let isReady = false
-    
-    // Initial delay to let backend start
-    setStatus('initializing')
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    while (currentAttempt < maxRetries && !isReady) {
-      setAttempt(currentAttempt)
-      
-      // Update status based on attempt number
-      if (currentAttempt < 3) {
-        setStatus('checking_backend')
-      } else if (currentAttempt < 15) {
-        setStatus('waiting_for_migrations')
-      } else {
-        setStatus('connecting')
-      }
-      
-      // Check if we've exceeded max wait time
-      if (Date.now() - startTime > maxWaitTimeMs) {
-        setStatus('error')
-        setErrorMessage(t('loading.timeout', 'Zeitüberschreitung beim Warten auf Backend'))
-        return
-      }
-      
-      isReady = await checkBackendHealth()
-      
-      if (isReady) {
-        setStatus('ready')
-        // Small delay to show "Ready" state before transitioning
-        await new Promise(resolve => setTimeout(resolve, 300))
-        onReady()
-        return
-      }
-      
-      currentAttempt++
-      
-      // Progressive delay: start at 1s, increase to max 2s
-      const delay = Math.min(retryDelayMs + (currentAttempt * 50), 2000)
-      await new Promise(resolve => setTimeout(resolve, delay))
-    }
-    
-    // Max retries exceeded
-    setStatus('error')
-    setErrorMessage(t('loading.max_retries', 'Backend-Server konnte nicht gestartet werden'))
-  }, [maxRetries, retryDelayMs, maxWaitTimeMs, startTime, checkBackendHealth, onReady, t])
-
   useEffect(() => {
-    runHealthCheck()
-  }, []) // Run once on mount
-
-  const handleRetry = () => {
+    let cancelled = false
+    const controller = new AbortController()
+    const timers = new Set<ReturnType<typeof setTimeout>>()
+    const started = Date.now()
+    const pause = (ms: number) => new Promise<void>(resolve => {
+      const timer = setTimeout(() => { timers.delete(timer); resolve() }, ms)
+      timers.add(timer)
+    })
     setStatus('initializing')
     setAttempt(0)
     setErrorMessage(null)
-    runHealthCheck()
-  }
+    setElapsedSeconds(0)
+    const clock = setInterval(() => {
+      if (!cancelled) setElapsedSeconds(Math.floor((Date.now() - started) / 1000))
+    }, 1000)
+    const run = async () => {
+      await pause(500)
+      for (let currentAttempt = 0; currentAttempt < maxRetries && !cancelled; currentAttempt++) {
+        if (Date.now() - started >= maxWaitTimeMs) break
+        setAttempt(currentAttempt)
+        setStatus(currentAttempt < 3 ? 'checking_backend' : currentAttempt < 15 ? 'waiting_for_migrations' : 'connecting')
+        try {
+          await budgetApi.health(controller.signal)
+          if (cancelled) return
+          setStatus('ready')
+          clearInterval(clock)
+          await pause(300)
+          if (!cancelled) onReadyRef.current()
+          return
+        } catch {
+          if (cancelled) return
+        }
+        await pause(Math.min(retryDelayMs + (currentAttempt + 1) * 50, 2000))
+      }
+      if (!cancelled) {
+        clearInterval(clock)
+        setStatus('error')
+        setErrorMessage(Date.now() - started >= maxWaitTimeMs ? t('loading.timeout') : t('loading.max_retries'))
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+      controller.abort()
+      clearInterval(clock)
+      timers.forEach(clearTimeout)
+    }
+  }, [retryRun, maxRetries, retryDelayMs, maxWaitTimeMs, t])
+
+  const handleRetry = () => setRetryRun(value => value + 1)
 
   const statusInfo = getStatusInfo()
   
@@ -206,7 +183,7 @@ function LoadingScreen({
         </div>
 
         {/* Status Message */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-6" role="status" aria-live="polite" aria-atomic="true">
           <p className={`text-lg font-semibold mb-1 ${
             status === 'error'
               ? 'text-red-500'
@@ -249,7 +226,7 @@ function LoadingScreen({
               <span className={`text-xs ${
                 isDark ? 'text-slate-500' : 'text-gray-400'
               }`}>
-                {Math.round(progressPercent)}%
+                {t('shellUX.connecting')}
               </span>
             </div>
           </div>

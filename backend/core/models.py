@@ -28,7 +28,7 @@ class Budget(models.Model):
         total_expenses = Decimal('0')
 
         for entry in entries:
-            amount = Decimal(entry.actual_amount or entry.planned_amount)
+            amount = Decimal(entry.actual_amount if entry.actual_amount is not None else entry.planned_amount)
             if entry.category.category_type == 'INCOME':
                 total_income += amount
             else:
@@ -202,7 +202,7 @@ class BudgetEntry(models.Model):
 
     def calculate_status(self):
         """Auto-determine status based on actual vs planned amounts"""
-        if not self.actual_amount or self.actual_amount == 0:
+        if self.actual_amount is None:
             return 'WITHIN_BUDGET'
 
         planned = Decimal(self.planned_amount)

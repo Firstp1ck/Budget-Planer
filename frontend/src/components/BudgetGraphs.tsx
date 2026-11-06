@@ -1,3 +1,4 @@
+import { isSalaryCategory } from '../utils/salary'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -75,9 +76,9 @@ function BudgetGraphs({
   ], [t])
 
   // Get gross salary for a specific month
-  const getGrossSalaryForMonth = (month: number): number => {
+  const getGrossSalaryForMonth = (month: number, planned = false): number => {
     const salaryCategory = categories.find(
-      (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+      isSalaryCategory
     )
     if (!salaryCategory) return 0
 
@@ -110,7 +111,7 @@ function BudgetGraphs({
       )
 
       if (salaryEntry) {
-        return parseFloat(salaryEntry.actual_amount || salaryEntry.planned_amount)
+        return parseFloat(planned ? salaryEntry.planned_amount : (salaryEntry.actual_amount ?? salaryEntry.planned_amount))
       }
     }
 
@@ -118,8 +119,8 @@ function BudgetGraphs({
   }
 
   // Calculate tax amount for a tax entry in a specific month
-  const calculateTaxAmount = (tax: TaxEntry, month: number): number => {
-    const salary = getGrossSalaryForMonth(month)
+  const calculateTaxAmount = (tax: TaxEntry, month: number, planned = false): number => {
+    const salary = getGrossSalaryForMonth(month, planned)
     if (salary === 0) return 0
     return (salary * parseFloat(tax.percentage)) / 100
   }
@@ -188,7 +189,20 @@ function BudgetGraphs({
     }, 0)
 
     expenses += totalTaxes
-    plannedExpenses += totalTaxes
+    plannedExpenses += taxEntries.reduce((sum, tax) => sum + (tax.is_active ? calculateTaxAmount(tax, month, true) : 0), 0)
+
+    // The overview uses net salary; use the same deductions for chart balances.
+    const deductionsFor = (planned: boolean) => {
+      const gross = getGrossSalaryForMonth(month, planned)
+      if (gross <= 0) return 0
+      const deductions = salaryReductions.reduce((sum, reduction) => {
+        if (!reduction.is_active) return sum
+        return sum + (reduction.reduction_type === 'PERCENTAGE' ? gross * parseFloat(reduction.value) / 100 : parseFloat(reduction.value))
+      }, 0)
+      return Math.min(gross, deductions)
+    }
+    income -= deductionsFor(false)
+    plannedIncome -= deductionsFor(true)
 
     return {
       income,

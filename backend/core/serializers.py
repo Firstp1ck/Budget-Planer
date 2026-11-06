@@ -116,3 +116,27 @@ class BudgetSummarySerializer(serializers.Serializer):
     tax_entries = TaxEntrySerializer(many=True)
     salary_reductions = SalaryReductionSerializer(many=True)
     actual_balances = MonthlyActualBalanceSerializer(many=True)
+
+
+class PlannedMonthSerializer(serializers.Serializer):
+    month = serializers.IntegerField(min_value=1, max_value=12)
+    planned_amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)
+
+
+class PlanEntriesSerializer(serializers.Serializer):
+    year = serializers.IntegerField(min_value=2000, max_value=2100)
+    entries = PlannedMonthSerializer(many=True, allow_empty=False)
+
+    def validate_entries(self, entries):
+        months = [entry['month'] for entry in entries]
+        if len(months) != len(set(months)):
+            raise serializers.ValidationError('Each month may appear only once.')
+        return entries
+
+
+class ActualBalanceFieldSerializer(serializers.Serializer):
+    budget = serializers.PrimaryKeyRelatedField(queryset=Budget.objects.all())
+    year = serializers.IntegerField(min_value=2000, max_value=2100)
+    month = serializers.IntegerField(min_value=1, max_value=12)
+    field = serializers.ChoiceField(choices=['income', 'expenses'])
+    value = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0)

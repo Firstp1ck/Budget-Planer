@@ -5,13 +5,16 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from django.http import HttpResponse
 from .models import Budget, BudgetEntry
 from decimal import Decimal
+from datetime import date
 
 
-def export_budget_to_excel(budget):
+def export_budget_to_excel(budget, year=None):
     """Export a budget to Excel format matching the original Numbers structure"""
+    if year is None:
+        year = max(budget.get_available_years(), default=date.today().year)
     wb = Workbook()
     ws = wb.active
-    ws.title = f"{budget.name} {budget.year}"
+    ws.title = f"Budget {year}"
 
     # Month headers
     months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -37,7 +40,7 @@ def export_budget_to_excel(budget):
 
     # Get all categories and entries
     categories = budget.categories.filter(is_active=True).order_by('order')
-    entries = BudgetEntry.objects.filter(category__budget=budget, year=budget.year)
+    entries = BudgetEntry.objects.filter(category__budget=budget, year=year)
 
     current_row = 2
 
@@ -72,13 +75,13 @@ def export_budget_to_excel(budget):
                 cell = ws.cell(row=current_row, column=month + 1)
 
                 if entry:
-                    amount = Decimal(entry.actual_amount or entry.planned_amount)
+                    amount = Decimal(entry.actual_amount if entry.actual_amount is not None else entry.planned_amount)
                     cell.value = float(amount)
                     cell.number_format = '#,##0.00'
                     yearly_total += amount
 
                     # Color coding based on status
-                    if entry.actual_amount:
+                    if entry.actual_amount is not None:
                         if entry.status == 'WITHIN_BUDGET':
                             cell.fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
                         elif entry.status == 'WARNING':
@@ -109,12 +112,12 @@ def export_budget_to_excel(budget):
     # Calculate monthly and yearly totals
     for month in range(1, 13):
         month_income = sum(
-            Decimal(e.actual_amount or e.planned_amount)
+            Decimal(e.actual_amount if e.actual_amount is not None else e.planned_amount)
             for e in entries
             if e.month == month and e.category.category_type == 'INCOME'
         )
         month_expenses = sum(
-            Decimal(e.actual_amount or e.planned_amount)
+            Decimal(e.actual_amount if e.actual_amount is not None else e.planned_amount)
             for e in entries
             if e.month == month and e.category.category_type != 'INCOME'
         )
@@ -132,7 +135,7 @@ def export_budget_to_excel(budget):
             cell.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
     # Yearly balance
-    yearly_summary = budget.get_yearly_summary()
+    yearly_summary = budget.get_yearly_summary(year)
     balance_cell = ws.cell(row=current_row, column=total_col)
     balance_cell.value = float(yearly_summary['balance'])
     balance_cell.number_format = '#,##0.00'
@@ -148,7 +151,7 @@ def export_budget_to_excel(budget):
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = f'attachment; filename="{budget.name}_{budget.year}.xlsx"'
+    response['Content-Disposition'] = f'attachment; filename="{budget.name}_{year}.xlsx"'
 
     wb.save(response)
     return response

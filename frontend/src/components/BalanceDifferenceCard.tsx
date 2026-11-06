@@ -1,3 +1,4 @@
+import { isSalaryCategory } from '../utils/salary'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BudgetCategory, BudgetEntry, TaxEntry, SalaryReduction, MonthlyActualBalance } from '../types/budget'
@@ -113,10 +114,10 @@ function BalanceDifferenceCard({
       }
 
       if (category.category_type === 'INCOME') {
-        if (category.name.toLowerCase().includes('gehalt')) {
+        if (category.id === categories.find(isSalaryCategory)?.id) {
           // Calculate net salary for planned
           const salaryCategory = categories.find(
-            (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+            isSalaryCategory
           )
           if (salaryCategory) {
             let grossSalary = 0
@@ -167,7 +168,7 @@ function BalanceDifferenceCard({
     taxEntries.forEach((tax) => {
       if (tax.is_active) {
         const salaryCategory = categories.find(
-          (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+          isSalaryCategory
         )
         if (salaryCategory) {
           let grossSalary = 0

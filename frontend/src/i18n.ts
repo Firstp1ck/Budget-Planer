@@ -62,4 +62,10 @@ i18n
     },
   })
 
+const syncDocumentLanguage = () => {
+  document.documentElement.lang = i18n.resolvedLanguage || i18n.language || 'en-US'
+}
+i18n.on('languageChanged', syncDocumentLanguage)
+syncDocumentLanguage()
+
 export default i18n

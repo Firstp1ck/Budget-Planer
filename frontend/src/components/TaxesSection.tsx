@@ -1,3 +1,4 @@
+import { isSalaryCategory } from '../utils/salary'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -47,20 +48,12 @@ function TaxesSection({
 
   // Find salary category (Gehalt)
   const salaryCategory = categories.find(
-    (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+    isSalaryCategory
   )
 
   // Get salary amount for a specific month
   const getSalaryForMonth = (month: number): number => {
     if (!salaryCategory) return 0
-
-    const salaryEntry = entries.find(
-      (e) => e.category === salaryCategory.id && e.month === month
-    )
-
-    if (salaryEntry) {
-      return parseFloat(salaryEntry.actual_amount || salaryEntry.planned_amount)
-    }
 
     // Check if salary category has yearly/custom mode
     if (salaryCategory.input_mode === 'YEARLY' && salaryCategory.yearly_amount) {
@@ -85,7 +78,9 @@ function TaxesSection({
       }
     }
 
-    return 0
+    if (salaryCategory.input_mode !== 'MONTHLY') return 0
+    const salaryEntry = entries.find(entry => entry.category === salaryCategory.id && entry.month === month)
+    return salaryEntry ? parseFloat(salaryEntry.actual_amount ?? salaryEntry.planned_amount) : 0
   }
 
   // Calculate tax amount for a tax entry in a specific month
@@ -132,13 +127,14 @@ function TaxesSection({
   })
 
   const handleSaveTax = () => {
+    if (createTaxMutation.isPending || updateTaxMutation.isPending) return
     if (!taxFormData.name.trim() || !taxFormData.percentage) {
       toast.error(t('validation.enterNameAndPercentage'))
       return
     }
 
-    const percentage = parseFloat(taxFormData.percentage)
-    if (isNaN(percentage) || percentage < 0 || percentage > 100) {
+    const percentage = Number(taxFormData.percentage)
+    if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
       toast.error(t('validation.percentageRange'))
       return
     }
@@ -208,6 +204,7 @@ function TaxesSection({
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setIsCollapsed(!isCollapsed)}
+                  aria-expanded={!isCollapsed}
                   className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
                   title={t('common.expand')}
                   aria-label={t('common.expand')}
@@ -243,6 +240,7 @@ function TaxesSection({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsCollapsed(!isCollapsed)}
+                  aria-expanded={!isCollapsed}
                 className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
                 title={t('common.collapse')}
                 aria-label={t('common.collapse')}
@@ -252,8 +250,9 @@ function TaxesSection({
                 </span>
               </button>
               <span>{t('tax.taxesIcon')}</span>
+              <span className="text-xs font-normal">{t('editorUX.sharedSettings')}</span>
               <span className="text-xs font-normal opacity-75">({taxEntries.length})</span>
-              {!isAddingTax && (
+              {!isAddingTax && !editingTaxId && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -273,6 +272,7 @@ function TaxesSection({
           </td>
         )}
       </tr>
+      {(createTaxMutation.isError || updateTaxMutation.isError) && <tr><td colSpan={displayMonths.length + 4}><p role="alert" className="p-3 text-sm text-red-700 dark:text-red-300">{t(createTaxMutation.isError ? 'tax.errorAdding' : 'tax.errorUpdating')} {t('editorUX.retry')}</p></td></tr>}
       {!isCollapsed && (
         <>
           {sortedTaxEntries.map((tax) => (
@@ -285,6 +285,10 @@ function TaxesSection({
                   <td className="px-4 py-2">
                     <input
                       type="text"
+                      autoFocus
+                      maxLength={200}
+                      aria-label={t('common.name')}
+                      disabled={createTaxMutation.isPending || updateTaxMutation.isPending}
                       value={taxFormData.name}
                       onChange={(e) => setTaxFormData({ ...taxFormData, name: e.target.value })}
                       onKeyDown={(e) => {
@@ -293,7 +297,7 @@ function TaxesSection({
                           handleUpdateTax()
                         } else if (e.key === 'Escape') {
                           e.preventDefault()
-                          handleCancelEdit()
+                          if (!createTaxMutation.isPending && !updateTaxMutation.isPending) handleCancelEdit()
                         }
                       }}
                       className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -305,6 +309,8 @@ function TaxesSection({
                       <div className="flex items-center gap-2">
                         <input
                           type="number"
+                      aria-label={t('editorUX.taxPercentage')}
+                      disabled={createTaxMutation.isPending || updateTaxMutation.isPending}
                           step="0.01"
                           min="0"
                           max="100"
@@ -316,7 +322,7 @@ function TaxesSection({
                               handleUpdateTax()
                             } else if (e.key === 'Escape') {
                               e.preventDefault()
-                              handleCancelEdit()
+                              if (!createTaxMutation.isPending && !updateTaxMutation.isPending) handleCancelEdit()
                             }
                           }}
                           className="flex-1 px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -354,17 +360,17 @@ function TaxesSection({
                         }}
                         disabled={updateTaxMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={t('common.save')}
+                        title={t('common.save')} aria-label={t('common.save')}
                       >
                         ✓
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleCancelEdit()
+                          if (!createTaxMutation.isPending && !updateTaxMutation.isPending) handleCancelEdit()
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title={t('common.cancel')}
+                        title={t('common.cancel')} aria-label={t('common.cancel')}
                       >
                         ✕
                       </button>
@@ -405,14 +411,14 @@ function TaxesSection({
                     )}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <div className="opacity-100 transition-opacity flex items-center justify-center gap-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           handleEditTax(tax)
                         }}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                        title={t('tax.editTax')}
+                        title={t('tax.editTax')} aria-label={t('tax.editTax')}
                       >
                         ✏️
                       </button>
@@ -423,7 +429,7 @@ function TaxesSection({
                         }}
                         disabled={deleteTaxMutation.isPending}
                         className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={t('tax.deleteTax')}
+                        title={t('tax.deleteTax')} aria-label={t('tax.deleteTax')}
                       >
                         🗑️
                       </button>
@@ -482,6 +488,10 @@ function TaxesSection({
               <td className="px-4 py-2">
                 <input
                   type="text"
+                      autoFocus
+                      maxLength={200}
+                      aria-label={t('common.name')}
+                      disabled={createTaxMutation.isPending || updateTaxMutation.isPending}
                   value={taxFormData.name}
                   onChange={(e) => setTaxFormData({ ...taxFormData, name: e.target.value })}
                   onKeyDown={(e) => {
@@ -490,7 +500,7 @@ function TaxesSection({
                       handleSaveTax()
                     } else if (e.key === 'Escape') {
                       e.preventDefault()
-                      handleCancelEdit()
+                      if (!createTaxMutation.isPending && !updateTaxMutation.isPending) handleCancelEdit()
                     }
                   }}
                   className="px-4 py-2 w-full border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -502,6 +512,8 @@ function TaxesSection({
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
+                      aria-label={t('editorUX.taxPercentage')}
+                      disabled={createTaxMutation.isPending || updateTaxMutation.isPending}
                       step="0.01"
                       min="0"
                       max="100"
@@ -513,7 +525,7 @@ function TaxesSection({
                           handleSaveTax()
                         } else if (e.key === 'Escape') {
                           e.preventDefault()
-                          handleCancelEdit()
+                          if (!createTaxMutation.isPending && !updateTaxMutation.isPending) handleCancelEdit()
                         }
                       }}
                       className="flex-1 px-4 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -540,17 +552,17 @@ function TaxesSection({
                     }}
                     disabled={createTaxMutation.isPending}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-green-500 text-white rounded-md hover:bg-green-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={t('common.save')}
+                    title={t('common.save')} aria-label={t('common.save')}
                   >
                     ✓
                   </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      handleCancelEdit()
+                      if (!createTaxMutation.isPending && !updateTaxMutation.isPending) handleCancelEdit()
                     }}
                     className="text-base px-3 py-2 min-w-[36px] min-h-[36px] bg-gray-500 text-white rounded-md hover:bg-gray-600 hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center"
-                    title={t('common.cancel')}
+                    title={t('common.cancel')} aria-label={t('common.cancel')}
                   >
                     ✕
                   </button>

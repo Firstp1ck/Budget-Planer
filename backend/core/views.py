@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError, transaction
+from django.db.models import F
 import json
 import logging
 from .models import Budget, BudgetCategory, BudgetEntry, BudgetTemplate, TaxEntry, SalaryReduction, MonthlyActualBalance
@@ -17,6 +18,8 @@ from .serializers import (
     YearlySummarySerializer,
     BudgetSummarySerializer,
     MonthlyActualBalanceSerializer,
+    PlanEntriesSerializer,
+    ActualBalanceFieldSerializer,
 )
 from .utils import export_budget_to_excel
 
@@ -85,6 +88,20 @@ class BudgetViewSet(viewsets.ModelViewSet):
         }
 
         serializer = BudgetSummarySerializer(data)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='export_json')
+    def export_budget(self, request, pk=None):
+        """Export the complete budget, including inactive configuration/history."""
+        budget = self.get_object()
+        serializer = BudgetSummarySerializer({
+            'budget': budget,
+            'categories': budget.categories.all(),
+            'entries': BudgetEntry.objects.filter(category__budget=budget),
+            'tax_entries': budget.tax_entries.all(),
+            'salary_reductions': budget.salary_reductions.all(),
+            'actual_balances': budget.actual_balances.all(),
+        })
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'], url_path='monthly/(?P<month>[0-9]+)')
@@ -192,8 +209,6 @@ class BudgetViewSet(viewsets.ModelViewSet):
         # Handle different data types that DRF might return
         if hasattr(data, 'dict'):
             data = data.dict()
-        elif isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
-            data = data[0]
         elif not isinstance(data, dict):
             data = {}
         
@@ -211,6 +226,42 @@ class BudgetViewSet(viewsets.ModelViewSet):
         tax_entries_data = data.get('tax_entries', [])
         salary_reductions_data = data.get('salary_reductions', [])
         actual_balances_data = data.get('actual_balances', [])
+
+        # Validate shapes and source references before any writes. Never silently
+        # omit history from an otherwise apparently successful import.
+        collections = {
+            'categories': categories_data, 'entries': entries_data,
+            'tax_entries': tax_entries_data, 'salary_reductions': salary_reductions_data,
+            'actual_balances': actual_balances_data,
+        }
+        for field, members in collections.items():
+            if not isinstance(members, list) or any(not isinstance(member, dict) for member in members):
+                return Response({field: ['Must be an array of objects.']}, status=status.HTTP_400_BAD_REQUEST)
+        category_ids = set()
+        for index, category in enumerate(categories_data):
+            source_id = category.get('id')
+            if type(source_id) is not int or source_id <= 0 or source_id in category_ids:
+                return Response({'categories': [f'Item {index + 1} must have a unique positive integer id.']},
+                                status=status.HTTP_400_BAD_REQUEST)
+            category_ids.add(source_id)
+        entry_keys = set()
+        for index, entry in enumerate(entries_data):
+            reference = entry.get('category')
+            if type(reference) is not int or reference not in category_ids:
+                return Response({'entries': [f'Item {index + 1} references an unknown category.']},
+                                status=status.HTTP_400_BAD_REQUEST)
+            key = (reference, entry.get('month'), entry.get('year'))
+            if any(type(value) is not int for value in key) or key in entry_keys:
+                return Response({'entries': [f'Item {index + 1} has invalid or duplicate category/month/year.']},
+                                status=status.HTTP_400_BAD_REQUEST)
+            entry_keys.add(key)
+        balance_keys = set()
+        for index, balance in enumerate(actual_balances_data):
+            key = (balance.get('month'), balance.get('year'))
+            if any(type(value) is not int for value in key) or key in balance_keys:
+                return Response({'actual_balances': [f'Item {index + 1} has invalid or duplicate month/year.']},
+                                status=status.HTTP_400_BAD_REQUEST)
+            balance_keys.add(key)
         
         # Validate required fields
         if 'budget' not in data:
@@ -225,14 +276,14 @@ class BudgetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if not budget_data.get('name'):
+        if not isinstance(budget_data.get('name'), str) or not budget_data['name'].strip():
             return Response(
                 {'budget': {'name': ['Dieses Feld ist zwingend erforderlich.']}},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         # Create the budget - handle duplicate names by appending timestamp
-        budget_name = budget_data.get('name', 'Imported Budget')
+        budget_name = budget_data['name'].strip()
         if Budget.objects.filter(name=budget_name).exists():
             from datetime import datetime
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -277,7 +328,7 @@ class BudgetViewSet(viewsets.ModelViewSet):
                     old_category_id = entry_data.get('category')
                     new_category_id = category_id_mapping.get(old_category_id)
                     if not new_category_id:
-                        continue
+                        raise ValueError('Entry references an unknown category.')
                     
                     entry_serializer = BudgetEntrySerializer(data={
                         'category': new_category_id,
@@ -367,6 +418,28 @@ class BudgetCategoryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(budget_id=budget_id)
 
         return queryset
+
+    @action(detail=True, methods=['post'])
+    def plan_entries(self, request, pk=None):
+        """Apply one year of planned values atomically, retaining recorded history."""
+        payload = PlanEntriesSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        category = self.get_object()
+        with transaction.atomic():
+            # A write lock also serializes SQLite, where select_for_update is a no-op.
+            BudgetCategory.objects.filter(pk=category.pk).update(order=F('order'))
+            category = BudgetCategory.objects.select_for_update().get(pk=category.pk)
+            if category.input_mode != 'MONTHLY':
+                return Response({'error': 'Only monthly categories support year-specific plan entry edits.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            changed = []
+            for item in payload.validated_data['entries']:
+                entry, _ = BudgetEntry.objects.get_or_create(
+                    category=category, year=payload.validated_data['year'], month=item['month'])
+                entry.planned_amount = item['planned_amount']
+                entry.save(update_fields=['planned_amount', 'status'])
+                changed.append(entry)
+        return Response(BudgetEntrySerializer(changed, many=True).data)
 
     @action(detail=True, methods=['patch'])
     def reorder(self, request, pk=None):
@@ -482,6 +555,23 @@ class MonthlyActualBalanceViewSet(viewsets.ModelViewSet):
     """ViewSet for MonthlyActualBalance model"""
     queryset = MonthlyActualBalance.objects.all()
     serializer_class = MonthlyActualBalanceSerializer
+
+    @action(detail=False, methods=['post'])
+    def set_field(self, request):
+        """Create or update one field, without writing a stale sibling value."""
+        payload = ActualBalanceFieldSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        with transaction.atomic():
+            # Lock the parent even when the monthly row does not exist yet.
+            Budget.objects.filter(pk=data['budget'].pk).update(updated_at=F('updated_at'))
+            budget = Budget.objects.select_for_update().get(pk=data['budget'].pk)
+            balance, _ = MonthlyActualBalance.objects.get_or_create(
+                budget=budget, year=data['year'], month=data['month'])
+            field = 'actual_income' if data['field'] == 'income' else 'actual_expenses'
+            setattr(balance, field, data['value'])
+            balance.save(update_fields=[field, 'updated_at'])
+        return Response(self.get_serializer(balance).data)
 
     def get_queryset(self):
         """Filter by budget, month, or year if provided"""

@@ -66,76 +66,36 @@ const api = axios.create({
   timeout: 10000, // 10 second timeout
 })
 
-// Log API configuration on startup
-if (typeof window !== 'undefined') {
-  console.log('=== API Configuration ===')
-  console.log('Base URL:', baseURL)
-  console.log('Window location:', window.location.href)
-  console.log('Protocol:', window.location.protocol)
-  console.log('Hostname:', window.location.hostname)
-  console.log('Tauri detected:', (window as any).__TAURI__ !== undefined)
-  console.log('Production mode:', import.meta.env.PROD)
-  console.log('=======================')
+// Reject accidental HTML responses without logging budget contents.
+api.interceptors.response.use((response) => {
+  const contentType = response.headers['content-type'] || ''
+  if (contentType.includes('text/html') && typeof response.data === 'string') {
+    throw new Error('API returned HTML instead of JSON. Please check the backend connection.')
+  }
+  return response
+})
+
+// Fetch all pages so search and template selection cover the complete collection.
+async function getAllPages<T>(path: string) {
+  const response = await api.get<PaginatedResponse<T>>(path)
+  const results = [...response.data.results]
+  let next = response.data.next
+  const visited = new Set<string>()
+  while (next) {
+    if (visited.has(next)) throw new Error('The server returned repeated pagination data.')
+    visited.add(next)
+    const page = new URL(next, 'http://localhost').searchParams.get('page')
+    if (!page) throw new Error('The server returned invalid pagination data.')
+    const nextResponse = await api.get<PaginatedResponse<T>>(path, { params: { page } })
+    results.push(...nextResponse.data.results)
+    next = nextResponse.data.next
+  }
+  return { ...response, data: { ...response.data, results, count: results.length, next: null } }
 }
-
-// Add request interceptor for debugging
-api.interceptors.request.use(
-  (config) => {
-    console.log('API Request:', config.method?.toUpperCase(), config.url)
-    if (config.data) {
-      console.log('Request data type:', typeof config.data)
-      console.log('Request data keys:', typeof config.data === 'object' ? Object.keys(config.data) : 'N/A')
-      if (config.url?.includes('import')) {
-        console.log('IMPORT REQUEST - Full data:', JSON.stringify(config.data, null, 2).substring(0, 2000))
-      }
-    }
-    return config
-  },
-  (error) => {
-    console.error('API Request Error:', error)
-    return Promise.reject(error)
-  }
-)
-
-// Add response interceptor for error handling
-api.interceptors.response.use(
-  (response) => {
-    // Check if we got HTML instead of JSON (common when API URL is wrong)
-    const contentType = response.headers['content-type'] || ''
-    if (contentType.includes('text/html') && typeof response.data === 'string' && response.data.includes('<!doctype')) {
-      console.error('Received HTML instead of JSON! This usually means the API URL is incorrect.')
-      throw new Error('API returned HTML instead of JSON. Backend server may not be running or API URL is incorrect.')
-    }
-    
-    return response
-  },
-  (error) => {
-    console.error('API Response Error:', error.message)
-    if (error.response) {
-      console.error('Response status:', error.response.status)
-      console.error('Response data:', error.response.data)
-      
-      // Check if we got HTML error page
-      const contentType = error.response.headers['content-type'] || ''
-      if (contentType.includes('text/html')) {
-        console.error('Received HTML error page instead of JSON response')
-        console.error('This usually means:')
-        console.error('1. Backend server is not running')
-        console.error('2. API URL is incorrect')
-        console.error('3. Request is being routed to frontend instead of backend')
-        error.isHtmlResponse = true
-      }
-    } else if (error.request) {
-      console.error('No response received:', error.request)
-      console.error('This usually means the backend server is not running at http://localhost:8000')
-    }
-    return Promise.reject(error)
-  }
-)
 
 // Budget endpoints
 export const budgetApi = {
-  getAll: () => api.get<PaginatedResponse<Budget>>('/budgets/'),
+  getAll: () => getAllPages<Budget>('/budgets/'),
   getById: (id: number) => api.get<Budget>(`/budgets/${id}/`),
   create: (data: Partial<Budget>) => api.post<Budget>('/budgets/', data),
   update: (id: number, data: Partial<Budget>) => api.put<Budget>(`/budgets/${id}/`, data),
@@ -145,10 +105,10 @@ export const budgetApi = {
     api.get<MonthlySummary>(`/budgets/${id}/monthly/${month}/`, { params: { year } }),
   getYearlySummary: (id: number, year: number) =>
     api.get<YearlySummary>(`/budgets/${id}/yearly/`, { params: { year } }),
-  export: (id: number) => api.get<BudgetSummaryData>(`/budgets/${id}/summary/`),
+  export: (id: number) => api.get<BudgetSummaryData>(`/budgets/${id}/export_json/`),
   // Import has a longer timeout (60s) because large budgets can take time to process
   import: (data: BudgetSummaryData) => api.post<Budget>('/budgets/import/', data, { timeout: 60000 }),
-  health: () => api.get<{status: string, message: string}>('/budgets/health/'),
+  health: (signal?: AbortSignal) => api.get<{status: string, message: string}>('/budgets/health/', { signal }),
 }
 
 // Category endpoints
@@ -159,6 +119,8 @@ export const categoryApi = {
   update: (id: number, data: Partial<BudgetCategory>) =>
     api.patch<BudgetCategory>(`/categories/${id}/`, data),
   delete: (id: number) => api.delete(`/categories/${id}/`),
+  planEntries: (id: number, data: { year: number; entries: { month: number; planned_amount: string }[] }) =>
+    api.post<BudgetEntry[]>(`/categories/${id}/plan_entries/`, data),
   reorder: (id: number, order: number) =>
     api.patch<BudgetCategory>(`/categories/${id}/reorder/`, { order }),
 }
@@ -192,6 +154,8 @@ export const taxApi = {
 
 // Actual Balance endpoints
 export const actualBalanceApi = {
+  setField: (data: { budget: number; year: number; month: number; field: 'income' | 'expenses'; value: string }) =>
+    api.post<MonthlyActualBalance>('/actual-balances/set_field/', data),
   getAll: (params?: { budget?: number; month?: number; year?: number }) =>
     api.get<PaginatedResponse<MonthlyActualBalance>>('/actual-balances/', { params }),
   create: (data: Partial<MonthlyActualBalance>) => api.post<MonthlyActualBalance>('/actual-balances/', data),
@@ -202,7 +166,7 @@ export const actualBalanceApi = {
 
 // Template endpoints
 export const templateApi = {
-  getAll: () => api.get<PaginatedResponse<BudgetTemplate>>('/templates/'),
+  getAll: () => getAllPages<BudgetTemplate>('/templates/'),
   create: (data: Partial<BudgetTemplate>) => api.post<BudgetTemplate>('/templates/', data),
   createFromBudget: (budgetId: number, name: string, overwrite?: boolean) =>
     api.post<BudgetTemplate>('/templates/create_from_budget/', { budget_id: budgetId, name, overwrite: overwrite || false }),

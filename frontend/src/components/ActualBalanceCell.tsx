@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { actualBalanceApi } from '../services/api'
 import type { MonthlyActualBalance } from '../types/budget'
 import { Currency, formatCurrency } from '../utils/currency'
+import CellEditorDialog from './CellEditorDialog'
 
 interface ActualBalanceCellProps {
   month: number
@@ -14,172 +15,66 @@ interface ActualBalanceCellProps {
   displayCurrency: Currency
   field: 'income' | 'expenses'
 }
-
 function ActualBalanceCell({ month, balance, budgetId, budgetYear, displayCurrency, field }: ActualBalanceCellProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
-  const [value, setValue] = useState(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
-  const cellRef = useRef<HTMLDivElement>(null)
-
-  const createMutation = useMutation({
-    mutationFn: (data: Partial<MonthlyActualBalance>) => actualBalanceApi.create(data),
+  const [value, setValue] = useState('')
+  const [error, setError] = useState('')
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const submitting = useRef(false)
+  useEffect(() => { setIsEditing(false); setError('') }, [budgetId, budgetYear, month, field])
+  const currentValue = balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00'
+  const close = () => {
+    if (submitting.current) return
+    setIsEditing(false)
+    requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+  const saveMutation = useMutation({
+    mutationFn: (amount: string) => actualBalanceApi.setField({ budget: budgetId, year: budgetYear, month, field, value: amount }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      setIsEditing(false)
-      toast.success(t('entry.created'))
-    },
-    onError: () => {
-      toast.error(t('entry.errorCreating'))
-      setIsEditing(false)
-    },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<MonthlyActualBalance> }) =>
-      actualBalanceApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
-      setIsEditing(false)
+      submitting.current = false
+      close()
       toast.success(t('entry.updated'))
     },
     onError: () => {
-      toast.error(t('entry.errorUpdating'))
-      setIsEditing(false)
+      submitting.current = false
+      setError(t('gridUX.saveError'))
+      queryClient.invalidateQueries({ queryKey: ['budget', budgetId, 'summary'] })
     },
   })
-
   const handleSave = () => {
-    const numValue = parseFloat(value)
-    if (isNaN(numValue) || numValue < 0) {
-      toast.error(t('validation.enterValidAmount'))
+    if (submitting.current) return
+    const amount = Number(value)
+    if (value.trim() === '' || !Number.isFinite(amount) || amount < 0) {
+      setError(t('validation.enterValidAmount'))
       return
     }
-
-    const data: Partial<MonthlyActualBalance> = {
-      budget: budgetId,
-      month,
-      year: budgetYear,
-      actual_income: field === 'income' ? numValue.toFixed(2) : (balance?.actual_income || '0.00'),
-      actual_expenses: field === 'expenses' ? numValue.toFixed(2) : (balance?.actual_expenses || '0.00'),
-    }
-
-    if (balance) {
-      updateMutation.mutate({ id: balance.id, data })
-    } else {
-      createMutation.mutate(data)
-    }
+    submitting.current = true
+    setError('')
+    saveMutation.mutate(amount.toFixed(2))
   }
-
-  // Handle keyboard events for the entire editing cell
-  useEffect(() => {
-    if (!isEditing) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if not typing in an input field
-      // Check both target and currentTarget to be safe
-      const target = e.target as HTMLElement
-      if (
-        target instanceof HTMLInputElement || 
-        target instanceof HTMLTextAreaElement || 
-        target instanceof HTMLSelectElement ||
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT'
-      ) {
-        return
-      }
-
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        handleSave()
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        setIsEditing(false)
-        setValue(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isEditing, value, balance, field, budgetId, month, budgetYear, updateMutation, createMutation])
-
-  if (isEditing) {
-    return (
-      <td className="px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-600">
-        <div ref={cellRef} className="space-y-2 min-w-[150px]" tabIndex={-1}>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {field === 'income' ? t('summary.income') : t('summary.expenses')}
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  handleSave()
-                } else if (e.key === 'Escape') {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setIsEditing(false)
-                  setValue(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
-                }
-              }}
-              placeholder="0.00"
-              className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-            />
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={handleSave}
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="flex-1 px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold disabled:opacity-50"
-            >
-              {(createMutation.isPending || updateMutation.isPending) ? (
-                <span className="flex items-center justify-center gap-1">
-                  <div className="animate-spin rounded-full h-2.5 w-2.5 border-b-2 border-white"></div>
-                  ...
-                </span>
-              ) : (
-                `✓ ${t('common.ok')}`
-              )}
-            </button>
-            <button
-              onClick={() => {
-                setIsEditing(false)
-                setValue(balance ? (field === 'income' ? balance.actual_income : balance.actual_expenses) : '0.00')
-              }}
-              className="flex-1 px-3 py-2 text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 font-semibold"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      </td>
-    )
-  }
-
-  return (
-    <td
-      onClick={() => setIsEditing(true)}
-      className="px-3 py-2 text-center text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border bg-white dark:bg-gray-800"
-      title={t('common.clickToEdit')}
-    >
-      {balance ? (
-        <div className="font-semibold text-xs text-gray-900 dark:text-white">
-          {formatCurrency(parseFloat(field === 'income' ? balance.actual_income : balance.actual_expenses), displayCurrency)}
-        </div>
-      ) : (
-        <div className="text-gray-400 dark:text-gray-600 text-sm">-</div>
-      )}
-    </td>
-  )
+  const label = t('gridUX.editBalance', { field: t(`summary.${field}`), month, year: budgetYear })
+  const inputId = `balance-${budgetId}-${budgetYear}-${month}-${field}`
+  if (isEditing) return <td className="px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-400">
+    <CellEditorDialog label={label} onCancel={close}>
+    <form aria-label={label} className="space-y-2" onSubmit={e => { e.preventDefault(); handleSave() }} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close() } }}>
+      <label htmlFor={inputId} className="block text-xs font-medium">{t(`summary.${field}`)} (CHF)</label>
+      <input id={inputId} type="number" min="0" step="0.01" required autoFocus onFocus={e => e.target.select()} value={value} disabled={saveMutation.isPending} onChange={e => setValue(e.target.value)} aria-invalid={!!error} aria-describedby={`${inputId}-help ${inputId}-error`} className="w-full px-3 py-2 text-sm border rounded dark:bg-gray-700" />
+      <p id={`${inputId}-help`} className="text-xs text-gray-600 dark:text-gray-300">{t('gridUX.chfHelp')}</p>
+      <p id={`${inputId}-error`} role={error ? 'alert' : undefined} className="text-xs text-red-700 dark:text-red-300">{error}</p>
+      <div className="flex gap-2">
+        <button type="submit" disabled={saveMutation.isPending} className="px-3 py-2 text-xs bg-blue-600 text-white rounded disabled:opacity-50">{saveMutation.isPending ? t('category.saving') : t('common.save')}</button>
+        <button type="button" onClick={close} disabled={saveMutation.isPending} className="px-3 py-2 text-xs bg-gray-200 dark:bg-gray-700 rounded">{t('common.cancel')}</button>
+      </div>
+    </form>
+    </CellEditorDialog>
+  </td>
+  return <td className="px-2 py-1 text-center text-sm border bg-white dark:bg-gray-800">
+    <button ref={triggerRef} type="button" aria-label={label} onClick={() => { setValue(currentValue); setError(''); setIsEditing(true) }} className="w-full min-h-[44px] px-1 py-2 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 focus-visible:ring-2 focus-visible:ring-blue-500">
+      <span className="font-semibold text-xs">{balance ? formatCurrency(Number(currentValue), displayCurrency) : '-'}</span>
+    </button>
+  </td>
 }
-
 export default ActualBalanceCell

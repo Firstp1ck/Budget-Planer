@@ -1,3 +1,4 @@
+import { isSalaryCategory } from '../utils/salary'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BudgetCategory, BudgetEntry, SalaryReduction, TaxEntry } from '../types/budget'
@@ -23,7 +24,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
   // Get gross salary for a specific month
   const getGrossSalaryForMonth = (month: number): number => {
     const salaryCategory = categories.find(
-      (c) => c.category_type === 'INCOME' && c.name.toLowerCase().includes('gehalt')
+      isSalaryCategory
     )
     if (!salaryCategory) return 0
 
@@ -124,7 +125,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
       let categoryTotal = 0
 
       // For salary category, calculate based on selected mode
-      if (category.category_type === 'INCOME' && category.name.toLowerCase().includes('gehalt')) {
+      if (category.id === categories.find(isSalaryCategory)?.id) {
         if (selectedMonth) {
           // Single month
           if (incomeMode === 'gross') {
@@ -251,6 +252,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
+            aria-expanded={!isSummaryCollapsed}
             className="flex items-center justify-center w-8 h-8 rounded-md bg-white/50 dark:bg-gray-700/50 hover:bg-white dark:hover:bg-gray-600 transition-all shadow-sm hover:shadow-md active:scale-95 border border-gray-300 dark:border-gray-600"
             title={isSummaryCollapsed ? t('common.expand') : t('common.collapse')}
             aria-label={isSummaryCollapsed ? t('common.expand') : t('common.collapse')}
@@ -269,10 +271,11 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
             {/* Income Mode Selector - only show for yearly view */}
             {!selectedMonth && (
               <div className="mb-6 p-4 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                <label htmlFor="summary-income-mode" className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
                   {t('summary.calculationMode')}:
                 </label>
                 <select
+                  id="summary-income-mode"
                   value={incomeMode}
                   onChange={(e) => setIncomeMode(e.target.value as IncomeCalculationMode)}
                   className="w-full md:w-auto px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-600 text-slate-900 dark:text-white text-sm cursor-pointer"
@@ -334,7 +337,7 @@ function BudgetSummary({ categories, entries, salaryReductions, taxEntries, sele
                   ? 'text-blue-700 dark:text-blue-300'
                   : 'text-orange-700 dark:text-orange-300'
               }`}>
-                {balance >= 0 ? '+' : ''}{formatCurrency(Math.abs(balance), displayCurrency)}
+                {balance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(balance), displayCurrency)}
               </p>
               </div>
             </div>
